@@ -1,0 +1,27 @@
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+class Config:
+    # Telegram Bot
+    BOT_TOKEN = os.getenv('BOT_TOKEN')
+    
+    # MySQL Database
+    DB_HOST = os.getenv('DB_HOST', 'localhost')
+    DB_USER = os.getenv('DB_USER', 'root')
+    DB_PASSWORD = os.getenv('DB_PASSWORD', '1234')
+    DB_NAME = os.getenv('DB_NAME', 'telegram_bot_manager')
+    
+    # Bot Settings
+    DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
+    LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+    
+    # Inactivity Settings
+    INACTIVITY_DAYS = int(os.getenv('INACTIVITY_DAYS', '3'))
+    
+    # Confirmation Timeout
+    CONFIRMATION_TIMEOUT = int(os.getenv('CONFIRMATION_TIMEOUT', '15'))
+    
+    # Storage Path
+    STORAGE_PATH = os.getenv('STORAGE_PATH', 'storage')
