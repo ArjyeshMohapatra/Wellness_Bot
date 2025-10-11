@@ -8,12 +8,10 @@ from datetime import time as dt_time
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from services.database_service import DatabaseService
-from config import Config
+from services import database_service as db
+import config
 
 logger = logging.getLogger(__name__)
-db = DatabaseService()
-config = Config()
 
 # Track active slots to avoid duplicate announcements
 active_slot_announcements = {}
@@ -417,8 +415,12 @@ async def check_user_day_cycles(context: ContextTypes.DEFAULT_TYPE):
                         logger.error(f"Error sending restriction lift message: {e}")
                 
                 # Update day number if it's a new day (for non-restricted users)
-                if not is_restricted and days_elapsed > 0 and days_elapsed != (day_number - 1):
+                if not is_restricted and days_elapsed > 0:
                     new_day = days_elapsed + 1
+                    
+                    # Only update if day actually changed
+                    if new_day == day_number:
+                        continue  # Day already correct, skip
                     
                     # Check if completed 7 days - reset cycle
                     if new_day > 7:

@@ -8,16 +8,24 @@ from datetime import datetime
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from services.database_service import DatabaseService
+from services import database_service as db
 from services.file_storage import FileStorage
-from utils.validators import contains_banned_word, sanitize_text
-from config import Config
+import config
 from handlers.start_handler import points, schedule
+import re
 
 logger = logging.getLogger(__name__)
-db = DatabaseService()
-config = Config()
 storage = FileStorage(config.STORAGE_PATH)
+
+def sanitize_text(text):
+    """Remove HTML tags and URLs from text."""
+    if not text:
+        return ""
+    # Remove HTML tags
+    text = re.sub(r'<[^>]+>', '', text)
+    # Remove URLs
+    text = re.sub(r'http[s]?://\S+', '', text)
+    return text.strip()
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle incoming messages in groups."""
@@ -113,7 +121,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         message_text_lower = message.text.lower()
         
         # Check if ANY banned word appears in the message with word boundaries
-        import re
         matched_word = None
         for banned_word in custom_banned:
             # Use word boundaries for single words, substring for phrases

@@ -7,10 +7,9 @@ import sys
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from services.database_service import DatabaseService
+from services import database_service as db
 
 logger = logging.getLogger(__name__)
-db = DatabaseService()
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle callback queries from inline keyboards."""
@@ -73,7 +72,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
         if content_type == 'photo':
             # Import storage here to avoid circular imports
             from services.file_storage import FileStorage
-            from config import Config
+            import config
             
             photo_file_id = confirmation_data['photo_file_id']
             username = confirmation_data['username']
@@ -87,7 +86,6 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                 timestamp = datetime.now().strftime("%Y_%m_%d_%I_%M_%S_%p").lower()
                 filename = f"{username}_{slot_name}_{timestamp}.jpg"
                 
-                config = Config()
                 storage = FileStorage(config.STORAGE_PATH)
                 local_path = await storage.save_photo(group_id, expected_user_id, username, slot_name, file, filename)
                 

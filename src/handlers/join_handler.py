@@ -6,10 +6,9 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from services.database_service import DatabaseService
+from services import database_service as db
 
 logger = logging.getLogger(__name__)
-db = DatabaseService()
 
 async def track_chats(update, context):
     result = extract_status_change(update.my_chat_member)
@@ -132,3 +131,4 @@ def extract_status_change(chat_member_update):
 # Handler definitions
 bot_join_handler = ChatMemberHandler(track_chats, ChatMemberHandler.MY_CHAT_MEMBER)
 member_join_handler = ChatMemberHandler(track_members, ChatMemberHandler.CHAT_MEMBER)
+

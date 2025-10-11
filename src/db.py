@@ -2,7 +2,7 @@ import mysql.connector
 from mysql.connector import pooling
 from contextlib import contextmanager
 import logging
-from config import Config
+import config
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +12,6 @@ connection_pool = None
 def init_db_pool():
     """Initialize MySQL connection pool."""
     global connection_pool
-    config = Config()
     
     try:
         connection_pool = pooling.MySQLConnectionPool(

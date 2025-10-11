@@ -2,7 +2,7 @@ import logging
 import sys
 from telegram import Update
 from telegram.ext import Application
-from config import Config
+import config
 from handlers import setup_handlers
 from db import init_db_pool
 
@@ -16,8 +16,6 @@ logger = logging.getLogger(__name__)
 def main():
     """Start the bot."""
     try:
-        config = Config()
-        
         # Validate configuration
         if not config.BOT_TOKEN:
             logger.error("BOT_TOKEN not found in .env file!")

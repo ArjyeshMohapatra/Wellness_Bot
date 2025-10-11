@@ -6,10 +6,9 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from services.database_service import DatabaseService
+from services import database_service as db
 
 logger = logging.getLogger(__name__)
-db = DatabaseService()
 
 async def start(update, context):
     user = update.effective_user
