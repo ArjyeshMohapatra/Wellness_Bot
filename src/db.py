@@ -5,6 +5,7 @@ import logging
 import config
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO) 
 
 # MySQL Connection Pool
 connection_pool = None
@@ -38,11 +39,10 @@ def get_db_connection():
     if connection_pool is None:
         init_db_pool()
     
-    connection = None
     try:
         connection = connection_pool.get_connection()
         yield connection
-        connection.commit()
+        connection.commit() # commits only if everything succeeds
     except mysql.connector.Error as e:
         if connection:
             connection.rollback()
@@ -50,23 +50,17 @@ def get_db_connection():
         raise
     finally:
         if connection and connection.is_connected():
-            connection.close()
+            connection.close() # returns connection back to the pool
 
 def execute_query(query, params=None, fetch=False):
     """Execute a query and optionally fetch results."""
     with get_db_connection() as conn:
-        cursor = conn.cursor(dictionary=True)
-        try:
-            cursor.execute(query, params or ())
-            
-            if fetch:
-                if 'SELECT' in query.upper():
-                    results = cursor.fetchall()
-                    return results
-                else:
-                    return cursor.lastrowid
-            else:
-                conn.commit()
-                return cursor.lastrowid if cursor.lastrowid else True
-        finally:
-            cursor.close()
+        with conn.cursor(dictionary=True) as cursor:  # cursor auto-closed
+            try:
+                cursor.execute(query, params or ())
+                if fetch:
+                    return cursor.fetchall()  # return rows for SELECT
+                return cursor.lastrowid or None
+            except mysql.connector.Error as e:
+                logger.error(f"Error executing query: {query} | Params: {params} | Error: {e}")
+                raise

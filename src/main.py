@@ -40,12 +40,12 @@ def main():
         logger.info("Bot is starting... Press Ctrl+C to stop")
         
         # Run the bot until the user presses Ctrl-C
-        application.run_polling(allowed_updates=[Update.MESSAGE, Update.CHAT_MEMBER, Update.CALLBACK_QUERY])
+        application.run_polling(allowed_updates=['message', 'chat_member', 'callback_query'])
         
     except KeyboardInterrupt:
         logger.info("Bot stopped by user")
-    except Exception as e:
-        logger.error(f"Fatal error: {e}")
+    except Exception:
+        logger.error("Fatal error", exc_info=True)
         sys.exit(1)
 
 if __name__ == '__main__':

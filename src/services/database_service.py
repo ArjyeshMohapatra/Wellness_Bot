@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, time
 import sys
 import os
 
@@ -51,10 +51,6 @@ def create_default_event_and_slots(group_id):
                 logger.info(f"Slots already exist for group {group_id}, skipping creation")
                 return True
             
-            # Use a single connection for the entire transaction
-            from db import get_db_connection
-            from datetime import datetime, timedelta
-            
             with get_db_connection() as conn:
                 cursor = conn.cursor(dictionary=True)
                 
@@ -65,7 +61,7 @@ def create_default_event_and_slots(group_id):
                 cursor.execute("""
                     INSERT INTO events 
                     (group_id, event_name, start_date, end_date, min_pass_points, is_active)
-                    VALUES (%s, 'Wellness Challenge', %s, %s, 200, TRUE)
+                    VALUES (%s, 'Wellness Challenge', %s, %s, 250, TRUE)
                 """, (group_id, start_date, end_date))
                 
                 event_id = cursor.lastrowid
@@ -133,7 +129,6 @@ def create_default_event_and_slots(group_id):
                 }
                 
                 for slot_name, start_time, end_time, slot_type, pts_text, pts_photo, initial_msg, response_pos, response_clar in slots:
-                    # Evening Snacks is optional (not mandatory)
                     is_mandatory = 0 if slot_name == 'Evening Snacks' else 1
                     
                     cursor.execute("""
@@ -156,7 +151,7 @@ def create_default_event_and_slots(group_id):
                 
                 cursor.close()
                 conn.commit()
-                logger.info(f"Created 8 default slots with multilingual keywords for group {group_id}")
+                logger.info(f"Created {len(slots)} default slots with multilingual keywords for group {group_id}")
                 return True
                 
         except Exception as e:
@@ -190,7 +185,6 @@ def add_member(group_id, user_id, username=None, first_name=None):
                     active_slot = get_active_slot(group_id)
                     
                     # Check if it's before first slot (Good Morning 04:00)
-                    from datetime import datetime, time
                     current_time = datetime.now().time()
                     first_slot_start = time(4, 0)  # 04:00 AM
                     
@@ -329,11 +323,6 @@ def add_points(group_id, user_id, points, event_id=None):
         except Exception as e:
             logger.error(f"Error adding points: {e}")
             return False
-    
-def get_member_points(group_id, user_id):
-        query = "SELECT current_points FROM group_members WHERE group_id = %s AND user_id = %s"
-        result = execute_query(query, (group_id, user_id), fetch=True)
-        return result[0]['current_points'] if result else 0
     
 def get_low_point_members(group_id, min_points):
         query = """

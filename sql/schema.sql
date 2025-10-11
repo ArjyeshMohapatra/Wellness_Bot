@@ -1,6 +1,8 @@
+DROP DATABASE IF EXISTS telegram_bot_manager;
 CREATE DATABASE IF NOT EXISTS telegram_bot_manager;
 USE telegram_bot_manager;
 
+-- LICENSES TABLE
 CREATE TABLE IF NOT EXISTS licenses (
     license_id INT AUTO_INCREMENT PRIMARY KEY,
     license_key VARCHAR(50) NOT NULL UNIQUE,
@@ -10,18 +12,20 @@ CREATE TABLE IF NOT EXISTS licenses (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- GROUPS CONFIG TABLE
 CREATE TABLE IF NOT EXISTS groups_config (
     config_id INT AUTO_INCREMENT PRIMARY KEY,
     group_id BIGINT NOT NULL UNIQUE,
-    license_key VARCHAR(50) NOT NULL UNIQUE,
+    license_id INT NOT NULL UNIQUE,
     admin_user_id BIGINT NOT NULL,
     max_members INT DEFAULT 0,
     welcome_message TEXT,
     kick_message TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (license_key) REFERENCES licenses(license_key)
+    FOREIGN KEY (license_id) REFERENCES licenses(license_id) ON DELETE CASCADE
 );
 
+-- EVENTS TABLE
 CREATE TABLE IF NOT EXISTS events (
     event_id INT AUTO_INCREMENT PRIMARY KEY,
     group_id BIGINT NOT NULL,
@@ -33,6 +37,7 @@ CREATE TABLE IF NOT EXISTS events (
     FOREIGN KEY (group_id) REFERENCES groups_config(group_id) ON DELETE CASCADE
 );
 
+-- GROUP SLOTS TABLE
 CREATE TABLE IF NOT EXISTS group_slots (
     slot_id INT AUTO_INCREMENT PRIMARY KEY,
     group_id BIGINT NOT NULL,
@@ -52,13 +57,16 @@ CREATE TABLE IF NOT EXISTS group_slots (
     FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE
 );
 
+-- SLOT KEYWORDS TABLE
 CREATE TABLE IF NOT EXISTS slot_keywords (
     keyword_id INT AUTO_INCREMENT PRIMARY KEY,
     slot_id INT NOT NULL,
     keyword VARCHAR(100) NOT NULL,
-    FOREIGN KEY (slot_id) REFERENCES group_slots(slot_id) ON DELETE CASCADE
+    FOREIGN KEY (slot_id) REFERENCES group_slots(slot_id) ON DELETE CASCADE,
+    INDEX idx_slot_id (slot_id)
 );
 
+-- GROUP MEMBERS TABLE
 CREATE TABLE IF NOT EXISTS group_members (
     member_id INT AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT NOT NULL,
@@ -76,9 +84,11 @@ CREATE TABLE IF NOT EXISTS group_members (
     last_active_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (user_id, group_id),
-    FOREIGN KEY (group_id) REFERENCES groups_config(group_id) ON DELETE CASCADE
+    FOREIGN KEY (group_id) REFERENCES groups_config(group_id) ON DELETE CASCADE,
+    INDEX idx_user_id (user_id)
 );
 
+-- MEMBER HISTORY TABLE
 CREATE TABLE IF NOT EXISTS member_history (
     history_id INT AUTO_INCREMENT PRIMARY KEY,
     group_id BIGINT NOT NULL,
@@ -88,13 +98,16 @@ CREATE TABLE IF NOT EXISTS member_history (
     FOREIGN KEY (group_id) REFERENCES groups_config(group_id) ON DELETE CASCADE
 );
 
+-- BANNED WORDS TABLE
 CREATE TABLE IF NOT EXISTS banned_words (
     word_id INT AUTO_INCREMENT PRIMARY KEY,
     group_id BIGINT,
-    word VARCHAR(255) NOT NULL UNIQUE,
+    word VARCHAR(255) NOT NULL,
+    UNIQUE (group_id, word),
     FOREIGN KEY (group_id) REFERENCES groups_config(group_id) ON DELETE CASCADE
 );
 
+-- USER ACTIVITY LOG TABLE
 CREATE TABLE IF NOT EXISTS user_activity_log (
     log_id INT AUTO_INCREMENT PRIMARY KEY,
     group_id BIGINT NOT NULL,
@@ -107,18 +120,22 @@ CREATE TABLE IF NOT EXISTS user_activity_log (
     points_earned INT DEFAULT 0,
     is_valid BOOLEAN DEFAULT TRUE,
     activity_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (group_id) REFERENCES groups_config(group_id) ON DELETE CASCADE
+    FOREIGN KEY (group_id) REFERENCES groups_config(group_id) ON DELETE CASCADE,
+    INDEX idx_user_activity (user_id, group_id)
 );
 
+-- DAILY POINTS LOG TABLE
 CREATE TABLE IF NOT EXISTS daily_points_log (
     log_id INT AUTO_INCREMENT PRIMARY KEY,
     event_id INT NOT NULL,
     user_id BIGINT NOT NULL,
     log_date DATE NOT NULL,
     points_scored INT NOT NULL,
-    FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE
+    FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE,
+    INDEX idx_daily_points_user (user_id, event_id)
 );
 
+-- DAILY SLOT TRACKER TABLE
 CREATE TABLE IF NOT EXISTS daily_slot_tracker (
     log_id INT AUTO_INCREMENT PRIMARY KEY,
     event_id INT NOT NULL,
@@ -132,6 +149,7 @@ CREATE TABLE IF NOT EXISTS daily_slot_tracker (
     FOREIGN KEY (slot_id) REFERENCES group_slots(slot_id) ON DELETE CASCADE
 );
 
+-- INACTIVITY WARNINGS TABLE
 CREATE TABLE IF NOT EXISTS inactivity_warnings (
     warning_id INT AUTO_INCREMENT PRIMARY KEY,
     group_id BIGINT NOT NULL,
@@ -141,7 +159,6 @@ CREATE TABLE IF NOT EXISTS inactivity_warnings (
     FOREIGN KEY (group_id) REFERENCES groups_config(group_id) ON DELETE CASCADE,
     UNIQUE(group_id, user_id, warning_date, warning_type)
 );
-
 
 INSERT IGNORE INTO banned_words (group_id, word) VALUES 
 -- English
