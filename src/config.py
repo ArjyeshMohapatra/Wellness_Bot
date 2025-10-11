@@ -15,9 +15,6 @@ DB_USER = os.getenv('DB_USER', 'root')
 DB_PASSWORD = os.getenv('DB_PASSWORD', '1234')
 DB_NAME = os.getenv('DB_NAME', 'telegram_bot_manager')
 
-# Debug logging for Railway
-print(f"[CONFIG DEBUG] DB_HOST={DB_HOST}, DB_PORT={DB_PORT}, DB_USER={DB_USER}, DB_NAME={DB_NAME}")
-
 # Bot Settings
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
