@@ -1,7 +1,9 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load .env file if it exists (for local development)
+# Railway provides env vars directly, so this is optional
+load_dotenv(override=False)
 
 # Telegram Bot
 BOT_TOKEN = os.getenv('BOT_TOKEN')
