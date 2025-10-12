@@ -70,6 +70,14 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
             username = confirmation_data['username']
             caption = confirmation_data.get('caption', '')
             
+            # Get slot configuration to determine points
+            slot = db.get_current_slot(group_id)
+            if not slot:
+                await query.edit_message_text("❌ No active slot found.")
+                return
+            
+            points = slot['points_for_photo']  # Photos get photo points (typically 10)
+            
             try:
                 # Download and save photo
                 file = await context.bot.get_file(photo_file_id)
@@ -83,29 +91,92 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                 # Award points
                 db.add_points(group_id, expected_user_id, points, event_id)
                 db.log_activity(group_id, expected_user_id, slot_name, 'photo', 
+                               message_content=caption,
                                telegram_file_id=photo_file_id, local_file_path=local_path, points_earned=points, is_valid=True)
                 
                 if event_id:
                     db.mark_slot_completed(event_id, slot_id, expected_user_id, 'completed')
                 
                 await query.edit_message_text(f"✅ Photo confirmed! +{points} points!")
-                logger.info(f"User {expected_user_id} confirmed photo for slot {slot_name}")
+                logger.info(f"User {expected_user_id} confirmed photo for slot {slot_name}, awarded {points} points")
             
             except Exception as e:
                 logger.error(f"Error saving confirmed photo: {e}")
                 await query.edit_message_text("❌ Error saving photo. Please try again.")
+        
+        elif content_type == 'media':
+            # Handle other media types (video, document, voice, etc.)
+            file_id = confirmation_data['file_id']
+            username = confirmation_data['username']
+            caption = confirmation_data.get('caption', '')
+            media_type = confirmation_data.get('media_type', 'media')
+            file_ext = confirmation_data.get('file_ext', 'file')
+            
+            # Get slot configuration to determine points
+            slot = db.get_current_slot(group_id)
+            if not slot:
+                await query.edit_message_text("❌ No active slot found.")
+                return
+            
+            # Determine points based on media type
+            if media_type in ['video', 'document']:
+                points = slot['points_for_photo']  # 10 points - substantial content like photos
+            elif media_type in ['voice', 'video_note']:
+                points = slot['points_for_text']  # 5 points - personal messages like text
+            elif media_type in ['sticker', 'animation']:
+                points = 0  # No points for entertainment content
+            else:
+                points = slot['points_for_photo']  # Default to photo points
+            
+            try:
+                # Download and save media
+                file = await context.bot.get_file(file_id)
+                
+                timestamp = datetime.now().strftime("%Y_%m_%d_%I_%M_%S_%p").lower()
+                filename = f"{username}_{slot_name}_{timestamp}.{file_ext}"
+                
+                storage = FileStorage(config.STORAGE_PATH)
+                local_path = await storage.save_media(group_id, expected_user_id, username, slot_name, file, filename, media_type)
+                
+                # Award points
+                if points > 0:
+                    db.add_points(group_id, expected_user_id, points, event_id)
+                
+                db.log_activity(group_id, expected_user_id, slot_name, media_type,
+                               message_content=caption,
+                               telegram_file_id=file_id, local_file_path=local_path, points_earned=points, is_valid=True)
+                
+                if event_id and points > 0:
+                    db.mark_slot_completed(event_id, slot_id, expected_user_id, 'completed')
+                
+                points_msg = f" +{points} points!" if points > 0 else " (no points awarded)"
+                await query.edit_message_text(f"✅ {media_type.capitalize()} confirmed!{points_msg}")
+                logger.info(f"User {expected_user_id} confirmed {media_type} for slot {slot_name}, awarded {points} points")
+            
+            except Exception as e:
+                logger.error(f"Error saving confirmed {media_type}: {e}")
+                await query.edit_message_text(f"❌ Error saving {media_type}. Please try again.")
                 
         else:
             # Text confirmation
             text = confirmation_data.get('text', '')
+            
+            # Get slot configuration to determine points
+            slot = db.get_current_slot(group_id)
+            if not slot:
+                await query.edit_message_text("❌ No active slot found.")
+                return
+            
+            points = slot['points_for_text']  # Text messages get text points (typically 5)
+            
             db.add_points(group_id, expected_user_id, points, event_id)
-            db.log_activity(group_id, expected_user_id, slot_name, 'text', text, points_earned=points, is_valid=True)
+            db.log_activity(group_id, expected_user_id, slot_name, 'text', message_content=text, points_earned=points, is_valid=True)
             
             if event_id:
                 db.mark_slot_completed(event_id, slot_id, expected_user_id, 'completed')
             
             await query.edit_message_text(f"✅ Confirmed! +{points} points!")
-            logger.info(f"User {expected_user_id} confirmed slot {slot_name}")
+            logger.info(f"User {expected_user_id} confirmed text for slot {slot_name}, awarded {points} points")
     
     else:
         # Log as invalid based on type

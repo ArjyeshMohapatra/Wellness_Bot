@@ -13,6 +13,11 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+async def post_init(application):
+    """Post-initialization function."""
+    # Initialize bot_data for storing pending confirmations
+    application.bot_data['pending_confirmations'] = {}
+
 def main():
     """Start the bot."""
     try:
@@ -27,11 +32,13 @@ def main():
         init_db_pool()
         logger.info("Database connection pool initialized")
         
-        # Create the Application
-        application = Application.builder().token(config.BOT_TOKEN).build()
-        
-        # Initialize bot_data for storing pending confirmations
-        application.bot_data['pending_confirmations'] = {}
+        # Create the Application with post_init
+        application = (
+            Application.builder()
+            .token(config.BOT_TOKEN)
+            .post_init(post_init)
+            .build()
+        )
         
         # Setup handlers
         setup_handlers(application)

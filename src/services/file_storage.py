@@ -30,3 +30,24 @@ class FileStorage:
         except Exception as e:
             logger.error(f"Error saving photo: {e}")
             raise
+    
+    async def save_media(self, group_id, user_id, username, slot_name, file, filename, media_type):
+        """Save any media type (video, document, voice, etc.) from Telegram to local storage."""
+        try:
+            today_date = datetime.now().strftime("%Y_%m_%d")
+            
+            # Create folder based on media type
+            media_path = (self.base_path / "groups" / f"gid_{group_id}" / media_type / today_date / slot_name)
+            media_path.mkdir(parents=True, exist_ok=True)
+            
+            file_path = media_path / filename
+            
+            # Download file from Telegram
+            await file.download_to_drive(str(file_path))
+            
+            logger.info(f"Saved {media_type} for user {user_id} in group {group_id}: {filename}")
+            return str(file_path)
+        
+        except Exception as e:
+            logger.error(f"Error saving {media_type}: {e}")
+            raise

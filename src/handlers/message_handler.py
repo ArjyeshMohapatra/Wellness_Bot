@@ -405,13 +405,49 @@ async def handle_other_media_response(update: Update, context: ContextTypes.DEFA
     slot_id = slot['slot_id']
     slot_name = slot['slot_name']
     
-    # Determine media type
-    media_type = "video" if message.video else \
-                 "document" if message.document else \
-                 "sticker" if message.sticker else \
-                 "animation" if message.animation else \
-                 "voice" if message.voice else \
-                 "video note" if message.video_note else "media"
+    # Determine media type and file extension
+    media_type = None
+    file_id = None
+    file_ext = None
+    
+    if message.video:
+        media_type = "video"
+        file_id = message.video.file_id
+        file_ext = "mp4"
+    elif message.document:
+        media_type = "document"
+        file_id = message.document.file_id
+        # Get original filename extension if available
+        if message.document.file_name:
+            file_ext = message.document.file_name.split('.')[-1] if '.' in message.document.file_name else "file"
+        else:
+            file_ext = "file"
+    elif message.sticker:
+        media_type = "sticker"
+        file_id = message.sticker.file_id
+        file_ext = "webp"
+    elif message.animation:
+        media_type = "animation"
+        file_id = message.animation.file_id
+        file_ext = "gif"
+    elif message.voice:
+        media_type = "voice"
+        file_id = message.voice.file_id
+        file_ext = "ogg"
+    elif message.video_note:
+        media_type = "video_note"
+        file_id = message.video_note.file_id
+        file_ext = "mp4"
+    
+    # Determine points based on media type
+    if media_type in ['video', 'document']:
+        points = slot['points_for_photo']  # 10 points - same effort as photo
+    elif media_type in ['voice', 'video_note']:
+        points = slot['points_for_text']  # 5 points - like text message
+    elif media_type in ['sticker', 'animation']:
+        points = 0  # No points - entertainment only
+    else:
+        points = slot['points_for_photo']  # Default
     
     # Always ask for confirmation for non-photo media
     keyboard = [
@@ -422,29 +458,15 @@ async def handle_other_media_response(update: Update, context: ContextTypes.DEFA
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
+    points_msg = f" (+{points} points)" if points > 0 else " (no points)"
     confirmation_msg = await message.reply_text(
-        f"Is this {media_type} for the {slot_name} slot?",
+        f"Is this {media_type} for the {slot_name} slot?{points_msg}",
         reply_markup=reply_markup
     )
     
     # Store confirmation data in context
     if 'pending_confirmations' not in context.bot_data:
         context.bot_data['pending_confirmations'] = {}
-    
-    # Get file_id based on media type
-    file_id = None
-    if message.video:
-        file_id = message.video.file_id
-    elif message.document:
-        file_id = message.document.file_id
-    elif message.sticker:
-        file_id = message.sticker.file_id
-    elif message.animation:
-        file_id = message.animation.file_id
-    elif message.voice:
-        file_id = message.voice.file_id
-    elif message.video_note:
-        file_id = message.video_note.file_id
     
     context.bot_data['pending_confirmations'][confirmation_msg.message_id] = {
         'user_id': user_id,
@@ -453,12 +475,13 @@ async def handle_other_media_response(update: Update, context: ContextTypes.DEFA
         'event_id': event_id,
         'group_id': group_id,
         'original_message_id': message.message_id,
-        'photo_file_id': file_id,  # Reuse same field name for consistency
+        'file_id': file_id,
         'username': username,
         'caption': message.caption if message.caption else '',
-        'points': slot['points_for_photo'],
-        'type': 'photo',  # Treat as photo for points
-        'media_type': media_type
+        'points': points,
+        'type': 'media',  # Mark as media (not photo)
+        'media_type': media_type,
+        'file_ext': file_ext
     }
     
     # Auto-select "No" after timeout

@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS licenses (
 CREATE TABLE IF NOT EXISTS groups_config (
     config_id INT AUTO_INCREMENT PRIMARY KEY,
     group_id BIGINT NOT NULL UNIQUE,
-    license_id INT NOT NULL UNIQUE,
+    license_key VARCHAR(50) NOT NULL UNIQUE,
     admin_user_id BIGINT NOT NULL,
     max_members INT DEFAULT 0,
     welcome_message TEXT,
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS groups_config (
 -- EVENTS TABLE
 CREATE TABLE IF NOT EXISTS events (
     event_id INT AUTO_INCREMENT PRIMARY KEY,
-    group_id BIGINT NOT NULL,
+    group_id BIGINT NOT NULL UNIQUE,
     event_name VARCHAR(255) NOT NULL DEFAULT 'Wellness Challenge',
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS events (
 -- GROUP SLOTS TABLE
 CREATE TABLE IF NOT EXISTS group_slots (
     slot_id INT AUTO_INCREMENT PRIMARY KEY,
-    group_id BIGINT NOT NULL,
+    group_id BIGINT NOT NULL UNIQUE,
     event_id INT,
     slot_name VARCHAR(255) NOT NULL,
     start_time TIME NOT NULL,
@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS slot_keywords (
 CREATE TABLE IF NOT EXISTS group_members (
     member_id INT AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT NOT NULL,
-    group_id BIGINT NOT NULL,
+    group_id BIGINT NOT NULL UNIQUE,
     username VARCHAR(255),
     first_name VARCHAR(255),
     current_event_points INT DEFAULT 0,
@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS group_members (
 -- MEMBER HISTORY TABLE
 CREATE TABLE IF NOT EXISTS member_history (
     history_id INT AUTO_INCREMENT PRIMARY KEY,
-    group_id BIGINT NOT NULL,
+    group_id BIGINT NOT NULL UNIQUE,
     user_id BIGINT NOT NULL,
     action ENUM('joined', 'left', 'kicked') NOT NULL,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -101,8 +101,8 @@ CREATE TABLE IF NOT EXISTS member_history (
 -- BANNED WORDS TABLE
 CREATE TABLE IF NOT EXISTS banned_words (
     word_id INT AUTO_INCREMENT PRIMARY KEY,
-    group_id BIGINT,
-    word VARCHAR(255) NOT NULL,
+    group_id BIGINT NOT NULL UNIQUE,
+    word VARCHAR(255) NOT NULL UNIQUE,
     UNIQUE (group_id, word),
     FOREIGN KEY (group_id) REFERENCES groups_config(group_id) ON DELETE CASCADE
 );
@@ -110,10 +110,10 @@ CREATE TABLE IF NOT EXISTS banned_words (
 -- USER ACTIVITY LOG TABLE
 CREATE TABLE IF NOT EXISTS user_activity_log (
     log_id INT AUTO_INCREMENT PRIMARY KEY,
-    group_id BIGINT NOT NULL,
+    group_id BIGINT NOT NULL UNIQUE,
     user_id BIGINT NOT NULL,
     slot_name VARCHAR(255),
-    activity_type ENUM('text', 'photo', 'button') NOT NULL,
+    activity_type ENUM('text', 'photo', 'video', 'document', 'sticker', 'animation', 'voice', 'video_note', 'button') NOT NULL,
     message_content TEXT,
     telegram_file_id VARCHAR(255),
     local_file_path TEXT,
@@ -152,7 +152,7 @@ CREATE TABLE IF NOT EXISTS daily_slot_tracker (
 -- INACTIVITY WARNINGS TABLE
 CREATE TABLE IF NOT EXISTS inactivity_warnings (
     warning_id INT AUTO_INCREMENT PRIMARY KEY,
-    group_id BIGINT NOT NULL,
+    group_id BIGINT NOT NULL UNIQUE,
     user_id BIGINT NOT NULL,
     warning_date DATE NOT NULL,
     warning_type ENUM('2day', '3day') NOT NULL,
