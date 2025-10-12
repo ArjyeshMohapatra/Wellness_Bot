@@ -65,47 +65,47 @@ def create_default_event_and_slots(group_id):
                 
                 # Create 8 default slots with all response fields
                 slots = [
-                    ('Good Morning', '04:00:00', '06:00:00', 'text', 5, 10, 
+                    ('Good Morning', '23:15:00', '23:17:00', 'text', 5, 10, 
                      'Its Good morning everyone! Share your morning photo 🌅',
                      'Great start to your day! ✅ +10 points',
                      'Is this your morning routine message?'),
                     
-                    ('Workout', '07:00:00', '08:00:00', 'photo', 2, 10, 
+                    ('Workout', '23:17:00', '23:19:00', 'photo', 2, 10, 
                      'Its Workout time everyone! Post your exercise photo 💪',
                      'Amazing workout! 💪 +10 points',
                      'Is this your workout photo?'),
                     
-                    ('Breakfast', '08:00:00', '10:00:00', 'photo', 5, 10, 
+                    ('Breakfast', '23:19:00', '23:21:00', 'photo', 5, 10, 
                      'Its Breakfast time everyone! Share your delicious & healthy meal 🍳',
                      'Healthy breakfast! 🍳 +10 points',
                      'Is this your breakfast photo?'),
                     
-                    ('Morning Water Intake', '11:00:00', '12:00:00', 'button', 2, 0, 
+                    ('Morning Water Intake', '23:21:00', '23:23:00', 'button', 2, 0, 
                      'Lets checkout your morning hydration everyone! How much water did everyone drink ? 💧',
                      'Great hydration! 💧 +2 points',
                      'Did you drink water?'),
                     
-                    ('Lunch', '13:00:00', '15:00:00', 'photo', 5, 10, 
+                    ('Lunch', '23:23:00', '23:25:00', 'photo', 5, 10, 
                      'Its Lunch time everyone! Post your delicious meal 🍱',
                      'Nutritious lunch! 🍱 +25 points',
                      'Is this your lunch photo?'),
                     
-                    ('Afternoon Water Intake', '16:00:00', '18:00:00', 'button', 2, 0, 
+                    ('Afternoon Water Intake', '23:25:00', '23:27:00', 'button', 2, 0, 
                      'Lets checkout your afternoon hydration everyone! How much water did everyone drink ? 💧',
                      'Great hydration! 💧 +2 points',
                      'Did you drink water?'),
                     
-                    ('Evening Snacks', '18:00:00', '19:00:00', 'photo', 5, 10, 
+                    ('Evening Snacks', '23:27:00', '23:29:00', 'photo', 5, 10, 
                      'Evening snack time! Share your healthy snack 🍎',
                      'Healthy snack! 🍎 +15 points',
                      'Is this your snack photo?'),
                     
-                    ('Evening Water intake', '19:00:00', '20:00:00', 'button', 2, 0, 
+                    ('Evening Water intake', '23:29:00', '23:31:00', 'button', 2, 0, 
                      'Lets checkout how hydrated are you in evening! Track your water 💧',
                      'Great hydration! 💧 +2 points',
                      'Did you drink water?'),
                     
-                    ('Dinner', '21:00:00', '22:00:00', 'photo', 5, 10, 
+                    ('Dinner', '23:31:00', '23:33:00', 'photo', 5, 10, 
                      'Its Dinner time everyone! Share your healthy meal 🍽️',
                      'Delicious dinner! 🍽️ +25 points',
                      'Is this your dinner photo?')
@@ -180,12 +180,20 @@ def add_member(group_id, user_id, username=None, first_name=None):
                     # Regular member - check if joining during active slot (mid-day)
                     active_slot = get_active_slot(group_id)
                     
-                    # Check if it's before first slot (Good Morning 04:00)
-                    current_time = datetime.now().time()
-                    first_slot_start = time(4, 0)  # 04:00 AM
+                    # Get the first slot time from database
+                    all_slots = get_all_slots(group_id)
+                    if all_slots and len(all_slots) > 0:
+                        first_slot_start = all_slots[0]['start_time']
+                        if hasattr(first_slot_start, 'total_seconds'):
+                            first_slot_start = (datetime.min + first_slot_start).time()
+                    else:
+                        first_slot_start = time(4, 0)  # Default fallback
                     
-                    # If there's an active slot OR time is after 04:00, restrict until next day
-                    is_restricted = 1 if (active_slot or current_time >= first_slot_start) else 0
+                    current_time = datetime.now().time()
+                    
+                    # Only restrict if there's an active slot (user joining MID-slot)
+                    # Don't restrict if joining before first slot starts
+                    is_restricted = 1 if active_slot else 0
                 
                 query = """
                     INSERT INTO group_members 
@@ -228,7 +236,7 @@ def deduct_knockout_points(group_id, user_id, points):
         try:
             query = """
                 UPDATE group_members 
-                SET knockout_points = knockout_points + %s,
+                SET knockout_points = LEAST(knockout_points + %s, current_points + knockout_points),
                     current_points = GREATEST(0, current_points - %s)
                 WHERE group_id = %s AND user_id = %s
             """
@@ -276,7 +284,11 @@ def get_active_slot(group_id):
         query = """
             SELECT * FROM group_slots
             WHERE group_id = %s
-            AND CURTIME() BETWEEN start_time AND end_time
+            AND (
+                (start_time <= end_time AND CURTIME() BETWEEN start_time AND end_time)
+                OR
+                (start_time > end_time AND (CURTIME() >= start_time OR CURTIME() <= end_time))
+            )
             LIMIT 1
         """
         result = execute_query(query, (group_id,), fetch=True)
@@ -352,10 +364,11 @@ def get_banned_words(group_id):
     
 def get_leaderboard(group_id, limit=10):
         query = """
-            SELECT user_id, username, first_name, current_points, knockout_points, user_day_number
+            SELECT user_id, username, first_name, current_points, knockout_points, user_day_number,
+                   (current_points - knockout_points) AS net_points
             FROM group_members
             WHERE group_id = %s
-            ORDER BY current_points DESC
+            ORDER BY net_points DESC
             LIMIT %s
         """
         return execute_query(query, (group_id, limit), fetch=True)

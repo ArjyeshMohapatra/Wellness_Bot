@@ -2,10 +2,10 @@ from telegram.ext import ContextTypes
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import logging
 import os
-from datetime import time as dt_time
+from datetime import time
 
 from services import database_service as db
-import config
+from db import get_db_connection
 
 logger = logging.getLogger(__name__)
 
@@ -230,8 +230,21 @@ async def check_low_points(context: ContextTypes.DEFAULT_TYPE):
             if min_points <= 0:
                 continue
             
-            # Get members below minimum
-            low_point_members = db.get_low_point_members(group_id, min_points)
+            # Get members who COMPLETED 7 days but are below minimum
+            query = """
+                SELECT user_id, username, first_name, current_points, user_day_number
+                FROM group_members
+                WHERE group_id = %s 
+                AND current_points < %s 
+                AND user_day_number >= 7
+                AND is_restricted = 0
+            """
+            
+            with get_db_connection() as conn:
+                cursor = conn.cursor(dictionary=True)
+                cursor.execute(query, (group_id, min_points))
+                low_point_members = cursor.fetchall()
+                cursor.close()
             
             for member in low_point_members:
                 user_id = member['user_id']
@@ -251,14 +264,14 @@ async def check_low_points(context: ContextTypes.DEFAULT_TYPE):
                     # Send congratulations and notification
                     await context.bot.send_message(
                         chat_id=group_id,
-                        text=f"� {first_name}, thank you for your participation!\n"
-                             f"🎯 You earned {current_points} points - great effort!\n\n"
+                        text=f"👋 {first_name}, thank you for your participation!\n"
+                             f"🎯 You completed 7 days and earned {current_points} points!\n\n"
                              f"Unfortunately, you didn't reach the minimum {min_points} points required.\n"
                              f"💪 Keep trying! You're temporarily removed for 1 day.\n"
                              f"You can rejoin and try again!"
                     )
                     
-                    logger.info(f"Kicked low-point user {user_id} from group {group_id}")
+                    logger.info(f"Kicked low-point user {user_id} from group {group_id} after 7 days with {current_points} points")
                 
                 except Exception as e:
                     logger.error(f"Error kicking user {user_id}: {e}")
@@ -517,9 +530,6 @@ async def post_daily_leaderboard(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error in post_daily_leaderboard: {e}")
 
-# Import get_db_connection
-from db import get_db_connection
-
 def setup_jobs(application):
     """Setup periodic jobs."""
     job_queue = application.job_queue
@@ -530,17 +540,16 @@ def setup_jobs(application):
     # Check mid-slot warnings every minute
     job_queue.run_repeating(check_mid_slot_warnings, interval=60, first=30)
     
-    # Check inactive users every hour
-    job_queue.run_repeating(check_inactive_users, interval=3600, first=300)
+    # Check inactive users once daily at 22:00 (10 PM)
+    job_queue.run_daily(check_inactive_users, time=time(hour=22, minute=0))
     
-    # Check low-point users every 6 hours
-    job_queue.run_repeating(check_low_points, interval=21600, first=600)
+    # Check user day cycles daily at 23:15 (just before first slot)
+    job_queue.run_daily(check_user_day_cycles, time=time(hour=23, minute=15))
     
-    # Check user day cycles daily at 04:00 AM (when first slot starts)
-    from datetime import time
-    job_queue.run_daily(check_user_day_cycles, time=time(hour=4, minute=0))
+    # Check low-point users daily at END OF DAY (23:00 - 11 PM)
+    job_queue.run_daily(check_low_points, time=time(hour=23, minute=0))
     
-    # Post daily leaderboard at 10:00 PM (end of day)
-    job_queue.run_daily(post_daily_leaderboard, time=time(hour=22, minute=15))
+    # Post daily leaderboard at 22:00 (10:00 PM)
+    job_queue.run_daily(post_daily_leaderboard, time=time(hour=22, minute=0))
     
     logger.info("Scheduled jobs setup completed")

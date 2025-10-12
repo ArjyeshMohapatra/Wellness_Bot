@@ -92,7 +92,6 @@ async def track_members(update, context):
     if not was_member and is_member:
         db.add_member(group_id, user_id, user.username, user.first_name)
         
-        # Create persistent custom keyboard (no leaderboard - posts automatically at 10 PM)
         reply_markup = ReplyKeyboardMarkup(
             [['My Score 💯', 'Time Sheet 📅']],
             resize_keyboard=True,

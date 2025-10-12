@@ -61,11 +61,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         try:
             await message.delete()
             
+            # Get actual first slot time dynamically
+            all_slots = db.get_all_slots(group_id)
+            if all_slots and len(all_slots) > 0:
+                first_slot = all_slots[0]
+                first_slot_time = first_slot['start_time']
+                if hasattr(first_slot_time, 'total_seconds'):
+                    first_slot_time = (datetime.min + first_slot_time).time()
+                time_str = first_slot_time.strftime("%H:%M")
+                slot_name = first_slot['slot_name']
+                restriction_text = f"You are restricted from posting until tomorrow's first slot ({slot_name} - {time_str}).\n\n"
+            else:
+                restriction_text = f"You are restricted from posting until tomorrow's first slot.\n\n"
+            
             restriction_msg = await context.bot.send_message(
                 chat_id=group_id,
                 text=f"👋 {first_name}, welcome to the group!\n\n"
                      f"⚠️ You joined during an active slot time.\n"
-                     f"You are restricted from posting until tomorrow's first slot (Good Morning - 04:00 AM).\n\n"
+                     f"{restriction_text}"
                      f"Your Day 1 will start tomorrow! 📅"
             )
             
@@ -212,29 +225,32 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             logger.error(f"Error handling duplicate submission: {e}")
             return
     
-    # Handle different message types
-    if message.photo and slot_type == 'photo':
-        await handle_photo_response(update, context, active_slot, event_id)
-    
-    elif message.text and slot_type in ['text', 'photo']:
-        await handle_text_response(update, context, active_slot, event_id)
-    
-    elif (message.video or message.document or message.sticker or message.animation or message.voice or message.video_note) and slot_type == 'photo':
-        # Other media types sent to photo slot - ask for confirmation
-        await handle_other_media_response(update, context, active_slot, event_id)
-    
-    else:
-        # Wrong type for slot
+    if slot_type == 'button':
         try:
             await message.delete()
             hint_msg = await context.bot.send_message(
                 chat_id=group_id,
-                text=f"📌 {first_name}, this slot requires: "
-                     f"{'photos' if slot_type == 'photo' else 'text messages'}"
+                text=f"💧 {first_name}, please use the water intake buttons for this slot!"
             )
-            context.job_queue.run_once(lambda ctx: hint_msg.delete(), when=8)
+            context.job_queue.run_once(lambda ctx: hint_msg.delete(), when=5)
         except Exception as e:
-            logger.error(f"Error sending hint: {e}")
+            logger.error(f"Error sending button hint: {e}")
+        return
+    
+    # Accept ANY media type for regular slots
+    if message.photo:
+        await handle_photo_response(update, context, active_slot, event_id)
+    
+    elif message.text:
+        await handle_text_response(update, context, active_slot, event_id)
+    
+    elif message.video or message.document or message.sticker or message.animation or message.voice or message.video_note:
+        # Other media types - ask for confirmation
+        await handle_other_media_response(update, context, active_slot, event_id)
+    
+    else:
+        # Unknown content type
+        logger.warning(f"Unknown message type from user {user_id} in group {group_id}")
 
 async def handle_text_response(update: Update, context: ContextTypes.DEFAULT_TYPE, slot: dict, event_id: int):
     """Handle text message for a slot."""
@@ -521,8 +537,8 @@ async def auto_reject_confirmation(context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 logger.error(f"Error in auto-reject: {e}")
             
-            # Remove from pending
-            del context.bot_data['pending_confirmations'][confirmation_msg_id]
+            # Remove from pending (use pop to prevent KeyError)
+            context.bot_data['pending_confirmations'].pop(confirmation_msg_id, None)
 
 # Create message handlers
 text_message_handler = MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)

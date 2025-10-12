@@ -49,12 +49,20 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.answer("This confirmation is not for you!", show_alert=True)
         return
     
-    # Get pending confirmation data
+    # Get pending confirmation data (use atomic pop to prevent race conditions)
     pending_confirmations = context.bot_data.get('pending_confirmations', {})
-    confirmation_data = pending_confirmations.get(message.message_id)
+    confirmation_data = pending_confirmations.pop(message.message_id, None)
     
     if not confirmation_data:
-        await query.edit_message_text("⏱️ This confirmation has expired.")
+        await query.edit_message_text("⏱️ This confirmation has expired or already processed.")
+        return
+    
+    # Double-check user ID from confirmation data for security
+    user_id_from_data = confirmation_data.get('user_id')
+    if query.from_user.id != user_id_from_data:
+        logger.warning(f"Security: User {query.from_user.id} tried to confirm for user {user_id_from_data}")
+        await query.answer("❌ Security violation detected!", show_alert=True)
+        # Don't add back to pending - already removed
         return
     
     group_id = confirmation_data['group_id']
@@ -71,7 +79,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
             caption = confirmation_data.get('caption', '')
             
             # Get slot configuration to determine points
-            slot = db.get_current_slot(group_id)
+            slot = db.get_active_slot(group_id)
             if not slot:
                 await query.edit_message_text("❌ No active slot found.")
                 return
@@ -113,7 +121,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
             file_ext = confirmation_data.get('file_ext', 'file')
             
             # Get slot configuration to determine points
-            slot = db.get_current_slot(group_id)
+            slot = db.get_active_slot(group_id)
             if not slot:
                 await query.edit_message_text("❌ No active slot found.")
                 return
@@ -162,7 +170,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
             text = confirmation_data.get('text', '')
             
             # Get slot configuration to determine points
-            slot = db.get_current_slot(group_id)
+            slot = db.get_active_slot(group_id)
             if not slot:
                 await query.edit_message_text("❌ No active slot found.")
                 return
@@ -198,8 +206,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
         except Exception as e:
             logger.warning(f"Could not delete original message: {e}")
     
-    # Remove from pending
-    del pending_confirmations[message.message_id]
+    # Note: Already removed from pending via pop() above
     
     # Delete confirmation message after 3 seconds
     context.job_queue.run_once(
@@ -224,60 +231,82 @@ async def handle_water_button(update: Update, context: ContextTypes.DEFAULT_TYPE
     liters = int(parts[1])
     slot_id = int(parts[2])
     
-    # Get slot info
-    active_slot = db.get_active_slot(group_id)
+    # Add in-memory lock to prevent spam clicking
+    if 'button_locks' not in context.bot_data:
+        context.bot_data['button_locks'] = set()
     
-    if not active_slot or active_slot['slot_id'] != slot_id:
-        await query.answer("This water slot is no longer active!", show_alert=True)
+    from datetime import datetime
+    lock_key = f"{group_id}_{user_id}_{slot_id}_{datetime.now().date()}"
+    
+    if lock_key in context.bot_data['button_locks']:
+        await query.answer("⏳ Processing your previous click, please wait...", show_alert=True)
         return
     
-    # Get event
-    event = db.get_active_event(group_id)
-    event_id = event['event_id'] if event else None
+    # Acquire lock
+    context.bot_data['button_locks'].add(lock_key)
     
-    # Check if already completed today
-    if event_id and db.check_slot_completed_today(event_id, slot_id, user_id):
-        await query.answer("Already completed!", show_alert=True)
-        # Send visible message in chat
+    try:
+        # Get slot info
+        active_slot = db.get_active_slot(group_id)
+        
+        if not active_slot or active_slot['slot_id'] != slot_id:
+            await query.answer("This water slot is no longer active!", show_alert=True)
+            return
+        
+        # Get event
+        event = db.get_active_event(group_id)
+        event_id = event['event_id'] if event else None
+        
+        # Check if already completed today
+        if event_id and db.check_slot_completed_today(event_id, slot_id, user_id):
+            await query.answer("Already completed!", show_alert=True)
+            # Send visible message in chat
+            slot_name = active_slot['slot_name']
+            response_msg = await context.bot.send_message(
+                chat_id=group_id,
+                text=f"⚠️ {first_name}, you have already completed {slot_name} slot for today!",
+                reply_to_message_id=query.message.message_id
+            )
+            # Auto-delete after 5 seconds
+            context.job_queue.run_once(
+                lambda ctx: response_msg.delete(),
+                when=5
+            )
+            return
+        
+        # Calculate points (e.g., 2 points per liter)
+        points = liters * 2
         slot_name = active_slot['slot_name']
+        
+        # Award points
+        db.add_points(group_id, user_id, points, event_id)
+        db.log_activity(group_id, user_id, slot_name, 'button', f"{liters}L water", points_earned=points)
+        
+        if event_id:
+            db.mark_slot_completed(event_id, slot_id, user_id, 'completed')
+        
+        # Send confirmation as popup notification (doesn't replace message)
+        await query.answer(f"✅ {liters}L logged! +{points} points!", show_alert=True)
+        
+        # Send a separate message to show who completed (doesn't replace buttons)
         response_msg = await context.bot.send_message(
             chat_id=group_id,
-            text=f"⚠️ {first_name}, you have already completed {slot_name} slot for today!",
-            reply_to_message_id=query.message.message_id
+            text=f"💧 {first_name} drank {liters}L of water! +{points} points!"
         )
-        # Auto-delete after 5 seconds
+        
+        ''' # Delete the response message after 5 seconds to keep chat clean
         context.job_queue.run_once(
             lambda ctx: response_msg.delete(),
             when=5
-        )
-        return
+        ) '''
+        
+        logger.info(f"User {user_id} logged {liters}L water for slot {slot_name}")
     
-    # Calculate points (e.g., 2 points per liter)
-    points = liters * 2
-    slot_name = active_slot['slot_name']
-    
-    # Award points
-    db.add_points(group_id, user_id, points, event_id)
-    db.log_activity(group_id, user_id, slot_name, 'button', f"{liters}L water", points_earned=points)
-    
-    if event_id:
-        db.mark_slot_completed(event_id, slot_id, user_id, 'completed')
-    
-    # Send confirmation as popup notification (doesn't replace message)
-    await query.answer(f"✅ {liters}L logged! +{points} points!", show_alert=True)
-    
-    # Send a separate message to show who completed (doesn't replace buttons)
-    response_msg = await context.bot.send_message(
-        chat_id=group_id,
-        text=f"💧 {first_name} drank {liters}L of water! +{points} points!"
-    )
-    
-    ''' # Delete the response message after 5 seconds to keep chat clean
-    context.job_queue.run_once(
-        lambda ctx: response_msg.delete(),
-        when=5
-    ) '''
-    
-    logger.info(f"User {user_id} logged {liters}L water for slot {slot_name}")
+    finally:
+        # Release lock after 3 seconds to prevent accidental double-clicks
+        def release_lock(ctx):
+            context.bot_data['button_locks'].discard(lock_key)
+        
+        context.job_queue.run_once(release_lock, when=3)
 
 callback_handler = CallbackQueryHandler(handle_callback)

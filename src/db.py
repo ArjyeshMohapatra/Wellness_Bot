@@ -39,6 +39,7 @@ def get_db_connection():
     if connection_pool is None:
         init_db_pool()
     
+    connection = None  # Initialize to None to prevent UnboundLocalError
     try:
         connection = connection_pool.get_connection()
         yield connection

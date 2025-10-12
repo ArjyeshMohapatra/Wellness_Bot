@@ -32,6 +32,20 @@ def main():
         init_db_pool()
         logger.info("Database connection pool initialized")
         
+        # Validate banned words exist in database
+        from db import get_db_connection
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM banned_words WHERE group_id IS NULL")
+            count = cursor.fetchone()[0]
+            cursor.close()
+            
+            if count == 0:
+                logger.error("❌ CRITICAL: No global banned words in database! Check sql/schema.sql INSERT statements!")
+                logger.warning("⚠️ Bot will start but content moderation may not work properly.")
+            else:
+                logger.info(f"✅ {count} global banned words loaded successfully")
+        
         # Create the Application with post_init
         application = (
             Application.builder()
