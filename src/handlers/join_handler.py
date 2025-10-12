@@ -1,10 +1,6 @@
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ChatMemberHandler, ContextTypes
 import logging
-import os
-import sys
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services import database_service as db
 
@@ -98,7 +94,7 @@ async def track_members(update, context):
         
         # Create persistent custom keyboard (no leaderboard - posts automatically at 10 PM)
         reply_markup = ReplyKeyboardMarkup(
-            [['My Score �'], ["Time Sheet 📅"]],
+            [['My Score 💯', 'Time Sheet 📅']],
             resize_keyboard=True,
             one_time_keyboard=False
         )

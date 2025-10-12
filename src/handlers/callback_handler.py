@@ -1,13 +1,10 @@
 from telegram import Update
 from telegram.ext import CallbackQueryHandler, ContextTypes
 import logging
-import os
-import sys
-
-# Add parent directory to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+from datetime import datetime
 from services import database_service as db
+from services.file_storage import FileStorage
+import config
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +15,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     first_name = query.from_user.first_name
     
     await query.answer()
-    
     data = query.data
     
     # Handle confirmation responses (Yes/No for keyword mismatch)
@@ -70,10 +66,6 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
     if response == 'yes':
         # Handle based on content type
         if content_type == 'photo':
-            # Import storage here to avoid circular imports
-            from services.file_storage import FileStorage
-            import config
-            
             photo_file_id = confirmation_data['photo_file_id']
             username = confirmation_data['username']
             caption = confirmation_data.get('caption', '')
@@ -82,7 +74,6 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                 # Download and save photo
                 file = await context.bot.get_file(photo_file_id)
                 
-                from datetime import datetime
                 timestamp = datetime.now().strftime("%Y_%m_%d_%I_%M_%S_%p").lower()
                 filename = f"{username}_{slot_name}_{timestamp}.jpg"
                 

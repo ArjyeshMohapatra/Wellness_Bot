@@ -2,11 +2,7 @@ from telegram.ext import ContextTypes
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import logging
 import os
-import sys
 from datetime import time as dt_time
-
-# Add parent directory to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services import database_service as db
 import config

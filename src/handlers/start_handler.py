@@ -1,11 +1,7 @@
 from telegram import Update,ReplyKeyboardMarkup
 from telegram.ext import CommandHandler, ContextTypes
 import logging
-import os
-import sys
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+from datetime import datetime
 from services import database_service as db
 
 logger = logging.getLogger(__name__)
@@ -26,8 +22,22 @@ async def start(update, context):
             f"Use /help for more commands."
         )
     else:
+        # In group chat - check if user is admin
+        try:
+            chat_member = await context.bot.get_chat_member(chat.id, user.id)
+            is_admin = chat_member.status in ['creator', 'administrator']
+        except Exception as e:
+            logger.warning(f"Could not check admin status: {e}")
+            is_admin = False
+        
+        # Only allow admins to use /start in groups
+        if not is_admin:
+            logger.info(f"Non-admin user {user.id} tried to use /start in group {chat.id}")
+            return  # Silently ignore
+        
+        # Admin-only code below:
         reply_markup = ReplyKeyboardMarkup(
-            [['My Score 💯'],["Time Sheet 📅"]],
+            [['My Score 💯', 'Time Sheet 📅']],
             resize_keyboard=True,
             one_time_keyboard=False
         )
@@ -76,7 +86,6 @@ async def start(update, context):
                         f"• Content moderation\n"
                         f"• Auto member management\n\n"
                         f"📋 *Commands:*\n"
-                        f"/start - Bot status\n"
                         f"/schedule - View all time slots\n"
                         f"/points - Check your points\n"
                         f"/leaderboard - Top members\n\n"
@@ -94,12 +103,11 @@ async def start(update, context):
 
                     await update.message.reply_text("✅ Group auto-configured. Check the pinned welcome message for details.")
                 else:
-                    await update.message.reply_text("❌ Failed to auto-configure the group. Please check bot permissions and database connectivity.")
+                    await update.message.reply_text("❌ Failed to auto-configure the group. Please check bot permissions.")
             else:
                 await update.message.reply_text(
                     f"⚠️ Group not configured yet! I can auto-configure if I'm an admin.\n\n"
-                    f"Please make me an admin and run /start again.\n\n"
-                    f"📝 Group ID: `{chat.id}`"
+                    f"Please make me an admin and run /start again."
                 )
 
 async def points(update, context):
@@ -140,9 +148,6 @@ async def points(update, context):
             f"{user.first_name}, you're not registered yet. Send any message to register!"
         )
 
-# Leaderboard command removed - now posted automatically at 10 PM daily
-# Users cannot manually request leaderboard anymore per boss requirement
-
 async def schedule(update, context):
     chat = update.effective_chat
     
@@ -165,10 +170,8 @@ async def schedule(update, context):
             
             # Convert timedelta to time string if needed
             if hasattr(start, 'total_seconds'):
-                from datetime import datetime
                 start = (datetime.min + start).time()
             if hasattr(end, 'total_seconds'):
-                from datetime import datetime
                 end = (datetime.min + end).time()
             
             message += f"⏰ {start.strftime('%H:%M')} - {end.strftime('%H:%M')}\n"
@@ -182,7 +185,6 @@ async def schedule(update, context):
 async def help_command(update, context):
     await update.message.reply_text(
         "🤖 **Bot Commands**\n\n"
-        "/start - Start the bot\n"
         "/points - Check your points\n"
         "/schedule - View today's schedule\n"
         "/help - Show this help\n\n"
@@ -191,8 +193,8 @@ async def help_command(update, context):
         "• Earn points for participation\n"
         "• Stay active to avoid being kicked\n"
         "• Avoid banned words\n"
-        "• Reach minimum points to stay in events\n"
-        "• Leaderboard posted automatically at 10 PM daily 🏆\n\n"
+        "• Reach minimum points to stay in the group\n"
+        "• Leaderboard posted automatically at 10:15 PM daily 🏆\n\n"
         "💡 Keyboard buttons appear automatically for easy access!"
     )
 
@@ -255,11 +257,8 @@ async def test_leaderboard(update, context):
     else:
         await update.message.reply_text("📊 No participants yet!")
 
-# Register command handlers
 start_handler = CommandHandler("start", start)
 points_handler = CommandHandler("points", points)
-# leaderboard_handler removed - leaderboard now posts automatically at 10 PM
 schedule_handler = CommandHandler("schedule", schedule)
 help_handler = CommandHandler("help", help_command)
 test_leaderboard_handler = CommandHandler("testleaderboard", test_leaderboard)
-# keyboard_handler removed - keyboard now appears automatically for all users

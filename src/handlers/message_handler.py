@@ -1,18 +1,13 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup,ReplyKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import MessageHandler, filters, ContextTypes
 import logging
-import os
-import sys
-from datetime import datetime
-
-# Add parent directory to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from datetime import datetime, timedelta
+import re
 
 from services import database_service as db
 from services.file_storage import FileStorage
 import config
 from handlers.start_handler import points, schedule
-import re
 
 logger = logging.getLogger(__name__)
 storage = FileStorage(config.STORAGE_PATH)
@@ -40,8 +35,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     username = message.from_user.username
     first_name = message.from_user.first_name
     
-    # Handle custom keyboard button presses FIRST - route to existing command handlers
-    # This must be checked before ANY other processing to avoid slot/banned word checks
     if message.text and message.text in ['My Score 💯', "Time Sheet 📅"]:
         if message.text == 'My Score 💯':
             await points(update, context)
@@ -57,28 +50,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     # Ensure member exists in database
     db.add_member(group_id, user_id, username, first_name)
-    
-    if 'keyboards_sent' not in context.bot_data:
-        context.bot_data['keyboards_sent'] = set()
-    
-    user_key = f"{group_id}_{user_id}"
-    if user_key not in context.bot_data['keyboards_sent']:
-        try:
-            reply_markup = ReplyKeyboardMarkup(
-                [['My Score 💯'],["Time Sheet 📅"]],
-                resize_keyboard=True,
-                one_time_keyboard=False
-            )
-            await context.bot.send_message(
-                chat_id=group_id,
-                text=f"👋 {first_name}, use the keyboard below for quick access!",
-                reply_markup=reply_markup,
-                reply_to_message_id=message.message_id
-            )
-            context.bot_data['keyboards_sent'].add(user_key)
-            logger.info(f"Sent keyboard to user {user_id} in group {group_id}")
-        except Exception as e:
-            logger.warning(f"Could not send keyboard to user {user_id}: {e}")
     
     # Update member activity
     db.update_member_activity(group_id, user_id)
@@ -131,8 +102,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     logger.warning(f"BANNED PHRASE MATCH: '{banned_word}' found in '{message.text[:50]}'")
                     break
             else:
-                # Single words: match as complete word only (with word boundaries)
-                # \b ensures it matches "hell" but not "hello"
                 pattern = r'\b' + re.escape(banned_word.lower()) + r'\b'
                 if re.search(pattern, message_text_lower):
                     matched_word = banned_word
@@ -163,19 +132,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     when=5
                 )
                 
-                # Ban permanently if 2 warnings - even if they have enough points
+                # Ban for 1 day if 2 warnings
                 if warnings >= 2:
-                    # PERMANENT BAN for banned words (no until_date)
-                    await context.bot.ban_chat_member(group_id, user_id)
+                    
+                    # Ban for 1 day (until_date requires Unix timestamp)
+                    ban_until = datetime.now() + timedelta(days=1)
+                    await context.bot.ban_chat_member(group_id, user_id, until_date=ban_until)
                     db.remove_member(group_id, user_id, 'banned')
                     
                     # Congratulate them if they had good points but still ban for violations
                     if current_points >= 100:
                         kick_msg = (f"👋 Congratulations {first_name}! You earned {current_points} points.\n"
-                                   f"However, you've been PERMANENTLY BANNED due to repeated use of inappropriate language.\n"
-                                   f"Reason: 2 warnings for banned words")
+                                   f"However, you've been BANNED due to repeated use of inappropriate language.\n"
+                                   f"Reason: 2 warnings for banned words\n")
                     else:
-                        kick_msg = f"🚫 {first_name} has been PERMANENTLY BANNED.\nReason: 2 warnings for banned words"
+                        kick_msg = (f"🚫 {first_name} has been BANNED.\n"
+                                   f"Reason: 2 warnings for banned words\n")
                     
                     await context.bot.send_message(chat_id=group_id, text=kick_msg)
                 

@@ -15,7 +15,6 @@ class FileStorage:
         """Save a photo from Telegram to local storage."""
         try:
             today_date = datetime.now().strftime("%Y_%m_%d")
-            post_time = datetime.now().strftime("%Y_%m_%d_%I_%M_%S_%p").lower()
             
             photos_path = (self.base_path / "groups" / f"gid_{group_id}" / "photos" / today_date / slot_name)
             photos_path.mkdir(parents=True, exist_ok=True)
