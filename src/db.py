@@ -24,7 +24,11 @@ def init_db_pool():
             user=config.DB_USER,
             password=config.DB_PASSWORD,
             database=config.DB_NAME,
-            autocommit=False
+            charset='utf8mb4',
+            collation='utf8mb4_unicode_520_ci',
+            use_unicode=True,
+            autocommit=False,
+            client_flags=[mysql.connector.constants.ClientFlag.SSL]
         )
         logger.info("Database connection pool initialized successfully")
     except mysql.connector.Error as e:
@@ -39,9 +43,13 @@ def get_db_connection():
     if connection_pool is None:
         init_db_pool()
     
-    connection = None  # Initialize to None to prevent UnboundLocalError
+    connection = None
     try:
         connection = connection_pool.get_connection()
+        connection.set_charset_collation('utf8mb4', 'utf8mb4_unicode_520_ci')
+        cursor = connection.cursor()
+        cursor.execute("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_520_ci;")
+        cursor.close() 
         yield connection
         connection.commit() # commits only if everything succeeds
     except mysql.connector.Error as e:

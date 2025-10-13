@@ -1,5 +1,5 @@
 DROP DATABASE IF EXISTS telegram_bot_manager;
-CREATE DATABASE IF NOT EXISTS telegram_bot_manager;
+CREATE DATABASE IF NOT EXISTS telegram_bot_manager CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci;
 USE telegram_bot_manager;
 
 -- LICENSES TABLE
@@ -102,10 +102,10 @@ CREATE TABLE IF NOT EXISTS member_history (
 CREATE TABLE IF NOT EXISTS banned_words (
     word_id INT AUTO_INCREMENT PRIMARY KEY,
     group_id BIGINT DEFAULT NULL,
-    word VARCHAR(255) NOT NULL,
+    word VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci NOT NULL,
     UNIQUE (group_id, word),
     FOREIGN KEY (group_id) REFERENCES groups_config(group_id) ON DELETE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
 
 -- USER ACTIVITY LOG TABLE
 CREATE TABLE IF NOT EXISTS user_activity_log (

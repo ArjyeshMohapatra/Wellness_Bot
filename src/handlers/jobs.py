@@ -95,9 +95,17 @@ async def check_and_announce_slots(context: ContextTypes.DEFAULT_TYPE):
                                 text=message
                             )
                     
+                    # Unpin all previous messages before pinning new slot
+                    try:
+                        await context.bot.unpin_all_chat_messages(group_id)
+                        logger.info(f"Unpinned previous messages in group {group_id}")
+                    except Exception as unpin_error:
+                        logger.warning(f"Could not unpin previous messages: {unpin_error}")
+                    
                     # Pin the slot announcement
                     try:
                         await context.bot.pin_chat_message(group_id, slot_msg.message_id)
+                        logger.info(f"Pinned slot {slot_name} announcement in group {group_id}")
                     except Exception as pin_error:
                         logger.warning(f"Could not pin slot announcement: {pin_error}")
                     

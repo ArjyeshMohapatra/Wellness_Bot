@@ -95,8 +95,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             logger.error(f"Error handling restricted user: {e}")
             return
     
-    # Check for banned words FIRST - ALWAYS ban on 2 warnings regardless of points
-    if message.text:
+    # Check if user is admin - admins are EXEMPT from banned word penalties
+    group_config = db.get_group_config(group_id)
+    is_admin = (group_config and group_config.get('admin_user_id') == user_id)
+    
+    # Check for banned words FIRST - ALWAYS ban on 2 warnings regardless of points (EXCEPT ADMINS)
+    if message.text and not is_admin:
         custom_banned = db.get_banned_words(group_id)
         
         if not custom_banned:
@@ -147,22 +151,43 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 
                 # Ban for 1 day if 2 warnings
                 if warnings >= 2:
-                    
-                    # Ban for 1 day (until_date requires Unix timestamp)
-                    ban_until = datetime.now() + timedelta(days=1)
-                    await context.bot.ban_chat_member(group_id, user_id, until_date=ban_until)
-                    db.remove_member(group_id, user_id, 'banned')
-                    
-                    # Congratulate them if they had good points but still ban for violations
-                    if current_points >= 100:
-                        kick_msg = (f"👋 Congratulations {first_name}! You earned {current_points} points.\n"
-                                   f"However, you've been BANNED due to repeated use of inappropriate language.\n"
-                                   f"Reason: 2 warnings for banned words\n")
-                    else:
-                        kick_msg = (f"🚫 {first_name} has been BANNED.\n"
-                                   f"Reason: 2 warnings for banned words\n")
-                    
-                    await context.bot.send_message(chat_id=group_id, text=kick_msg)
+                    try:
+                        # Step 1: Ban user permanently first (removes from group)
+                        await context.bot.ban_chat_member(group_id, user_id)
+                        
+                        # Step 2: Unban immediately so they can rejoin after 1 day manually
+                        # This kicks them out but doesn't permanently blacklist them
+                        await context.bot.unban_chat_member(group_id, user_id, only_if_banned=True)
+                        
+                        # Update database
+                        db.remove_member(group_id, user_id, 'banned')
+                        
+                        # Congratulate them if they had good points but still kick for violations
+                        if current_points >= 100:
+                            kick_msg = (f"👋 {first_name} earned {current_points} points but has been REMOVED from the group.\n"
+                                       f"Reason: 2 warnings for using banned words.\n"
+                                       f"You may rejoin after 24 hours.")
+                        else:
+                            kick_msg = (f"🚫 {first_name} has been REMOVED from the group.\n"
+                                       f"Reason: 2 warnings for using banned words.\n"
+                                       f"You may rejoin after 24 hours.")
+                        
+                        await context.bot.send_message(chat_id=group_id, text=kick_msg)
+                        logger.warning(f"User {user_id} ({first_name}) kicked for 2 banned word violations")
+                        
+                    except Exception as kick_error:
+                        logger.error(f"Error kicking user {user_id}: {kick_error}")
+                        # Try alternative method - just ban with until_date
+                        try:
+                            ban_until = datetime.now() + timedelta(days=1)
+                            await context.bot.ban_chat_member(group_id, user_id, until_date=ban_until)
+                            db.remove_member(group_id, user_id, 'banned')
+                            
+                            kick_msg = (f"🚫 {first_name} has been BANNED for 24 hours.\n"
+                                       f"Reason: 2 warnings for using banned words.")
+                            await context.bot.send_message(chat_id=group_id, text=kick_msg)
+                        except Exception as ban_error:
+                            logger.error(f"Failed to ban user {user_id}: {ban_error}")
                 
                 logger.warning(f"Banned word detected from user {user_id}: {matched_word}")
                 return

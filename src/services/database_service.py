@@ -65,50 +65,50 @@ def create_default_event_and_slots(group_id):
                 
                 # Create 8 default slots with all response fields
                 slots = [
-                    ('Good Morning', '23:15:00', '23:17:00', 'text', 5, 10, 
+                    ('Good Morning', '10:15:00', '10:17:00', 'text', 10, 10, 
                      'Its Good morning everyone! Share your morning photo 🌅',
-                     'Great start to your day! ✅ +10 points',
-                     'Is this your morning routine message?'),
+                     'Great start to your day! ✅',
+                     'Is this for the Good Morning slot?'),
                     
-                    ('Workout', '23:17:00', '23:19:00', 'photo', 2, 10, 
+                    ('Workout', '10:17:00', '10:19:00', 'photo', 10, 10, 
                      'Its Workout time everyone! Post your exercise photo 💪',
-                     'Amazing workout! 💪 +10 points',
-                     'Is this your workout photo?'),
+                     'Amazing workout! 💪',
+                     'Is this for the Workout slot?'),
                     
-                    ('Breakfast', '23:19:00', '23:21:00', 'photo', 5, 10, 
+                    ('Breakfast', '10:19:00', '10:21:00', 'photo', 10, 10, 
                      'Its Breakfast time everyone! Share your delicious & healthy meal 🍳',
-                     'Healthy breakfast! 🍳 +10 points',
-                     'Is this your breakfast photo?'),
+                     'Healthy breakfast! 🍳',
+                     'Is this for the Breakfast slot?'),
                     
-                    ('Morning Water Intake', '23:21:00', '23:23:00', 'button', 2, 0, 
+                    ('Morning Water Intake', '10:21:00', '10:23:00', 'button', 2, 0, 
                      'Lets checkout your morning hydration everyone! How much water did everyone drink ? 💧',
-                     'Great hydration! 💧 +2 points',
+                     'Great hydration! 💧',
                      'Did you drink water?'),
                     
-                    ('Lunch', '23:23:00', '23:25:00', 'photo', 5, 10, 
+                    ('Lunch', '10:23:00', '10:25:00', 'photo', 10, 10, 
                      'Its Lunch time everyone! Post your delicious meal 🍱',
-                     'Nutritious lunch! 🍱 +25 points',
-                     'Is this your lunch photo?'),
+                     'Nutritious lunch! 🍱',
+                     'Is this for the Lunch slot?'),
                     
-                    ('Afternoon Water Intake', '23:25:00', '23:27:00', 'button', 2, 0, 
+                    ('Afternoon Water Intake', '10:25:00', '10:27:00', 'button', 2, 0, 
                      'Lets checkout your afternoon hydration everyone! How much water did everyone drink ? 💧',
-                     'Great hydration! 💧 +2 points',
+                     'Great hydration! 💧',
                      'Did you drink water?'),
                     
-                    ('Evening Snacks', '23:27:00', '23:29:00', 'photo', 5, 10, 
+                    ('Evening Snacks', '10:27:00', '10:29:00', 'photo', 10, 10, 
                      'Evening snack time! Share your healthy snack 🍎',
-                     'Healthy snack! 🍎 +15 points',
-                     'Is this your snack photo?'),
+                     'Healthy snack! 🍎',
+                     'Is this for the Evening Snacks slot?'),
                     
-                    ('Evening Water intake', '23:29:00', '23:31:00', 'button', 2, 0, 
+                    ('Evening Water intake', '10:29:00', '10:31:00', 'button', 2, 0, 
                      'Lets checkout how hydrated are you in evening! Track your water 💧',
-                     'Great hydration! 💧 +2 points',
+                     'Great hydration! 💧',
                      'Did you drink water?'),
                     
-                    ('Dinner', '23:31:00', '23:33:00', 'photo', 5, 10, 
+                    ('Dinner', '10:31:00', '10:33:00', 'photo', 10, 10, 
                      'Its Dinner time everyone! Share your healthy meal 🍽️',
-                     'Delicious dinner! 🍽️ +25 points',
-                     'Is this your dinner photo?')
+                     'Delicious dinner! 🍽️',
+                     'Is this for the Dinner slot?')
                 ]
                 
                 # Multilingual keywords for each slot
@@ -191,8 +191,6 @@ def add_member(group_id, user_id, username=None, first_name=None):
                     
                     current_time = datetime.now().time()
                     
-                    # Only restrict if there's an active slot (user joining MID-slot)
-                    # Don't restrict if joining before first slot starts
                     is_restricted = 1 if active_slot else 0
                 
                 query = """
@@ -236,7 +234,7 @@ def deduct_knockout_points(group_id, user_id, points):
         try:
             query = """
                 UPDATE group_members 
-                SET knockout_points = LEAST(knockout_points + %s, current_points + knockout_points),
+                SET knockout_points = knockout_points + %s,
                     current_points = GREATEST(0, current_points - %s)
                 WHERE group_id = %s AND user_id = %s
             """
