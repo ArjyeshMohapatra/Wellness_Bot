@@ -1,5 +1,5 @@
 from telegram.ext import ContextTypes
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions
 import logging
 import os
 from datetime import time
@@ -365,9 +365,9 @@ async def check_mid_slot_warnings(context: ContextTypes.DEFAULT_TYPE):
     
     except Exception as e:
         logger.error(f"Error in check_mid_slot_warnings: {e}")
-
+        
 async def check_user_day_cycles(context: ContextTypes.DEFAULT_TYPE):
-    """Check and update user day cycles, lift restrictions, reset after Day 7."""
+    """Check and update user day cycles, and reset after Day 7."""
     try:
         from datetime import datetime, timedelta
         
@@ -412,35 +412,15 @@ async def check_user_day_cycles(context: ContextTypes.DEFAULT_TYPE):
                 today = datetime.now().date()
                 days_elapsed = (today - cycle_start).days
                 
-                # Lift restriction if user was restricted and it's a new day
-                if is_restricted and days_elapsed >= 1:
-                    query = "UPDATE group_members SET is_restricted = 0 WHERE group_id = %s AND user_id = %s"
-                    with get_db_connection() as conn:
-                        cursor = conn.cursor()
-                        cursor.execute(query, (group_id, user_id))
-                        cursor.close()
-                        conn.commit()
-                    
-                    try:
-                        await context.bot.send_message(
-                            chat_id=group_id,
-                            text=f"🎉 {first_name}, your restriction has been lifted!\n"
-                                 f"Welcome to Day 1! You can now participate in activities. 💪"
-                        )
-                        logger.info(f"Lifted restriction for user {user_id} in group {group_id}")
-                    except Exception as e:
-                        logger.error(f"Error sending restriction lift message: {e}")
-                
                 # Update day number if it's a new day (for non-restricted users)
                 if not is_restricted and days_elapsed > 0:
                     new_day = days_elapsed + 1
                     
-                    # Only update if day actually changed
                     if new_day == day_number:
-                        continue  # Day already correct, skip
+                        continue
                     
-                    # Check if completed 7 days - reset cycle
                     if new_day > 7:
+                        # Reset the 7-day cycle
                         query = """
                             UPDATE group_members 
                             SET user_day_number = 1, 

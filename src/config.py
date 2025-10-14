@@ -35,3 +35,9 @@ except ValueError:
 # Storage Path
 STORAGE_PATH = os.getenv('STORAGE_PATH', 'storage')
 # os.makedirs(STORAGE_PATH, exist_ok=True)  # ensure path exists
+
+# New Member Restriction Settings (in minutes)
+try:
+    NEW_MEMBER_RESTRICTION_MINUTES = int(os.getenv('NEW_MEMBER_RESTRICTION_MINUTES', '1'))
+except ValueError:
+    NEW_MEMBER_RESTRICTION_MINUTES = 1

@@ -11,12 +11,7 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-logger = logging.getLogger(__name__)
-
-async def post_init(application):
-    """Post-initialization function."""
-    # Initialize bot_data for storing pending confirmations
-    application.bot_data['pending_confirmations'] = {}
+logger = logging.getLogger(__name__) 
 
 def main():
     """Start the bot."""
@@ -32,25 +27,10 @@ def main():
         init_db_pool()
         logger.info("Database connection pool initialized")
         
-        # Validate banned words exist in database
-        from db import get_db_connection
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM banned_words WHERE group_id IS NULL")
-            count = cursor.fetchone()[0]
-            cursor.close()
-            
-            if count == 0:
-                logger.error("❌ CRITICAL: No global banned words in database! Check sql/schema.sql INSERT statements!")
-                logger.warning("⚠️ Bot will start but content moderation may not work properly.")
-            else:
-                logger.info(f"✅ {count} global banned words loaded successfully")
-        
         # Create the Application with post_init
         application = (
             Application.builder()
             .token(config.BOT_TOKEN)
-            .post_init(post_init)
             .build()
         )
         

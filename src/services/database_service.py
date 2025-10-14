@@ -1,8 +1,8 @@
 import logging
-from datetime import datetime, date, timedelta, time
-
+from datetime import datetime, timedelta, timezone
+from config import NEW_MEMBER_RESTRICTION_MINUTES
 from db import execute_query, get_db_connection
-
+import time
 logger = logging.getLogger(__name__)
 
 def get_group_config(group_id):
@@ -167,43 +167,32 @@ def add_member(group_id, user_id, username=None, first_name=None):
                     WHERE group_id = %s AND user_id = %s
                 """
                 execute_query(query, (username, first_name, group_id, user_id))
+                return False # not a new member so no restriction needed
             else:
                 # New member - check if admin (admins never get restricted)
                 group_config = get_group_config(group_id)
                 is_admin = (group_config and group_config.get('admin_user_id') == user_id)
                 
                 if is_admin:
-                    # Admin - no restriction ever
                     is_restricted = 0
+                    restriction_until = None
                     logger.info(f"Admin {user_id} added to group {group_id} - NO RESTRICTION (admin privilege)")
                 else:
-                    # Regular member - check if joining during active slot (mid-day)
-                    active_slot = get_active_slot(group_id)
+                    # Regular member - always restrict for configured minutes (default 30)
+                    is_restricted = 1
+                    restriction_until = int(time.time()) + (NEW_MEMBER_RESTRICTION_MINUTES * 60)
                     
-                    # Get the first slot time from database
-                    all_slots = get_all_slots(group_id)
-                    if all_slots and len(all_slots) > 0:
-                        first_slot_start = all_slots[0]['start_time']
-                        if hasattr(first_slot_start, 'total_seconds'):
-                            first_slot_start = (datetime.min + first_slot_start).time()
-                    else:
-                        first_slot_start = time(4, 0)  # Default fallback
-                    
-                    current_time = datetime.now().time()
-                    
-                    is_restricted = 1 if active_slot else 0
+                    logger.info(f"🔒 DB: New member {user_id} marked for restriction")
+                    logger.info(f"   Duration: {NEW_MEMBER_RESTRICTION_MINUTES} minutes")
+                    logger.info(f"   Until: {restriction_until}")
+                    logger.info(f"   is_restricted will be set to: 1")
                 
                 query = """
                     INSERT INTO group_members 
-                    (user_id, group_id, username, first_name, user_day_number, cycle_start_date, is_restricted, last_active_timestamp, joined_at)
-                    VALUES (%s, %s, %s, %s, 1, CURDATE(), %s, NOW(), NOW())
+                    (user_id, group_id, username, first_name, user_day_number, cycle_start_date, is_restricted, restriction_until, last_active_timestamp, joined_at)
+                    VALUES (%s, %s, %s, %s, 1, CURDATE(), %s, %s, NOW(), NOW())
                 """
-                execute_query(query, (user_id, group_id, username, first_name, is_restricted))
-                
-                if is_restricted:
-                    logger.info(f"New member {user_id} added to group {group_id} - RESTRICTED until tomorrow (joined mid-day)")
-                else:
-                    logger.info(f"New member {user_id} added to group {group_id} - Day 1 cycle started immediately")
+                execute_query(query, (user_id, group_id, username, first_name, is_restricted, restriction_until))
                 
                 execute_query(
                     "INSERT INTO member_history (group_id, user_id, action) VALUES (%s, %s, 'joined')",

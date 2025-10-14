@@ -1,12 +1,51 @@
-from telegram import Update, ReplyKeyboardMarkup
+from telegram import Update, ReplyKeyboardMarkup, ChatPermissions
 from telegram.ext import ChatMemberHandler, ContextTypes
 import logging
+import time
+from datetime import datetime, timedelta, timezone
 
+# You can use the built-in zoneinfo if your Python is 3.9+
+# from zoneinfo import ZoneInfo 
+
+from config import NEW_MEMBER_RESTRICTION_MINUTES
 from services import database_service as db
+from db import execute_query
 
 logger = logging.getLogger(__name__)
 
+async def unrestrict_member(context: ContextTypes.DEFAULT_TYPE):
+    """Unrestricts a member after the set restriction time."""
+    job_data = context.job.data
+    group_id = job_data['group_id']
+    user_id = job_data['user_id']
+    first_name = job_data['first_name']
+
+    try:
+        # Unrestrict the user by setting default permissions
+        await context.bot.restrict_chat_member(
+            chat_id=group_id,
+            user_id=user_id,
+            permissions=ChatPermissions(
+                can_send_messages=True,
+                can_send_other_messages=True,
+                can_add_web_page_previews=True,
+                can_change_info=True,
+                can_invite_users=True,
+                can_pin_messages=True
+            ),
+            until_date=0  # until_date=0 or not specified means forever, but setting all permissions to True effectively unrestricts
+        )
+        logger.info(f"✅ User {user_id} ({first_name}) has been UNMUTED in group {group_id}.")
+        await context.bot.send_message(
+            chat_id=group_id,
+            text=f"🎉 {first_name}, you are now unrestricted and can send messages!"
+        )
+
+    except Exception as e:
+        logger.error(f"❌ ERROR unrestricting user {user_id} ({first_name}) in group {group_id}: {e}", exc_info=True)
+
 async def track_chats(update, context):
+    """Handles the bot being added to or removed from a group."""
     result = extract_status_change(update.my_chat_member)
     if result is None:
         return
@@ -71,59 +110,106 @@ async def track_chats(update, context):
     elif was_member and not is_member:
         logger.info(f"Bot removed from group {group_id}")
 
-async def track_members(update, context):
+async def track_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"track_members called for chat_member update: {update.chat_member}")
+    """Handles new members joining or leaving the group."""
     result = extract_status_change(update.chat_member)
     if result is None:
+        logger.info("track_members: extract_status_change returned None, returning.")
         return
-    
+
     was_member, is_member = result
     chat = update.effective_chat
     group_id = chat.id
     user = update.chat_member.new_chat_member.user
     user_id = user.id
-    
+
     if user.is_bot:
+        logger.info(f"track_members: User {user_id} is a bot, returning.")
         return
-    
+
     group_config = db.get_group_config(group_id)
     if not group_config:
+        logger.info(f"track_members: No group config found for {group_id}, returning.")
         return
-    
+
     if not was_member and is_member:
-        db.add_member(group_id, user_id, user.username, user.first_name)
-        
+        logger.info(f"track_members: New member {user_id} joining group {group_id}. Proceeding with restriction logic.")
+        try:
+            chat_member = await context.bot.get_chat_member(chat_id=group_id, user_id=user_id)
+            is_telegram_admin = chat_member.status in ['administrator', 'creator']
+            
+            db.add_member(group_id, user_id, user.username, user.first_name)
+
+            if not is_telegram_admin:
+                
+                until_date_timestamp = int(time.time()) + (NEW_MEMBER_RESTRICTION_MINUTES * 60)
+                logger.info(f"Calculated until_date_timestamp: {until_date_timestamp}")
+
+                await context.bot.restrict_chat_member(
+                    chat_id=group_id,
+                    user_id=user_id,
+                    permissions=ChatPermissions(
+                        can_send_messages=False,
+                        can_send_other_messages=False,
+                        can_add_web_page_previews=False,
+                        can_change_info=False,
+                        can_invite_users=False,
+                        can_pin_messages=False
+                    )
+                )
+                
+                # Schedule the unrestrict job
+                context.job_queue.run_once(
+                    unrestrict_member,
+                    NEW_MEMBER_RESTRICTION_MINUTES * 60,  # Convert minutes to seconds
+                    data={'group_id': group_id, 'user_id': user_id, 'first_name': user.first_name},
+                    name=f"unrestrict_{user_id}_{group_id}"
+                )
+                
+                welcome_msg_text = (f"Hi {user.first_name}, {group_config.get('welcome_message', 'Welcome! 🌟')}\n\n"
+                                    f"🔇 **You are muted for {NEW_MEMBER_RESTRICTION_MINUTES} minute(s)** as per group policy.\n")
+                
+                logger.info(f"✅ User {user_id} joined and has been MUTED for {NEW_MEMBER_RESTRICTION_MINUTES} minute(s). Unrestriction scheduled.")
+            
+            else:
+                welcome_msg_text = f"Welcome, {user.first_name}! As an admin, you have full access immediately."
+                logger.info(f"Admin {user_id} joined group {group_id} - no restrictions applied.")
+
+        except Exception as e:
+            logger.error(f"❌ CRITICAL ERROR restricting new member {user_id}: {e}", exc_info=True)
+            welcome_msg_text = f"Welcome, {user.first_name}! There was an issue applying the initial mute."
+
         reply_markup = ReplyKeyboardMarkup(
             [['My Score 💯', 'Time Sheet 📅']],
             resize_keyboard=True,
             one_time_keyboard=False
         )
-        
-        welcome_msg = group_config.get('welcome_message', 'Welcome! 🌟')
         await context.bot.send_message(
             chat_id=group_id,
-            text=f"{user.first_name}, {welcome_msg}\n\nUse the keyboard below for quick access:",
+            text=welcome_msg_text,
             reply_markup=reply_markup
         )
-        logger.info(f"User {user_id} joined group {group_id}")
-    
+
     elif was_member and not is_member:
         db.remove_member(group_id, user_id, 'left')
         logger.info(f"User {user_id} left group {group_id}")
 
 def extract_status_change(chat_member_update):
-    status_change = chat_member_update.difference().get("status")
-    old_is_member, new_is_member = chat_member_update.difference().get("is_member", (None, None))
-    
-    if status_change is None:
+    """Extracts old and new member status from a chat_member update."""
+    old_member = chat_member_update.old_chat_member
+    new_member = chat_member_update.new_chat_member
+
+    # Determine if the user was a member and is now a member
+    was_member = old_member.status in ["member", "administrator", "creator"] or old_member.is_member is True
+    is_member = new_member.status in ["member", "administrator", "creator"] or new_member.is_member is True
+
+    # If there's no change in membership status, return None
+    if was_member == is_member:
         return None
-    
-    old_status, new_status = status_change
-    was_member = old_status in ["member", "administrator", "creator"] or (old_is_member is True)
-    is_member = new_status in ["member", "administrator", "creator"] or (new_is_member is True)
-    
+
     return was_member, is_member
 
 # Handler definitions
 bot_join_handler = ChatMemberHandler(track_chats, ChatMemberHandler.MY_CHAT_MEMBER)
 member_join_handler = ChatMemberHandler(track_members, ChatMemberHandler.CHAT_MEMBER)
-

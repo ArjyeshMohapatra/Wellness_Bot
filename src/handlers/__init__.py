@@ -17,6 +17,7 @@ def setup_handlers(application):
     application.add_handler(schedule_handler)
     application.add_handler(help_handler)
     application.add_handler(test_leaderboard_handler)  # Admin-only test command
+    application.add_handler(member_join_handler)
     # keyboard_handler removed - keyboard now appears automatically
     
     # Chat member handlers (for tracking joins/leaves)

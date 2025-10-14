@@ -54,50 +54,52 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Update member activity
     db.update_member_activity(group_id, user_id)
     
-    # Check if user is restricted (joined mid-day)
+    # Check if user is admin first - admins are NEVER restricted and EXEMPT from all penalties
     member = db.get_member(group_id, user_id)
-    if member and member.get('is_restricted', 0) == 1:
-        # User is restricted - delete message and notify
-        try:
-            await message.delete()
-            
-            # Get actual first slot time dynamically
-            all_slots = db.get_all_slots(group_id)
-            if all_slots and len(all_slots) > 0:
-                first_slot = all_slots[0]
-                first_slot_time = first_slot['start_time']
-                if hasattr(first_slot_time, 'total_seconds'):
-                    first_slot_time = (datetime.min + first_slot_time).time()
-                time_str = first_slot_time.strftime("%H:%M")
-                slot_name = first_slot['slot_name']
-                restriction_text = f"You are restricted from posting until tomorrow's first slot ({slot_name} - {time_str}).\n\n"
-            else:
-                restriction_text = f"You are restricted from posting until tomorrow's first slot.\n\n"
-            
-            restriction_msg = await context.bot.send_message(
-                chat_id=group_id,
-                text=f"👋 {first_name}, welcome to the group!\n\n"
-                     f"⚠️ You joined during an active slot time.\n"
-                     f"{restriction_text}"
-                     f"Your Day 1 will start tomorrow! 📅"
-            )
-            
-            # Delete notification after 15 seconds
-            context.job_queue.run_once(
-                lambda ctx: restriction_msg.delete(),
-                when=15
-            )
-            
-            logger.info(f"Restricted user {user_id} tried to post")
-            return
-            
-        except Exception as e:
-            logger.error(f"Error handling restricted user: {e}")
-            return
     
-    # Check if user is admin - admins are EXEMPT from banned word penalties
-    group_config = db.get_group_config(group_id)
-    is_admin = (group_config and group_config.get('admin_user_id') == user_id)
+    # Also check if user is currently a Telegram admin/creator
+    try:
+        chat_member = await context.bot.get_chat_member(group_id, user_id)
+        is_telegram_admin = chat_member.status in ['administrator', 'creator']
+    except Exception as e:
+        logger.error(f"Error checking admin status: {e}")
+        is_telegram_admin = False
+    
+    # Check database admin
+    is_db_admin = (group_config and group_config.get('admin_user_id') == user_id)
+    
+    # User is admin if they're either Telegram admin OR database admin
+    is_admin = is_telegram_admin or is_db_admin
+    
+    # If user is admin but was restricted, unrestrict them immediately
+    if is_admin and member and member.get('is_restricted', 0) == 1:
+        try:
+            from telegram import ChatPermissions
+            from db import execute_query
+            
+            # Unrestrict the admin
+            await context.bot.restrict_chat_member(
+                chat_id=group_id,
+                user_id=user_id,
+                permissions=ChatPermissions(
+                    can_send_messages=True,
+                    can_send_media_messages=True,
+                    can_send_polls=True,
+                    can_send_other_messages=True,
+                    can_add_web_page_previews=True,
+                    can_change_info=True,
+                    can_invite_users=True,
+                    can_pin_messages=True
+                )
+            )
+            
+            # Update database
+            query = "UPDATE group_members SET is_restricted = 0, restriction_until = NULL WHERE group_id = %s AND user_id = %s"
+            execute_query(query, (group_id, user_id))
+            
+            logger.info(f"Admin {user_id} was restricted but has now been unrestricted in group {group_id}")
+        except Exception as e:
+            logger.error(f"Error unrestricting admin: {e}")
     
     # Check for banned words FIRST - ALWAYS ban on 2 warnings regardless of points (EXCEPT ADMINS)
     if message.text and not is_admin:
