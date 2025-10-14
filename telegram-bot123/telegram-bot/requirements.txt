@@ -1,0 +1,5 @@
+python-telegram-bot>=22.5
+python-dotenv==1.0.0
+mysql-connector-python==8.2.0
+Pillow>=10.1.0
+pytz>=2023.3
