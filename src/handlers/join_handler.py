@@ -19,6 +19,7 @@ async def unrestrict_member(context: ContextTypes.DEFAULT_TYPE):
     group_id = job_data['group_id']
     user_id = job_data['user_id']
     first_name = job_data['first_name']
+    welcome_message = job_data['welcome_message']
 
     try:
         # Unrestrict the user by setting default permissions
@@ -35,10 +36,20 @@ async def unrestrict_member(context: ContextTypes.DEFAULT_TYPE):
             ),
             until_date=0  # until_date=0 or not specified means forever, but setting all permissions to True effectively unrestricts
         )
+        
+        welcome_msg_text = (f"Hi {first_name}, {welcome_message}")
+        
+        reply_markup = ReplyKeyboardMarkup(
+            [['My Score 💯', 'Time Sheet 📅']],
+            resize_keyboard=True,
+            one_time_keyboard=False
+        )
+        
         logger.info(f"✅ User {user_id} ({first_name}) has been UNMUTED in group {group_id}.")
         await context.bot.send_message(
             chat_id=group_id,
-            text=f"🎉 {first_name}, you are now unrestricted and can send messages!"
+            text={welcome_msg_text},
+            reply_markup=reply_markup
         )
 
     except Exception as e:
@@ -159,16 +170,14 @@ async def track_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                 )
                 
+                welcome_message = group_config.get('welcome_message', 'Welcome! 🌟')
                 # Schedule the unrestrict job
                 context.job_queue.run_once(
                     unrestrict_member,
                     NEW_MEMBER_RESTRICTION_MINUTES * 60,  # Convert minutes to seconds
-                    data={'group_id': group_id, 'user_id': user_id, 'first_name': user.first_name},
+                    data={'group_id': group_id, 'user_id': user_id, 'first_name': user.first_name, 'welcome_message': welcome_message},
                     name=f"unrestrict_{user_id}_{group_id}"
                 )
-                
-                welcome_msg_text = (f"Hi {user.first_name}, {group_config.get('welcome_message', 'Welcome! 🌟')}\n\n"
-                                    f"🔇 **You are muted for {NEW_MEMBER_RESTRICTION_MINUTES} minute(s)** as per group policy.\n")
                 
                 logger.info(f"✅ User {user_id} joined and has been MUTED for {NEW_MEMBER_RESTRICTION_MINUTES} minute(s). Unrestriction scheduled.")
             
@@ -178,13 +187,8 @@ async def track_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         except Exception as e:
             logger.error(f"❌ CRITICAL ERROR restricting new member {user_id}: {e}", exc_info=True)
-            welcome_msg_text = f"Welcome, {user.first_name}! There was an issue applying the initial mute."
+            welcome_msg_text = f"Welcome, {user.first_name}!"
 
-        reply_markup = ReplyKeyboardMarkup(
-            [['My Score 💯', 'Time Sheet 📅']],
-            resize_keyboard=True,
-            one_time_keyboard=False
-        )
         await context.bot.send_message(
             chat_id=group_id,
             text=welcome_msg_text,
