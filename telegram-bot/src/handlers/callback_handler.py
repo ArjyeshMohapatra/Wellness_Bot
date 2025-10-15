@@ -1,0 +1,316 @@
+from telegram import Update
+from telegram.ext import CallbackQueryHandler, ContextTypes
+import logging
+from datetime import datetime
+from services import database_service as db
+from services.file_storage import FileStorage
+import config
+
+logger = logging.getLogger(__name__)
+
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle callback queries from inline keyboards."""
+    query = update.callback_query
+    user_id = query.from_user.id
+    first_name = query.from_user.first_name
+    
+    await query.answer()
+    data = query.data
+    
+    # Handle confirmation responses (Yes/No for keyword mismatch)
+    if data.startswith('confirm_'):
+        await handle_confirmation(update, context)
+    
+    # Handle water consumption buttons
+    elif data.startswith('water_'):
+        await handle_water_button(update, context)
+    
+    else:
+        logger.warning(f"Unhandled callback data: {data}")
+
+async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle Yes/No confirmation for slot responses."""
+    query = update.callback_query
+    data = query.data
+    message = query.message
+    
+    # Parse callback data: confirm_yes/no_<slot_id>_<user_id>_<original_msg_id>
+    parts = data.split('_')
+    if len(parts) < 4:
+        await query.edit_message_text("❌ Invalid confirmation.")
+        return
+    
+    response = parts[1]  # 'yes' or 'no'
+    slot_id = int(parts[2])
+    expected_user_id = int(parts[3])
+    
+    # Verify it's the right user
+    if query.from_user.id != expected_user_id:
+        await query.answer("This confirmation is not for you!", show_alert=True)
+        return
+    
+    # Get pending confirmation data (use atomic pop to prevent race conditions)
+    pending_confirmations = context.bot_data.get('pending_confirmations', {})
+    confirmation_data = pending_confirmations.pop(message.message_id, None)
+    
+    if not confirmation_data:
+        await query.edit_message_text("⏱️ This confirmation has expired or already processed.")
+        return
+    
+    # Double-check user ID from confirmation data for security
+    user_id_from_data = confirmation_data.get('user_id')
+    if query.from_user.id != user_id_from_data:
+        logger.warning(f"Security: User {query.from_user.id} tried to confirm for user {user_id_from_data}")
+        await query.answer("❌ Security violation detected!", show_alert=True)
+        # Don't add back to pending - already removed
+        return
+    
+    group_id = confirmation_data['group_id']
+    slot_name = confirmation_data['slot_name']
+    event_id = confirmation_data['event_id']
+    points = confirmation_data['points']
+    content_type = confirmation_data.get('type', 'text')
+    
+    if response == 'yes':
+        # Handle based on content type
+        if content_type == 'photo':
+            photo_file_id = confirmation_data['photo_file_id']
+            username = confirmation_data['username']
+            caption = confirmation_data.get('caption', '')
+            
+            # Get slot configuration to determine points
+            slot = db.get_active_slot(group_id)
+            if not slot:
+                await query.edit_message_text("❌ No active slot found.")
+                return
+            
+            points = slot['points_for_photo']  # Photos get photo points (typically 10)
+            
+            try:
+                # Download and save photo
+                file = await context.bot.get_file(photo_file_id)
+                
+                timestamp = datetime.now().strftime("%Y_%m_%d_%I_%M_%S_%p").lower()
+                filename = f"{username}_{slot_name}_{timestamp}.jpg"
+                
+                storage = FileStorage(config.STORAGE_PATH)
+                local_path = await storage.save_photo(group_id, expected_user_id, username, slot_name, file, filename)
+                
+                # Award points
+                db.add_points(group_id, expected_user_id, points, event_id)
+                db.log_activity(group_id, expected_user_id, slot_name, 'photo', 
+                               message_content=caption,
+                               telegram_file_id=photo_file_id, local_file_path=local_path, points_earned=points, is_valid=True)
+                
+                if event_id:
+                    db.mark_slot_completed(event_id, slot_id, expected_user_id, 'completed')
+                
+                await query.edit_message_text(f"✅ Photo confirmed! +{points} points!")
+                logger.info(f"User {expected_user_id} confirmed photo for slot {slot_name}, awarded {points} points")
+            
+            except Exception as e:
+                logger.error(f"Error saving confirmed photo: {e}")
+                await query.edit_message_text("❌ Error saving photo. Please try again.")
+        
+        elif content_type == 'media':
+            # Handle other media types (video, document, voice, etc.)
+            file_id = confirmation_data['file_id']
+            username = confirmation_data['username']
+            caption = confirmation_data.get('caption', '')
+            media_type = confirmation_data.get('media_type', 'media')
+            file_ext = confirmation_data.get('file_ext', 'file')
+            
+            # Get slot configuration to determine points
+            slot = db.get_active_slot(group_id)
+            if not slot:
+                await query.edit_message_text("❌ No active slot found.")
+                return
+            
+            # Determine points based on media type
+            if media_type in ['video', 'document']:
+                points = slot['points_for_photo']  # 10 points - substantial content like photos
+            elif media_type in ['voice', 'video_note']:
+                points = slot['points_for_text']  # 5 points - personal messages like text
+            elif media_type in ['sticker', 'animation']:
+                points = 0  # No points for entertainment content
+            else:
+                points = slot['points_for_photo']  # Default to photo points
+            
+            try:
+                # Download and save media
+                file = await context.bot.get_file(file_id)
+                
+                timestamp = datetime.now().strftime("%Y_%m_%d_%I_%M_%S_%p").lower()
+                filename = f"{username}_{slot_name}_{timestamp}.{file_ext}"
+                
+                storage = FileStorage(config.STORAGE_PATH)
+                local_path = await storage.save_media(group_id, expected_user_id, username, slot_name, file, filename, media_type)
+                
+                # Award points
+                if points > 0:
+                    db.add_points(group_id, expected_user_id, points, event_id)
+                
+                db.log_activity(group_id, expected_user_id, slot_name, media_type,
+                               message_content=caption,
+                               telegram_file_id=file_id, local_file_path=local_path, points_earned=points, is_valid=True)
+                
+                if event_id and points > 0:
+                    db.mark_slot_completed(event_id, slot_id, expected_user_id, 'completed')
+                
+                points_msg = f" +{points} points!" if points > 0 else " (no points awarded)"
+                await query.edit_message_text(f"✅ {media_type.capitalize()} confirmed!{points_msg}")
+                logger.info(f"User {expected_user_id} confirmed {media_type} for slot {slot_name}, awarded {points} points")
+            
+            except Exception as e:
+                logger.error(f"Error saving confirmed {media_type}: {e}")
+                await query.edit_message_text(f"❌ Error saving {media_type}. Please try again.")
+                
+        else:
+            # Text confirmation
+            text = confirmation_data.get('text', '')
+            
+            # Get slot configuration to determine points
+            slot = db.get_active_slot(group_id)
+            if not slot:
+                await query.edit_message_text("❌ No active slot found.")
+                return
+            
+            points = slot['points_for_text']  # Text messages get text points (typically 5)
+            
+            db.add_points(group_id, expected_user_id, points, event_id)
+            db.log_activity(group_id, expected_user_id, slot_name, 'text', message_content=text, points_earned=points, is_valid=True)
+            
+            if event_id:
+                db.mark_slot_completed(event_id, slot_id, expected_user_id, 'completed')
+            
+            await query.edit_message_text(f"✅ Confirmed! +{points} points!")
+            logger.info(f"User {expected_user_id} confirmed text for slot {slot_name}, awarded {points} points")
+    
+    else:
+        # Log as invalid based on type
+        if content_type == 'photo':
+            db.log_activity(group_id, expected_user_id, slot_name, 'photo', points_earned=0, is_valid=False)
+        else:
+            text = confirmation_data.get('text', '')
+            db.log_activity(group_id, expected_user_id, slot_name, 'text', text, points_earned=0, is_valid=False)
+        
+        await query.edit_message_text("❌ Cancelled. No points awarded.")
+        logger.info(f"User {expected_user_id} rejected confirmation for slot {slot_name}")
+        
+        # Delete the original message that was rejected
+        try:
+            original_message_id = confirmation_data.get('original_message_id')
+            if original_message_id:
+                await context.bot.delete_message(chat_id=group_id, message_id=original_message_id)
+                logger.info(f"Deleted rejected message {original_message_id}")
+        except Exception as e:
+            logger.warning(f"Could not delete original message: {e}")
+    
+    # Note: Already removed from pending via pop() above
+    
+    # Delete confirmation message after 3 seconds
+    context.job_queue.run_once(
+        lambda ctx: message.delete(),
+        when=3
+    )
+
+async def handle_water_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle water consumption button clicks (1L to 5L)."""
+    query = update.callback_query
+    data = query.data
+    user_id = query.from_user.id
+    first_name = query.from_user.first_name
+    group_id = query.message.chat.id
+    
+    
+    member = db.get_member(group_id, user_id)
+    if member and member.get('is_restricted', 0) == 1:
+        await query.answer("You are currently restricted and cannot perform this action.", show_alert=True)
+        return
+    
+    # Parse: water_<liters>_<slot_id>
+    parts = data.split('_')
+    if len(parts) < 3:
+        await query.answer("Invalid water selection", show_alert=True)
+        return
+    
+    liters = int(parts[1])
+    slot_id = int(parts[2])
+    
+    # Add in-memory lock to prevent spam clicking
+    if 'button_locks' not in context.bot_data:
+        context.bot_data['button_locks'] = set()
+        
+    lock_key = f"{group_id}_{user_id}_{slot_id}_{datetime.now().date()}"
+    
+    if lock_key in context.bot_data['button_locks']:
+        await query.answer("⏳ Processing your previous click, please wait...", show_alert=True)
+        return
+    
+    # Acquire lock
+    context.bot_data['button_locks'].add(lock_key)
+    
+    try:
+        # Get slot info
+        active_slot = db.get_active_slot(group_id)
+        
+        if not active_slot or active_slot['slot_id'] != slot_id:
+            await query.answer("This water slot is no longer active!", show_alert=True)
+            return
+        
+        # Get event
+        event = db.get_active_event(group_id)
+        event_id = event['event_id'] if event else None
+        
+        # Check if already completed today
+        if event_id and db.check_slot_completed_today(event_id, slot_id, user_id):
+            await query.answer("Already completed!", show_alert=True)
+            # Send visible message in chat
+            slot_name = active_slot['slot_name']
+            response_msg = await context.bot.send_message(
+                chat_id=group_id,
+                text=f"⚠️ {first_name}, you have already completed {slot_name} slot for today!",
+                reply_to_message_id=query.message.message_id
+            )
+            # Auto-delete after 5 seconds
+            context.job_queue.run_once(
+                lambda ctx: response_msg.delete(),
+                when=5
+            )
+            return
+        
+        points = active_slot['points_for_photo']
+        slot_name = active_slot['slot_name']
+        
+        # Award points
+        db.add_points(group_id, user_id, points, event_id)
+        db.log_activity(group_id, user_id, slot_name, 'button', f"{liters}L water", points_earned=points)
+        
+        if event_id:
+            db.mark_slot_completed(event_id, slot_id, user_id, 'completed')
+        
+        # Send confirmation as popup notification (doesn't replace message)
+        await query.answer(f"✅ {liters}L logged! +{points} points!", show_alert=True)
+        
+        # Send a separate message to show who completed (doesn't replace buttons)
+        response_msg = await context.bot.send_message(
+            chat_id=group_id,
+            text=f"💧 {first_name} drank {liters}L of water! +{points} points!"
+        )
+        
+        ''' # Delete the response message after 5 seconds to keep chat clean
+        context.job_queue.run_once(
+            lambda ctx: response_msg.delete(),
+            when=5
+        ) '''
+        
+        logger.info(f"User {user_id} logged {liters}L water for slot {slot_name}")
+    
+    finally:
+        # Release lock after 3 seconds to prevent accidental double-clicks
+        def release_lock(ctx):
+            context.bot_data['button_locks'].discard(lock_key)
+        
+        context.job_queue.run_once(release_lock, when=3)
+
+callback_handler = CallbackQueryHandler(handle_callback)
