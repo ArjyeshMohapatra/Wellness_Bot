@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS group_members (
     user_day_number INT DEFAULT 1,
     cycle_start_date DATE,
     is_restricted TINYINT(1) DEFAULT 0,
-    restriction_until DATETIME NULL DEFAULT NULL,
+    restriction_until TIMESTAMP NULL DEFAULT NULL,
     last_active_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (user_id, group_id),

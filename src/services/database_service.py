@@ -23,41 +23,30 @@ def get_first_slot_time(group_id):
 
 def get_restriction_until_time(group_id):
     """
-    Calculates the restriction time for a new member.
-    - If they join before the first slot, they are restricted until the first slot today.
-    - If they join after the first slot, they are restricted until the first slot tomorrow.
+    Calculates the restriction time for a new member using NAIVE datetime objects in IST.
     """
     ist = timezone("Asia/Kolkata")
     now_ist = datetime.now(ist)
-
     first_slot_timedelta = get_first_slot_time(group_id)
 
     if not first_slot_timedelta:
-        # Fallback: Restrict for a default duration if no slots are configured
-        return now_ist + timedelta(minutes=NEW_MEMBER_RESTRICTION_MINUTES)
-
-    first_slot_time = (datetime.min + first_slot_timedelta).time()
-
-    # Combine today's date with the first slot's time
-    first_slot_datetime_today = now_ist.replace(
-        hour=first_slot_time.hour,
-        minute=first_slot_time.minute,
-        second=0,
-        microsecond=0,
-    )
-
-    if now_ist < first_slot_datetime_today:
-        # User joined before the first slot today
-        return first_slot_datetime_today
+        restriction_time = now_ist + timedelta(minutes=NEW_MEMBER_RESTRICTION_MINUTES)
     else:
-        # User joined after the first slot today, restrict until tomorrow's first slot
-        tomorrow = now_ist + timedelta(days=1)
-        return tomorrow.replace(
-            hour=first_slot_time.hour,
-            minute=first_slot_time.minute,
-            second=0,
-            microsecond=0,
+        first_slot_time = (datetime.min + first_slot_timedelta).time()
+        first_slot_datetime_today_ist = datetime.combine(
+            now_ist.date(), first_slot_time
         )
+        first_slot_datetime_today_ist = ist.localize(first_slot_datetime_today_ist)
+
+        if now_ist < first_slot_datetime_today_ist:
+            restriction_time = first_slot_datetime_today_ist
+        else:
+            tomorrow_ist = now_ist + timedelta(days=1)
+            next_slot = datetime.combine(tomorrow_ist.date(), first_slot_time)
+            restriction_time = ist.localize(next_slot)
+
+    # Return naive datetime in IST
+    return restriction_time.replace(tzinfo=None)
 
 
 def create_group_config(group_id, admin_user_id):
@@ -297,30 +286,40 @@ def create_default_event_and_slots(group_id):
 
 
 # adds new members and their info to db table
-def add_member(group_id, user_id, username=None, first_name=None, is_admin=False):
-    try:
-        # Check if member already exists
-        existing = get_member(group_id, user_id)
+# In telegram-bot/src/services/database_service.py
 
+
+def add_member(group_id, user_id, username=None, first_name=None, is_admin=False):
+    """
+    Adds or updates a member and ALWAYS returns their full record from the database and if it was newly inserted.
+    This is critical for the join handler to function correctly.
+    """
+    try:
+        logger.debug(
+            f"[DEBUG] add_member called for user {user_id} in group {group_id}"
+        )
+        existing = get_member(group_id, user_id)
+        is_new = existing is None
+        logger.debug(
+            f"[DEBUG] Existing member lookup result: {existing}, is_new: {is_new}"
+        )
         if existing:
-            # Update existing member
             query = """
-                UPDATE group_members
-                SET username = %s, first_name = %s, last_active_timestamp = NOW()
+                UPDATE group_members SET username = %s, first_name = %s, last_active_timestamp = NOW()
                 WHERE group_id = %s AND user_id = %s
             """
+            logger.debug(f"[DEBUG] Executing UPDATE for user {user_id}")
             execute_query(query, (username, first_name, group_id, user_id))
-            return False  # not a new member so no restriction needed
         else:
             is_restricted = 0 if is_admin else 1
             restriction_until = None
-
             if is_restricted:
-                # Regular member - always restrict
                 restriction_until = get_restriction_until_time(group_id)
-
+                # Convert to MySQL TIMESTAMP format (string, IST)
+                if restriction_until is not None:
+                    restriction_until = restriction_until.strftime("%Y-%m-%d %H:%M:%S")
                 logger.info(
-                    f"🔒 DB: New member {user_id} marked for restriction until {restriction_until}"
+                    f"🔒 DB: New member {user_id} marked for restriction until {restriction_until} (IST)"
                 )
             else:
                 logger.info(
@@ -329,9 +328,10 @@ def add_member(group_id, user_id, username=None, first_name=None, is_admin=False
 
             query = """
                 INSERT INTO group_members
-                (user_id, group_id, username, first_name, user_day_number, cycle_start_date, is_restricted, restriction_until, last_active_timestamp, joined_at)
-                VALUES (%s, %s, %s, %s, 1, CURDATE(), %s, %s, NOW(), NOW())
+                (user_id, group_id, username, first_name, is_restricted, restriction_until, joined_at, last_active_timestamp)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())
             """
+            logger.debug(f"[DEBUG] Executing INSERT for user {user_id}")
             execute_query(
                 query,
                 (
@@ -343,16 +343,20 @@ def add_member(group_id, user_id, username=None, first_name=None, is_admin=False
                     restriction_until,
                 ),
             )
-
+            logger.debug(f"[DEBUG] INSERT complete for user {user_id}")
             execute_query(
                 "INSERT INTO member_history (group_id, user_id, action) VALUES (%s, %s, 'joined')",
                 (group_id, user_id),
             )
+            logger.debug(f"[DEBUG] member_history INSERT complete for user {user_id}")
 
-        return True
+        # ALWAYS fetch and return the complete member data.
+        member_data = get_member(group_id, user_id)
+        logger.debug(f"[DEBUG] Final member_data fetched: {member_data}")
+        return member_data, is_new
     except Exception as e:
         logger.error(f"Error adding member: {e}")
-        return False
+        return None  # Return None on failure
 
 
 def update_member_activity(group_id, user_id):

@@ -52,7 +52,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     # Ensure member exists in database
-    db.add_member(group_id, user_id, username, first_name)
+    member, is_new = db.add_member(group_id, user_id, username, first_name)
 
     # Update member activity
     db.update_member_activity(group_id, user_id)
@@ -67,6 +67,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     except Exception as e:
         logger.error(f"Error checking admin status: {e}")
         is_telegram_admin = False
+
+    # Send welcome if new member
+    if is_new:
+        welcome_message = group_config.get("welcome_message", "Welcome!")
+        welcome_text = f"Hi {first_name}, {welcome_message}"
+
+        restriction_until_str = member.get("restriction_until")
+        if (
+            member.get("is_restricted")
+            and restriction_until_str
+            and not is_telegram_admin
+        ):
+            if isinstance(restriction_until_str, str):
+                restriction_until_dt = datetime.strptime(
+                    restriction_until_str, "%Y-%m-%d %H:%M:%S"
+                )
+            else:
+                restriction_until_dt = restriction_until_str
+            restriction_local_time = restriction_until_dt.strftime("%I:%M %p on %b %d")
+            welcome_text += f"\n\nJust a heads-up, new members are restricted from messaging until **{restriction_local_time} (IST)**."
+
+        if is_telegram_admin:
+            welcome_text += "\n\nAs an admin, you have full access immediately! 💼"
+
+        await context.bot.send_message(chat_id=group_id, text=welcome_text)
 
     # Check database admin
     is_db_admin = group_config and group_config.get("admin_user_id") == user_id
@@ -83,6 +108,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 user_id=user_id,
                 permissions=ChatPermissions(
                     can_send_messages=True,
+                    can_send_media_messages=True,
                     can_send_polls=True,
                     can_send_other_messages=True,
                     can_add_web_page_previews=True,
