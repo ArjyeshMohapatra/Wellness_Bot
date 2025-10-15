@@ -127,8 +127,6 @@ async def track_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Apply's Telegram restriction if the DB record says they are restricted
             if member.get("is_restricted") and member.get("restriction_until"):
                 restriction_until_dt = member["restriction_until"]
-                ist = timezone("Asia/Kolkata")
-                restriction_until_dt = ist.localize(restriction_until_dt)
 
                 await context.bot.restrict_chat_member(
                     chat_id=group_id,
