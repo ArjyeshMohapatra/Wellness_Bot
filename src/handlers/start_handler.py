@@ -160,7 +160,6 @@ async def schedule(update, context):
     
     if all_slots:
         message = "📅 **Today's Schedule**\n\n"
-        message += f"   🎭 Stickers/GIFs: 0pts\n\n"
         for slot in all_slots:
             start = slot['start_time']
             end = slot['end_time']
@@ -174,10 +173,9 @@ async def schedule(update, context):
             if hasattr(end, 'total_seconds'):
                 end = (datetime.min + end).time()
             
+            message += f"{name}\n"
             message += f"⏰ {start.strftime('%H:%M')} - {end.strftime('%H:%M')}\n"
-            message += f"   {name}\n"
-            message += f"   📝 Text/Voice: {points_text}pts\n"
-            message += f"   📸 Photo/Video/Doc: {points_photo}pts\n\n"
+            message += f"🔖 Points : {points_photo}\n\n"
         
         await update.message.reply_text(message)
     else:

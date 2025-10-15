@@ -62,8 +62,7 @@ CREATE TABLE IF NOT EXISTS slot_keywords (
     keyword_id INT AUTO_INCREMENT PRIMARY KEY,
     slot_id INT NOT NULL,
     keyword VARCHAR(100) NOT NULL,
-    FOREIGN KEY (slot_id) REFERENCES group_slots(slot_id) ON DELETE CASCADE,
-    INDEX idx_slot_id (slot_id)
+    FOREIGN KEY (slot_id) REFERENCES group_slots(slot_id) ON DELETE CASCADE
 );
 
 -- GROUP MEMBERS TABLE
@@ -81,12 +80,11 @@ CREATE TABLE IF NOT EXISTS group_members (
     user_day_number INT DEFAULT 1,
     cycle_start_date DATE,
     is_restricted TINYINT(1) DEFAULT 0,
-    restriction_until TIMESTAMP NULL,
+    restriction_until TIMESTAMP NULL DEFAULT NULL,
     last_active_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (user_id, group_id),
-    FOREIGN KEY (group_id) REFERENCES groups_config(group_id) ON DELETE CASCADE,
-    INDEX idx_user_id (user_id)
+    FOREIGN KEY (group_id) REFERENCES groups_config(group_id) ON DELETE CASCADE
 );
 
 -- MEMBER HISTORY TABLE
@@ -121,8 +119,7 @@ CREATE TABLE IF NOT EXISTS user_activity_log (
     points_earned INT DEFAULT 0,
     is_valid BOOLEAN DEFAULT TRUE,
     activity_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (group_id) REFERENCES groups_config(group_id) ON DELETE CASCADE,
-    INDEX idx_user_activity (user_id, group_id)
+    FOREIGN KEY (group_id) REFERENCES groups_config(group_id) ON DELETE CASCADE
 );
 
 -- DAILY POINTS LOG TABLE
@@ -132,8 +129,7 @@ CREATE TABLE IF NOT EXISTS daily_points_log (
     user_id BIGINT NOT NULL,
     log_date DATE NOT NULL,
     points_scored INT NOT NULL,
-    FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE,
-    INDEX idx_daily_points_user (user_id, event_id)
+    FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE
 );
 
 -- DAILY SLOT TRACKER TABLE

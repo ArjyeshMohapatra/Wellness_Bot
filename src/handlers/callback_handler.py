@@ -222,6 +222,12 @@ async def handle_water_button(update: Update, context: ContextTypes.DEFAULT_TYPE
     first_name = query.from_user.first_name
     group_id = query.message.chat.id
     
+    
+    member = db.get_member(group_id, user_id)
+    if member and member.get('is_restricted', 0) == 1:
+        await query.answer("You are currently restricted and cannot perform this action.", show_alert=True)
+        return
+    
     # Parse: water_<liters>_<slot_id>
     parts = data.split('_')
     if len(parts) < 3:
@@ -234,8 +240,7 @@ async def handle_water_button(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Add in-memory lock to prevent spam clicking
     if 'button_locks' not in context.bot_data:
         context.bot_data['button_locks'] = set()
-    
-    from datetime import datetime
+        
     lock_key = f"{group_id}_{user_id}_{slot_id}_{datetime.now().date()}"
     
     if lock_key in context.bot_data['button_locks']:
@@ -274,8 +279,7 @@ async def handle_water_button(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
             return
         
-        # Calculate points (e.g., 2 points per liter)
-        points = liters * 2
+        points = active_slot['points_for_photo']
         slot_name = active_slot['slot_name']
         
         # Award points
