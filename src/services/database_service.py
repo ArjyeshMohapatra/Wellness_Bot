@@ -4,7 +4,6 @@ from pytz import timezone
 from config import NEW_MEMBER_RESTRICTION_MINUTES
 from db import execute_query, get_db_connection
 import time
-from handlers.join_handler import get_restriction_until_time
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +12,53 @@ def get_group_config(group_id):
     query = "SELECT * FROM groups_config WHERE group_id = %s"
     result = execute_query(query, (group_id,), fetch=True)
     return result[0] if result else None
+
+
+# fetches very first slot's starting time
+def get_first_slot_time(group_id):
+    """Get the start time of the first slot of the day."""
+    query = "SELECT start_time FROM group_slots WHERE group_id = %s ORDER BY start_time ASC LIMIT 1"
+    result = execute_query(query, (group_id,), fetch=True)
+    return result[0]["start_time"] if result else None
+
+
+def get_restriction_until_time(group_id):
+    """
+    Calculates the restriction time for a new member.
+    - If they join before the first slot, they are restricted until the first slot today.
+    - If they join after the first slot, they are restricted until the first slot tomorrow.
+    """
+    ist = timezone("Asia/Kolkata")
+    now_ist = datetime.now(ist)
+
+    first_slot_timedelta = get_first_slot_time(group_id)
+
+    if not first_slot_timedelta:
+        # Fallback: Restrict for a default duration if no slots are configured
+        return now_ist + timedelta(minutes=NEW_MEMBER_RESTRICTION_MINUTES)
+
+    first_slot_time = (datetime.min + first_slot_timedelta).time()
+
+    # Combine today's date with the first slot's time
+    first_slot_datetime_today = now_ist.replace(
+        hour=first_slot_time.hour,
+        minute=first_slot_time.minute,
+        second=0,
+        microsecond=0,
+    )
+
+    if now_ist < first_slot_datetime_today:
+        # User joined before the first slot today
+        return first_slot_datetime_today
+    else:
+        # User joined after the first slot today, restrict until tomorrow's first slot
+        tomorrow = now_ist + timedelta(days=1)
+        return tomorrow.replace(
+            hour=first_slot_time.hour,
+            minute=first_slot_time.minute,
+            second=0,
+            microsecond=0,
+        )
 
 
 def create_group_config(group_id, admin_user_id):
@@ -507,11 +553,3 @@ def get_leaderboard(group_id, limit=10):
             LIMIT %s
         """
     return execute_query(query, (group_id, limit), fetch=True)
-
-
-# fetches very first slot's starting time
-def get_first_slot_time(group_id):
-    """Get the start time of the first slot of the day."""
-    query = "SELECT start_time FROM group_slots WHERE group_id = %s ORDER BY start_time ASC LIMIT 1"
-    result = execute_query(query, (group_id,), fetch=True)
-    return result[0]["start_time"] if result else None

@@ -12,45 +12,6 @@ from db import execute_query
 logger = logging.getLogger(__name__)
 
 
-def get_restriction_until_time(group_id):
-    """
-    Calculates the restriction time for a new member.
-    - If they join before the first slot, they are restricted until the first slot today.
-    - If they join after the first slot, they are restricted until the first slot tomorrow.
-    """
-    ist = timezone("Asia/Kolkata")
-    now_ist = datetime.now(ist)
-
-    first_slot_timedelta = db.get_first_slot_time(group_id)
-
-    if not first_slot_timedelta:
-        # Fallback: Restrict for a default duration if no slots are configured
-        return now_ist + timedelta(minutes=NEW_MEMBER_RESTRICTION_MINUTES)
-
-    first_slot_time = (datetime.min + first_slot_timedelta).time()
-
-    # Combine today's date with the first slot's time
-    first_slot_datetime_today = now_ist.replace(
-        hour=first_slot_time.hour,
-        minute=first_slot_time.minute,
-        second=0,
-        microsecond=0,
-    )
-
-    if now_ist < first_slot_datetime_today:
-        # User joined before the first slot today
-        return first_slot_datetime_today
-    else:
-        # User joined after the first slot today, restrict until tomorrow's first slot
-        tomorrow = now_ist + timedelta(days=1)
-        return tomorrow.replace(
-            hour=first_slot_time.hour,
-            minute=first_slot_time.minute,
-            second=0,
-            microsecond=0,
-        )
-
-
 async def track_chats(update, context):
     """Handles the bot being added to or removed from a group."""
     result = extract_status_change(update.my_chat_member)
@@ -166,6 +127,8 @@ async def track_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Apply's Telegram restriction if the DB record says they are restricted
             if member.get("is_restricted") and member.get("restriction_until"):
                 restriction_until_dt = member["restriction_until"]
+                ist = timezone("Asia/Kolkata")
+                restriction_until_dt = ist.localize(restriction_until_dt)
 
                 await context.bot.restrict_chat_member(
                     chat_id=group_id,
@@ -177,11 +140,12 @@ async def track_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ),
                     until_date=restriction_until_dt,
                 )
-
+                # Welcome the new user
                 welcome_message = group_config.get("welcome_message", "Welcome!")
                 await context.bot.send_message(
                     chat_id=group_id, text=f"Hi {first_name}, {welcome_message}."
                 )
+
                 logger.info(
                     f"✅ User {user_id} joined and has been MUTED until {restriction_until_dt}."
                 )
