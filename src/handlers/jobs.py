@@ -588,6 +588,6 @@ def setup_jobs(application):
     job_queue.run_daily(check_low_points, time=time(hour=23, minute=0))
 
     # Post daily leaderboard at 22:00 (10:00 PM)
-    job_queue.run_daily(post_daily_leaderboard, time=time(hour=16, minute=15))
+    job_queue.run_daily(post_daily_leaderboard, time=time(hour=11, minute=58))
 
     logger.info("Scheduled jobs setup completed")

@@ -113,8 +113,8 @@ def create_default_event_and_slots(group_id):
             slots = [
                 (
                     "Good Morning",
-                    "14:45:00",
-                    "14:50:00",
+                    "10:30:00",
+                    "10:35:00",
                     "text",
                     10,
                     10,
@@ -124,8 +124,8 @@ def create_default_event_and_slots(group_id):
                 ),
                 (
                     "Workout",
-                    "14:55:00",
-                    "15:00:00",
+                    "10:40:00",
+                    "10:45:00",
                     "photo",
                     10,
                     10,
@@ -135,8 +135,8 @@ def create_default_event_and_slots(group_id):
                 ),
                 (
                     "Breakfast",
-                    "15:05:00",
-                    "15:10:00",
+                    "10:50:00",
+                    "10:55:00",
                     "photo",
                     10,
                     10,
@@ -146,8 +146,8 @@ def create_default_event_and_slots(group_id):
                 ),
                 (
                     "Morning Water Intake",
-                    "15:15:00",
-                    "15:20:00",
+                    "11:00:00",
+                    "11:05:00",
                     "button",
                     10,
                     10,
@@ -157,8 +157,8 @@ def create_default_event_and_slots(group_id):
                 ),
                 (
                     "Lunch",
-                    "15:25:00",
-                    "15:30:00",
+                    "11:10:00",
+                    "11:15:00",
                     "photo",
                     10,
                     10,
@@ -168,8 +168,8 @@ def create_default_event_and_slots(group_id):
                 ),
                 (
                     "Afternoon Water Intake",
-                    "15:35:00",
-                    "15:40:00",
+                    "11:20:00",
+                    "11:25:00",
                     "button",
                     10,
                     10,
@@ -179,8 +179,8 @@ def create_default_event_and_slots(group_id):
                 ),
                 (
                     "Evening Snacks",
-                    "15:45:00",
-                    "15:50:00",
+                    "11:30:00",
+                    "11:35:00",
                     "photo",
                     10,
                     10,
@@ -190,8 +190,8 @@ def create_default_event_and_slots(group_id):
                 ),
                 (
                     "Evening Water intake",
-                    "15:55:00",
-                    "16:00:00",
+                    "11:40:00",
+                    "11:45:00",
                     "button",
                     10,
                     10,
@@ -201,8 +201,8 @@ def create_default_event_and_slots(group_id):
                 ),
                 (
                     "Dinner",
-                    "16:05:00",
-                    "16:10:00",
+                    "11:50:00",
+                    "11:55:00",
                     "photo",
                     10,
                     10,
