@@ -175,8 +175,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 warning_msg = await context.bot.send_message(
                     chat_id=group_id,
                     text=f"⚠️ {first_name}, please avoid using inappropriate language!\n"
-                    f"Warning {warnings}/2. Using banned word: '{matched_word}'\n"
-                    f"⚠️ -10 knockout points deducted!",
+                    f"Warning {warnings}/2. Using banned word: '{matched_word}'\n",
                 )
 
                 context.job_queue.run_once(lambda ctx: warning_msg.delete(), when=5)
@@ -258,8 +257,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             warning_msg = await context.bot.send_message(
                 chat_id=group_id,
                 text=f"⏰ {first_name}, no active slot right now!\n"
-                f"Please only post during designated time slots.\n"
-                f"⚠️ -5 knockout points deducted!",
+                f"Please only post during designated time slots.\n",
             )
 
             # Delete warning after 10 seconds
@@ -363,7 +361,7 @@ async def handle_text_response(
         if event_id:
             db.mark_slot_completed(event_id, slot_id, user_id, "completed")
 
-        await message.reply_text(slot["response_positive"] + f"\n+{points} points!")
+        await message.reply_text(slot["response_positive"] + f"\n{points} points!")
         logger.info(f"User {user_id} completed slot {slot_name} with text")
 
     else:
@@ -468,7 +466,7 @@ async def handle_photo_response(
             if event_id:
                 db.mark_slot_completed(event_id, slot_id, user_id, "completed")
 
-            await message.reply_text(slot["response_positive"] + f"\n+{points} points!")
+            await message.reply_text(slot["response_positive"] + f"\n{points} points!")
             logger.info(f"User {user_id} completed slot {slot_name} with photo")
 
         except Exception as e:
@@ -598,9 +596,9 @@ async def handle_other_media_response(
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    points_msg = f" (+{points} points)" if points > 0 else " (no points)"
+    points_msg = f" ({points} points)" if points > 0 else " (no points)"
     confirmation_msg = await message.reply_text(
-        f"Is this {media_type} for the {slot_name} slot?{points_msg}",
+        f"{first_name}, Is this your {slot_name} ?{points_msg}",
         reply_markup=reply_markup,
     )
 
@@ -619,7 +617,7 @@ async def handle_other_media_response(
         "username": username,
         "caption": message.caption if message.caption else "",
         "points": points,
-        "type": "media",  # Mark as media (not photo)
+        "type": "media",
         "media_type": media_type,
         "file_ext": file_ext,
     }

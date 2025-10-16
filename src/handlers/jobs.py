@@ -65,11 +65,6 @@ async def check_and_announce_slots(context: ContextTypes.DEFAULT_TYPE):
                         "initial_message", f"{slot_name} has started!"
                     )
 
-                    # Check for active event to include in announcement
-                    active_event = db.get_active_event(group_id)
-                    if active_event:
-                        message += f"\n📅 Event: {active_event['event_name']}"
-
                     # For water slots with buttons
                     if slot_type == "button":
                         keyboard = [

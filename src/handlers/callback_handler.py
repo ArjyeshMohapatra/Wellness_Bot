@@ -123,7 +123,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                         event_id, slot_id, expected_user_id, "completed"
                     )
 
-                await query.edit_message_text(f"✅ Photo confirmed! +{points} points!")
+                await query.edit_message_text(f"✅ You scored {points} points!")
                 logger.info(
                     f"User {expected_user_id} confirmed photo for slot {slot_name}, awarded {points} points"
                 )
@@ -202,7 +202,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                     )
 
                 points_msg = (
-                    f" +{points} points!" if points > 0 else " (no points awarded)"
+                    f"{points} points!" if points > 0 else " (no points awarded)"
                 )
                 await query.edit_message_text(
                     f"✅ {media_type.capitalize()} confirmed!{points_msg}"
@@ -245,7 +245,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
             if event_id:
                 db.mark_slot_completed(event_id, slot_id, expected_user_id, "completed")
 
-            await query.edit_message_text(f"✅ Confirmed! +{points} points!")
+            await query.edit_message_text(f"✅ You scored {points} points!")
             logger.info(
                 f"User {expected_user_id} confirmed text for slot {slot_name}, awarded {points} points"
             )
@@ -304,11 +304,24 @@ async def handle_water_button(update: Update, context: ContextTypes.DEFAULT_TYPE
     group_id = query.message.chat.id
 
     member = db.get_member(group_id, user_id)
+    member_name = member.get("first_name", "Unknown")
     if member and member.get("is_restricted", 0) == 1:
         await query.answer(
             "You are currently restricted and cannot perform this action.",
             show_alert=True,
         )
+
+        msg = await query.reply_text(
+            f"{member_name} are restricted and cannot perform this action."
+        )
+
+        context.job_queue.run_once(
+            lambda _: context.bot.delete_message(
+                chat_id=msg.chat_id, message_id=msg.message_id
+            ),
+            when=5,
+        )
+
         return
 
     # Parse: water_<liters>_<slot_id>
@@ -379,12 +392,12 @@ async def handle_water_button(update: Update, context: ContextTypes.DEFAULT_TYPE
             db.mark_slot_completed(event_id, slot_id, user_id, "completed")
 
         # Send confirmation as popup notification (doesn't replace message)
-        await query.answer(f"✅ {liters}L logged! +{points} points!", show_alert=True)
+        await query.answer(f"✅ {liters}L logged! {points} points!", show_alert=True)
 
         # Send a separate message to show who completed (doesn't replace buttons)
         response_msg = await context.bot.send_message(
             chat_id=group_id,
-            text=f"💧 {first_name} drank {liters}L of water! +{points} points!",
+            text=f"💧 {first_name} drank {liters}L of water! {points} points!",
         )
 
         """ # Delete the response message after 5 seconds to keep chat clean
