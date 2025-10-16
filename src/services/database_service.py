@@ -370,9 +370,15 @@ def get_member(group_id, user_id):
     return result[0] if result else None
 
 
-def add_warning(group_id, user_id):
-    # Use banned_word_count as warning counter since 'warnings' column doesn't exist
+# updates banned word counts per user
+def add_banned_words_warning(group_id, user_id):
     query = "UPDATE group_members SET banned_word_count = banned_word_count + 1 WHERE group_id = %s AND user_id = %s"
+    execute_query(query, (group_id, user_id))
+
+
+# updates general warning count per user
+def add_general_warning(group_id, user_id):
+    query = "UPDATE group_members SET general_warnings = general_warnings + 1 WHERE group_id = %s AND user_id = %s"
     execute_query(query, (group_id, user_id))
 
 

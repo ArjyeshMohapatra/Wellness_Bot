@@ -109,12 +109,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 permissions=ChatPermissions(
                     can_send_messages=True,
                     can_send_media_messages=True,
-                    can_send_polls=True,
                     can_send_other_messages=True,
-                    can_add_web_page_previews=True,
-                    can_change_info=True,
-                    can_invite_users=True,
-                    can_pin_messages=True,
                 ),
             )
 
@@ -163,7 +158,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if matched_word:
             try:
                 await message.delete()
-                db.add_warning(group_id, user_id)
+                db.add_banned_words_warning(group_id, user_id)
 
                 # Deduct 10 knockout points for banned word
                 db.deduct_knockout_points(group_id, user_id, 10)
@@ -180,33 +175,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
                 context.job_queue.run_once(lambda ctx: warning_msg.delete(), when=5)
 
-                # Ban for 1 day if 2 warnings
                 if warnings >= 2:
                     try:
-                        # Step 1: Ban user permanently first (removes from group)
                         await context.bot.ban_chat_member(group_id, user_id)
 
-                        # Step 2: Unban immediately so they can rejoin after 1 day manually
-                        # This kicks them out but doesn't permanently blacklist them
-                        await context.bot.unban_chat_member(
-                            group_id, user_id, only_if_banned=True
-                        )
-
-                        # Update database
                         db.remove_member(group_id, user_id, "banned")
 
-                        # Congratulate them if they had good points but still kick for violations
                         if current_points >= 100:
                             kick_msg = (
                                 f"👋 {first_name} earned {current_points} points but has been REMOVED from the group.\n"
                                 f"Reason: 2 warnings for using banned words.\n"
-                                f"You may rejoin after 24 hours."
                             )
                         else:
                             kick_msg = (
                                 f"🚫 {first_name} has been REMOVED from the group.\n"
                                 f"Reason: 2 warnings for using banned words.\n"
-                                f"You may rejoin after 24 hours."
                             )
 
                         await context.bot.send_message(chat_id=group_id, text=kick_msg)
@@ -214,25 +197,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                             f"User {user_id} ({first_name}) kicked for 2 banned word violations"
                         )
 
-                    except Exception as kick_error:
-                        logger.error(f"Error kicking user {user_id}: {kick_error}")
-                        # Try alternative method - just ban with until_date
-                        try:
-                            ban_until = datetime.now() + timedelta(days=1)
-                            await context.bot.ban_chat_member(
-                                group_id, user_id, until_date=ban_until
-                            )
-                            db.remove_member(group_id, user_id, "banned")
-
-                            kick_msg = (
-                                f"🚫 {first_name} has been BANNED for 24 hours.\n"
-                                f"Reason: 2 warnings for using banned words."
-                            )
-                            await context.bot.send_message(
-                                chat_id=group_id, text=kick_msg
-                            )
-                        except Exception as ban_error:
-                            logger.error(f"Failed to ban user {user_id}: {ban_error}")
+                    except Exception as ban_error:
+                        logger.error(
+                            f"Failed to apply 24-hour ban for user {user_id}: {ban_error}"
+                        )
+                        await context.bot.send_message(
+                            chat_id=group_id,
+                            text=f"⚠️ Could not ban {first_name}. Please check my admin permissions.",
+                        )
 
                 logger.warning(
                     f"Banned word detected from user {user_id}: {matched_word}"
@@ -249,7 +221,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # No active slot - delete message, warn, and deduct knockout points
         try:
             await message.delete()
-            db.add_warning(group_id, user_id)
+            db.add_general_warning(group_id, user_id)
 
             # Deduct 5 knockout points for posting outside slot
             db.deduct_knockout_points(group_id, user_id, 5)
@@ -639,38 +611,43 @@ async def auto_reject_confirmation(context: ContextTypes.DEFAULT_TYPE):
         if confirmation_msg_id in context.bot_data["pending_confirmations"]:
             data = context.bot_data["pending_confirmations"][confirmation_msg_id]
 
-            try:
-                # Edit message to show timeout
-                await context.bot.edit_message_text(
-                    chat_id=data["group_id"],
-                    message_id=confirmation_msg_id,
-                    text="⏱️ Timeout - marked as No",
-                )
+            if data:
+                try:
+                    # Deletes the user's original message that was rejected
+                    original_message_id = data.get("original_message_id")
+                    if original_message_id:
+                        await context.bot.delete_message(
+                            chat_id=data["group_id"], message_id=original_message_id
+                        )
+                        logger.info(f"Deleted timed-out message {original_message_id}")
 
-                # Delete after 3 seconds
-                context.job_queue.run_once(
-                    lambda ctx: context.bot.delete_message(
-                        data["group_id"], confirmation_msg_id
-                    ),
-                    when=3,
-                )
+                    await context.bot.edit_message_text(
+                        chat_id=data["group_id"],
+                        message_id=confirmation_msg_id,
+                        text="⏱️ Timeout - Post deleted.",
+                    )
 
-                # Log as invalid activity
-                db.log_activity(
-                    data["group_id"],
-                    data["user_id"],
-                    data["slot_name"],
-                    "text",
-                    data["text"],
-                    points_earned=0,
-                    is_valid=False,
-                )
+                    # Deletes the "Timeout" message itself after 3 seconds
+                    context.job_queue.run_once(
+                        lambda ctx: context.bot.delete_message(
+                            data["group_id"], confirmation_msg_id
+                        ),
+                        when=3,
+                    )
 
-            except Exception as e:
-                logger.error(f"Error in auto-reject: {e}")
+                    # Logs that the activity was invalid
+                    db.log_activity(
+                        group_id=data["group_id"],
+                        user_id=data["user_id"],
+                        slot_name=data["slot_name"],
+                        activity_type=data.get("type", "text"),
+                        message_content=data.get("text", ""),
+                        points_earned=0,
+                        is_valid=False,
+                    )
 
-            # Remove from pending (use pop to prevent KeyError)
-            context.bot_data["pending_confirmations"].pop(confirmation_msg_id, None)
+                except Exception as e:
+                    logger.error(f"Error in auto-reject: {e}")
 
 
 # Create message handlers

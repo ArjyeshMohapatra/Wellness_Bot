@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS group_members (
     current_event_points INT DEFAULT 0,
     current_points INT DEFAULT 0,
     knockout_points INT DEFAULT 0,
-    warnings INT DEFAULT 0,
+    general_warnings INT DEFAULT 0,
     banned_word_count INT DEFAULT 0,
     user_day_number INT DEFAULT 1,
     cycle_start_date DATE,

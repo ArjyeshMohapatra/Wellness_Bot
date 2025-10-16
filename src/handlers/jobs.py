@@ -2,7 +2,7 @@ from telegram.ext import ContextTypes
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions
 import logging
 import os
-from datetime import time
+from datetime import datetime, time, timedelta
 
 from services import database_service as db
 from db import get_db_connection, execute_query
@@ -141,12 +141,12 @@ async def check_and_announce_slots(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def check_inactive_users(context: ContextTypes.DEFAULT_TYPE):
-    """Check for inactive users: warn at 2 days, kick temporarily at 3 days."""
+    """Check for inactive users: warn at 3 days, kick temporarily at 4 days."""
     try:
         logger.info("Checking for inactive users...")
         from datetime import datetime, timedelta
 
-        # Get all groups
+        # Gets all groups
         query = "SELECT group_id FROM groups_config"
         with get_db_connection() as conn:
             cursor = conn.cursor(dictionary=True)
@@ -157,17 +157,17 @@ async def check_inactive_users(context: ContextTypes.DEFAULT_TYPE):
         for group in groups:
             group_id = group["group_id"]
 
-            # Check for 2-day inactive (warning)
-            inactive_2day = db.get_inactive_members(group_id, 2)
+            # Check for 3-day inactive (warning)
+            inactive_3day = db.get_inactive_members(group_id, 3)
 
-            for member in inactive_2day:
+            for member in inactive_3day:
                 user_id = member["user_id"]
                 first_name = member.get("first_name", "User")
 
                 # Check if already warned today
                 check_query = """
                     SELECT * FROM inactivity_warnings 
-                    WHERE group_id = %s AND user_id = %s AND warning_date = CURDATE() AND warning_type = '2day'
+                    WHERE group_id = %s AND user_id = %s AND warning_date = CURDATE() AND warning_type = '3day'
                 """
                 with get_db_connection() as conn:
                     cursor = conn.cursor(dictionary=True)
@@ -180,14 +180,14 @@ async def check_inactive_users(context: ContextTypes.DEFAULT_TYPE):
                         # Send warning
                         await context.bot.send_message(
                             chat_id=group_id,
-                            text=f"⚠️ {first_name}, you've been inactive for 2 days!\n"
+                            text=f"⚠️ {first_name}, you've been inactive for 3 days!\n"
                             f"Please participate in today's activities or you'll be removed tomorrow.",
                         )
 
                         # Log warning
                         insert_query = """
                             INSERT INTO inactivity_warnings (group_id, user_id, warning_date, warning_type)
-                            VALUES (%s, %s, CURDATE(), '2day')
+                            VALUES (%s, %s, CURDATE(), '3day')
                         """
                         with get_db_connection() as conn:
                             cursor = conn.cursor()
@@ -196,21 +196,21 @@ async def check_inactive_users(context: ContextTypes.DEFAULT_TYPE):
                             conn.commit()
 
                         logger.info(
-                            f"Warned 2-day inactive user {user_id} in group {group_id}"
+                            f"Warned 3-day inactive user {user_id} in group {group_id}"
                         )
 
                     except Exception as e:
                         logger.error(f"Error warning user {user_id}: {e}")
 
-            # Check for 3-day inactive (kick temporarily)
-            inactive_3day = db.get_inactive_members(group_id, 3)
+            # Check for 4-day inactive (kick temporarily)
+            inactive_4day = db.get_inactive_members(group_id, 4)
 
-            for member in inactive_3day:
+            for member in inactive_4day:
                 user_id = member["user_id"]
                 first_name = member.get("first_name", "User")
 
                 try:
-                    # Deduct 20 knockout points for 3-day inactivity before kicking
+                    # Deduct 20 knockout points for 4-day inactivity before kicking
                     db.deduct_knockout_points(group_id, user_id, 20)
 
                     # Kick temporarily for a few hours (6 hours)
@@ -225,13 +225,12 @@ async def check_inactive_users(context: ContextTypes.DEFAULT_TYPE):
                     # Send notification
                     await context.bot.send_message(
                         chat_id=group_id,
-                        text=f"🚫 {first_name} has been temporarily removed due to 3 days of inactivity.\n"
-                        f"⚠️ 20 knockout points were deducted.\n"
-                        f"They can be re-added by an admin after discussing with them.",
+                        text=f"🚫 {first_name} has been temporarily removed due to 4 days of inactivity.\n"
+                        f"⚠️ 20 knockout points were deducted.\n",
                     )
 
                     logger.info(
-                        f"Kicked 3-day inactive user {user_id} from group {group_id}"
+                        f"Kicked 4-day inactive user {user_id} from group {group_id}"
                     )
 
                 except Exception as e:
@@ -326,11 +325,9 @@ mid_slot_warnings_sent = {}
 
 
 async def check_mid_slot_warnings(context: ContextTypes.DEFAULT_TYPE):
-    """Post warning messages at 50% of slot duration."""
+    """Post warning messages at last 10 mins of slot duration."""
     try:
-        from datetime import datetime, time
-
-        # Get all groups
+        # Gets all groups
         query = "SELECT group_id FROM groups_config"
         with get_db_connection() as conn:
             cursor = conn.cursor(dictionary=True)
@@ -359,32 +356,24 @@ async def check_mid_slot_warnings(context: ContextTypes.DEFAULT_TYPE):
                 # Calculate slot duration and mid-point
                 now = datetime.now().time()
 
-                # Convert times to minutes for comparison
-                start_minutes = start_time.hour * 60 + start_time.minute
-                end_minutes = end_time.hour * 60 + end_time.minute
-                now_minutes = now.hour * 60 + now.minute
+                end_datetime = datetime.combine(datetime.today(), end_time)
+                reminder_datetime = end_datetime - timedelta(minutes=10)
+                reminder_time = reminder_datetime.time()
 
-                # Handle overnight slots
-                if end_minutes < start_minutes:
-                    end_minutes += 24 * 60
-                    if now_minutes < start_minutes:
-                        now_minutes += 24 * 60
+                # Check if its the reminder time
+                if (
+                    now.hour == reminder_time.hour
+                    and now.minute == reminder_time.minute
+                ):
 
-                duration_minutes = end_minutes - start_minutes
-                mid_point_minutes = start_minutes + (duration_minutes // 2)
-
-                # Check if we're at mid-point (within 1 minute tolerance)
-                if abs(now_minutes - mid_point_minutes) <= 1:
                     # Check if warning already sent for this slot today
                     today_key = f"{group_id}_{slot_id}_{datetime.now().date()}"
 
                     if today_key not in mid_slot_warnings_sent:
-                        remaining_minutes = duration_minutes // 2
-
                         await context.bot.send_message(
                             chat_id=group_id,
-                            text=f"⏰ *{slot_name}* - Reminder!\n\n"
-                            f"⚠️ Only {remaining_minutes} minutes remaining!\n"
+                            text=f"⏰ *{slot_name}* - Final Reminder!\n\n"
+                            f"⚠️ Only 10 minutes remaining!\n"
                             f"📸 If you haven't posted yet, do it now!",
                             parse_mode="Markdown",
                         )

@@ -3,6 +3,7 @@ from telegram.ext import CallbackQueryHandler, ContextTypes
 import logging
 from datetime import datetime
 from services import database_service as db
+from db import execute_query
 from services.file_storage import FileStorage
 import config
 
@@ -35,6 +36,8 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
     query = update.callback_query
     data = query.data
     message = query.message
+    user = query.from_user
+    first_name = user.first_name
 
     # Parse callback data: confirm_yes/no_<slot_id>_<user_id>_<original_msg_id>
     parts = data.split("_")
@@ -42,18 +45,11 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.edit_message_text("❌ Invalid confirmation.")
         return
 
-    response = parts[1]  # 'yes' or 'no'
-    slot_id = int(parts[2])
     expected_user_id = int(parts[3])
 
-    # Verify it's the right user
-    if query.from_user.id != expected_user_id:
-        await query.answer("This confirmation is not for you!", show_alert=True)
-        return
-
-    # Get pending confirmation data (use atomic pop to prevent race conditions)
+    # Get pending confirmation data
     pending_confirmations = context.bot_data.get("pending_confirmations", {})
-    confirmation_data = pending_confirmations.pop(message.message_id, None)
+    confirmation_data = pending_confirmations.get(query.message.message_id)
 
     if not confirmation_data:
         await query.edit_message_text(
@@ -61,15 +57,24 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return
 
-    # Double-check user ID from confirmation data for security
-    user_id_from_data = confirmation_data.get("user_id")
-    if query.from_user.id != user_id_from_data:
-        logger.warning(
-            f"Security: User {query.from_user.id} tried to confirm for user {user_id_from_data}"
+    # Verify it's the right user
+    if query.from_user.id != expected_user_id:
+        response_msg = await query.message.reply_text(
+            f"{first_name}, this confirmation is not for you!"
         )
-        await query.answer("❌ Security violation detected!", show_alert=True)
-        # Don't add back to pending - already removed
+        context.job_queue.run_once(
+            lambda _: context.bot.delete_message(
+                chat_id=response_msg.chat_id, message_id=response_msg.message_id
+            ),
+            when=5,
+        )
         return
+
+    context.bot_data["pending_confirmations"].pop(query.message.message_id, None)
+    await query.answer()
+
+    response = parts[1]  # 'yes' or 'no'
+    slot_id = int(parts[2])
 
     group_id = confirmation_data["group_id"]
     slot_name = confirmation_data["slot_name"]
@@ -251,27 +256,16 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
 
     else:
-        # Log as invalid based on type
-        if content_type == "photo":
-            db.log_activity(
-                group_id,
-                expected_user_id,
-                slot_name,
-                "photo",
-                points_earned=0,
-                is_valid=False,
-            )
-        else:
-            text = confirmation_data.get("text", "")
-            db.log_activity(
-                group_id,
-                expected_user_id,
-                slot_name,
-                "text",
-                text,
-                points_earned=0,
-                is_valid=False,
-            )
+        content_type = confirmation_data.get("type", "text")
+        db.log_activity(
+            group_id=group_id,
+            user_id=expected_user_id,
+            slot_name=slot_name,
+            activity_type=content_type,
+            message_content=confirmation_data.get("text", ""),
+            points_earned=0,
+            is_valid=False,
+        )
 
         await query.edit_message_text("❌ Cancelled. No points awarded.")
         logger.info(
@@ -289,9 +283,6 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
         except Exception as e:
             logger.warning(f"Could not delete original message: {e}")
 
-    # Note: Already removed from pending via pop() above
-
-    # Delete confirmation message after 3 seconds
     context.job_queue.run_once(lambda ctx: message.delete(), when=3)
 
 
@@ -304,25 +295,25 @@ async def handle_water_button(update: Update, context: ContextTypes.DEFAULT_TYPE
     group_id = query.message.chat.id
 
     member = db.get_member(group_id, user_id)
-    member_name = member.get("first_name", "Unknown")
+
     if member and member.get("is_restricted", 0) == 1:
+        restriction_until = member.get("restriction_until")
+        if restriction_until and datetime.now() > restriction_until:
+            query_text = "UPDATE group_members SET is_restricted = 0, restriction_until = NULL WHERE group_id = %s AND user_id = %s"
+            execute_query(query_text, (group_id, user_id))
+            logger.info(
+                f"User {user_id}'s restriction has expired. Unrestricted in DB."
+            )
+        else:
+            await query.answer(
+                "You are currently restricted and cannot perform this action.",
+                show_alert=True,
+            )
+            return
         await query.answer(
             "You are currently restricted and cannot perform this action.",
             show_alert=True,
         )
-
-        msg = await query.reply_text(
-            f"{member_name} are restricted and cannot perform this action."
-        )
-
-        context.job_queue.run_once(
-            lambda _: context.bot.delete_message(
-                chat_id=msg.chat_id, message_id=msg.message_id
-            ),
-            when=5,
-        )
-
-        return
 
     # Parse: water_<liters>_<slot_id>
     parts = data.split("_")
