@@ -3,7 +3,6 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions
 import logging
 import os
 from datetime import datetime, time, timedelta
-from pytz import timezone
 
 from services import database_service as db
 from db import get_db_connection, execute_query
@@ -490,7 +489,6 @@ async def post_daily_leaderboard(context: ContextTypes.DEFAULT_TYPE):
 def setup_jobs(application):
     """Setup periodic jobs."""
     job_queue = application.job_queue
-    ist=timezone("Asia/Kolkata")
 
     # Check and announce slots every minute
     job_queue.run_repeating(check_and_announce_slots, interval=60, first=0)
@@ -499,15 +497,15 @@ def setup_jobs(application):
     job_queue.run_repeating(check_mid_slot_warnings, interval=60, first=30)
 
     # Check inactive users once daily at 22:00 (10 PM)
-    job_queue.run_daily(check_inactive_users, time=time(hour=22, minute=0),tzinfo=ist)
+    job_queue.run_daily(check_inactive_users, time=time(hour=22, minute=0))
 
     # Check user day cycles daily at 23:15 (just before first slot)
-    job_queue.run_daily(check_user_day_cycles, time=time(hour=9, minute=30),tzinfo=ist)
+    job_queue.run_daily(check_user_day_cycles, time=time(hour=9, minute=30))
 
     # Check low-point users daily at END OF DAY (23:00 - 11 PM)
-    job_queue.run_daily(check_low_points, time=time(hour=23, minute=0),tzinfo=ist)
+    job_queue.run_daily(check_low_points, time=time(hour=23, minute=0))
 
     # Post daily leaderboard at 22:00 (10:00 PM)
-    job_queue.run_daily(post_daily_leaderboard, time=time(hour=11, minute=58),tzinfo=ist)
+    job_queue.run_daily(post_daily_leaderboard, time=time(hour=11, minute=58))
 
     logger.info("Scheduled jobs setup completed")

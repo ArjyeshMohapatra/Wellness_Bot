@@ -21,6 +21,7 @@ def get_first_slot_time(group_id):
     return result[0]["start_time"] if result else None
 
 
+# REPLACE the old function with this one
 def get_restriction_until_time(group_id):
     """
     Calculates the restriction time for a new member using NAIVE datetime objects in IST.
@@ -30,23 +31,22 @@ def get_restriction_until_time(group_id):
     first_slot_timedelta = get_first_slot_time(group_id)
 
     if not first_slot_timedelta:
-        restriction_time = now_ist + timedelta(minutes=NEW_MEMBER_RESTRICTION_MINUTES)
+        # Fallback if no slots are defined: restrict for a few minutes.
+        return (now_ist + timedelta(minutes=NEW_MEMBER_RESTRICTION_MINUTES)).replace(tzinfo=None)
+
+    first_slot_time = (datetime.min + first_slot_timedelta).time()
+
+    # Get the time of the first slot on today's date
+    first_slot_today_ist = ist.localize(datetime.combine(now_ist.date(), first_slot_time))
+
+    if now_ist < first_slot_today_ist:
+        # If the user joins BEFORE the first slot today, restrict them until that slot starts.
+        return first_slot_today_ist.replace(tzinfo=None)
     else:
-        first_slot_time = (datetime.min + first_slot_timedelta).time()
-        first_slot_datetime_today_ist = datetime.combine(
-            now_ist.date(), first_slot_time
-        )
-        first_slot_datetime_today_ist = ist.localize(first_slot_datetime_today_ist)
-
-        if now_ist < first_slot_datetime_today_ist:
-            restriction_time = first_slot_datetime_today_ist
-        else:
-            tomorrow_ist = now_ist + timedelta(days=1)
-            next_slot = datetime.combine(tomorrow_ist.date(), first_slot_time)
-            restriction_time = ist.localize(next_slot)
-
-    # Return naive datetime in IST
-    return restriction_time.replace(tzinfo=None)
+        # If the user joins AFTER the first slot today, restrict them until the first slot TOMORROW.
+        tomorrow_date = (now_ist + timedelta(days=1)).date()
+        first_slot_tomorrow_ist = ist.localize(datetime.combine(tomorrow_date, first_slot_time))
+        return first_slot_tomorrow_ist.replace(tzinfo=None)
 
 
 def create_group_config(group_id, admin_user_id):
@@ -104,31 +104,31 @@ def create_default_event_and_slots(group_id):
         logger.info(f"Created wellness event {event_id} for group {group_id}")
 
         slots = [
-            ("Good Morning", "04:45:00", "04:50:00", "media", 10,
+            ("Good Morning", "10:30:00", "10:35:00", "media", 10,
                 "Its Good morning everyone! Share your morning photo 🌅",
                 "Great start to your day! ✅", "Is this your Good Morning ?"),
-            ("Workout", "04:55:00", "05:00:00", "media", 10,
+            ("Workout", "10:40:00", "10:45:00", "media", 10,
                 "Its Workout time everyone! Post your exercise photo 💪",
                 "Amazing workout! 💪", "Is this your Workout ?"),
-            ("Breakfast", "05:05:00", "05:10:00", "media", 10,
+            ("Breakfast", "10:50:00", "10:55:00", "media", 10,
                 "Its Breakfast time everyone! Share your delicious & healthy meal 🍳",
                 "Healthy breakfast! 🍳", "Is this your Breakfast ?"),
-            ("Morning Water Intake", "05:15:00", "05:20:00", "button", 10,
+            ("Morning Water Intake", "11:00:00", "11:05:00", "button", 10,
                 "Lets checkout your morning hydration everyone! How much water did everyone drink ? 💧",
                 "Great hydration! 💧", "Is this the amount of water you drank ?"),
-            ("Lunch", "05:25:00", "05:30:00", "media", 10,
+            ("Lunch", "11:10:00", "11:15:00", "media", 10,
                 "Its Lunch time everyone! Post your delicious meal 🍱",
                 "Nutritious lunch! 🍱", "Is this your lunch ?"),
-            ("Afternoon Water Intake", "05:35:00", "05:40:00", "button", 10,
+            ("Afternoon Water Intake", "11:20:00", "11:25:00", "button", 10,
                 "Lets checkout your afternoon hydration everyone! How much water did everyone drink ? 💧",
                 "Great hydration! 💧", "Is this the amount of water you drank ?"),
-            ("Evening Snacks", "05:45:00", "05:50:00", "media",10,
+            ("Evening Snacks", "11:30:00", "11:35:00", "media",10,
                 "Evening snack time! Share your healthy snack 🍎",
                 "Healthy snack! 🍎", "Is this your evening snacks ?"),
-            ("Evening Water intake", "05:55:00", "06:00:00", "button", 10,
+            ("Evening Water intake", "11:40:00", "11:45:00", "button", 10,
                 "Lets checkout how hydrated are you in evening! Track your water 💧",
                 "Great hydration! 💧", "Is this the amount of water you drank ?"),
-            ("Dinner", "06:05:00", "06:10:00", "media", 10,
+            ("Dinner", "11:50:00", "11:55:00", "media", 10,
                 "Its Dinner time everyone! Share your healthy meal 🍽️",
                 "Delicious dinner! 🍽️", "Is this your dinner ?"),
         ]
@@ -150,12 +150,12 @@ def create_default_event_and_slots(group_id):
             
             query="""
                     INSERT INTO group_slots 
-                    (group_id, slot_name, start_time, end_time, slot_type, slot_points, 
-                        initial_message, response_positive, response_clarify, is_mandatory)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (group_id, event_id, slot_name, start_time, end_time, 
+                        initial_message, response_positive, response_clarify, image_file_path, slot_type, slot_points, is_mandatory)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
-            slot_id=execute_query(query,(group_id,slot_name,start_time,end_time,slot_type,slot_points,
-                                    initial_msg,response_pos,response_clar,is_mandatory))
+            slot_id=execute_query(query,(group_id, event_id, slot_name,start_time,end_time,
+                                    initial_msg,response_pos,response_clar, None, slot_type, slot_points, is_mandatory))
 
             # Add keywords for this slot
             if slot_name in slot_keywords:

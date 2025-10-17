@@ -30,7 +30,7 @@ def main():
         # Initialize database connection pool
         init_db_pool()
         logger.info("Database connection pool initialized")
-
+        
         # Create the Application with post_init
         application = Application.builder().token(config.BOT_TOKEN).build()
 

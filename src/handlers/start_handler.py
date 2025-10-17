@@ -41,8 +41,7 @@ async def start(update, context):
             username=user.username,
             first_name=user.first_name,
             last_name=user.last_name,
-            is_admin=True,
-            is_restricted=0
+            is_admin=True
         )
         
         # Admin-only code below:
