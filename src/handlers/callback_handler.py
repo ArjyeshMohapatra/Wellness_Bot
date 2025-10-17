@@ -38,6 +38,8 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
     message = query.message
     user = query.from_user
     first_name = user.first_name
+    username=user.username
+    last_name=user.last_name
 
     # Parse callback data: confirm_yes/no_<slot_id>_<user_id>_<original_msg_id>
     parts = data.split("_")
@@ -81,13 +83,15 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
     event_id = confirmation_data["event_id"]
     points = confirmation_data["points"]
     content_type = confirmation_data.get("type", "text")
+    username= confirmation_data["username"]
+    first_name=confirmation_data["first_name"]
+    last_name=confirmation_data["last_name"]
+    caption = confirmation_data.get("caption", "")
 
     if response == "yes":
         # Handle based on content type
         if content_type == "photo":
             photo_file_id = confirmation_data["photo_file_id"]
-            username = confirmation_data["username"]
-            caption = confirmation_data.get("caption", "")
 
             # Get slot configuration to determine points
             slot = db.get_active_slot(group_id)
@@ -116,6 +120,9 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                     expected_user_id,
                     slot_name,
                     "photo",
+                    username=username,
+                    first_name=first_name,
+                    last_name=last_name,
                     message_content=caption,
                     telegram_file_id=photo_file_id,
                     local_file_path=local_path,
@@ -142,8 +149,6 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
         elif content_type == "media":
             # Handle other media types (video, document, voice, etc.)
             file_id = confirmation_data["file_id"]
-            username = confirmation_data["username"]
-            caption = confirmation_data.get("caption", "")
             media_type = confirmation_data.get("media_type", "media")
             file_ext = confirmation_data.get("file_ext", "file")
 
@@ -155,17 +160,13 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
 
             # Determine points based on media type
             if media_type in ["video", "document"]:
-                points = slot[
-                    "points_for_photo"
-                ]  # 10 points - substantial content like photos
+                points = slot["points_for_photo"]
             elif media_type in ["voice", "video_note"]:
-                points = slot[
-                    "points_for_text"
-                ]  # 5 points - personal messages like text
+                points = slot["points_for_text"]
             elif media_type in ["sticker", "animation"]:
-                points = 0  # No points for entertainment content
+                points = slot["points_for_photo"]
             else:
-                points = slot["points_for_photo"]  # Default to photo points
+                points = slot["points_for_photo"]
 
             try:
                 # Download and save media
@@ -195,6 +196,9 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                     slot_name,
                     media_type,
                     message_content=caption,
+                    username=username,
+                    first_name=first_name,
+                    last_name=last_name,
                     telegram_file_id=file_id,
                     local_file_path=local_path,
                     points_earned=points,
@@ -232,9 +236,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                 await query.edit_message_text("❌ No active slot found.")
                 return
 
-            points = slot[
-                "points_for_text"
-            ]  # Text messages get text points (typically 5)
+            points = slot["points_for_text"]
 
             db.add_points(group_id, expected_user_id, points, event_id)
             db.log_activity(
@@ -243,6 +245,9 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                 slot_name,
                 "text",
                 message_content=text,
+                username=username,
+                first_name=first_name,
+                last_name=last_name,
                 points_earned=points,
                 is_valid=True,
             )
@@ -261,6 +266,9 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
             group_id=group_id,
             user_id=expected_user_id,
             slot_name=slot_name,
+            username=username,
+            first_name=first_name,
+            last_name=last_name,
             activity_type=content_type,
             message_content=confirmation_data.get("text", ""),
             points_earned=0,
@@ -293,6 +301,8 @@ async def handle_water_button(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_id = query.from_user.id
     first_name = query.from_user.first_name
     group_id = query.message.chat.id
+    username=query.from_user.username
+    last_name=query.from_user.last_name
 
     member = db.get_member(group_id, user_id)
 
@@ -376,13 +386,16 @@ async def handle_water_button(update: Update, context: ContextTypes.DEFAULT_TYPE
             slot_name,
             "button",
             f"{liters}L water",
+            username=username,
+            first_name=first_name,
+            last_name=last_name,
             points_earned=points,
         )
 
         if event_id:
             db.mark_slot_completed(event_id, slot_id, user_id, "completed")
 
-        # Send confirmation as popup notification (doesn't replace message)
+        # Send confirmation to telegram
         await query.answer(f"✅ {liters}L logged! {points} points!", show_alert=True)
 
         # Send a separate message to show who completed (doesn't replace buttons)
@@ -391,20 +404,14 @@ async def handle_water_button(update: Update, context: ContextTypes.DEFAULT_TYPE
             text=f"💧 {first_name} drank {liters}L of water! {points} points!",
         )
 
-        """ # Delete the response message after 5 seconds to keep chat clean
-        context.job_queue.run_once(
-            lambda ctx: response_msg.delete(),
-            when=5
-        ) """
-
         logger.info(f"User {user_id} logged {liters}L water for slot {slot_name}")
 
     finally:
-        # Release lock after 3 seconds to prevent accidental double-clicks
+        # Release lock after 5 seconds to prevent accidental double-clicks
         def release_lock(ctx):
             context.bot_data["button_locks"].discard(lock_key)
 
-        context.job_queue.run_once(release_lock, when=3)
+        context.job_queue.run_once(release_lock, when=5)
 
 
 callback_handler = CallbackQueryHandler(handle_callback)

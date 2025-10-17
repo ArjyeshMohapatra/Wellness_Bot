@@ -14,15 +14,11 @@ active_slot_announcements = {}
 
 
 async def check_and_announce_slots(context: ContextTypes.DEFAULT_TYPE):
-    """Check for active slots and announce them."""
+    """Check for active slots and announce them to the user at regular intervals"""
     try:
         # Get all group configs
         query = "SELECT group_id FROM groups_config"
-        with get_db_connection() as conn:
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute(query)
-            groups = cursor.fetchall()
-            cursor.close()
+        groups=execute_query(query)
 
         for group in groups:
             group_id = group["group_id"]
@@ -38,9 +34,6 @@ async def check_and_announce_slots(context: ContextTypes.DEFAULT_TYPE):
                 end_time = active_slot["end_time"]
 
                 if active_slot_announcements.get(group_id) != slot_id:
-                    # Format time strings
-                    from datetime import datetime
-
                     if hasattr(start_time, "total_seconds"):
                         start_str = (datetime.min + start_time).strftime("%H:%M")
                     else:
@@ -144,15 +137,10 @@ async def check_inactive_users(context: ContextTypes.DEFAULT_TYPE):
     """Check for inactive users: warn at 3 days, kick temporarily at 4 days."""
     try:
         logger.info("Checking for inactive users...")
-        from datetime import datetime, timedelta
 
         # Gets all groups
         query = "SELECT group_id FROM groups_config"
-        with get_db_connection() as conn:
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute(query)
-            groups = cursor.fetchall()
-            cursor.close()
+        groups=execute_query(query)
 
         for group in groups:
             group_id = group["group_id"]
@@ -163,17 +151,15 @@ async def check_inactive_users(context: ContextTypes.DEFAULT_TYPE):
             for member in inactive_3day:
                 user_id = member["user_id"]
                 first_name = member.get("first_name", "User")
+                last_name = member.get("last_name","")
+                username = member.get("username","User")
 
                 # Check if already warned today
                 check_query = """
                     SELECT * FROM inactivity_warnings 
                     WHERE group_id = %s AND user_id = %s AND warning_date = CURDATE() AND warning_type = '3day'
                 """
-                with get_db_connection() as conn:
-                    cursor = conn.cursor(dictionary=True)
-                    cursor.execute(check_query, (group_id, user_id))
-                    existing = cursor.fetchone()
-                    cursor.close()
+                existing= execute_query(query,(group_id,user_id))
 
                 if not existing:
                     try:
@@ -185,15 +171,7 @@ async def check_inactive_users(context: ContextTypes.DEFAULT_TYPE):
                         )
 
                         # Log warning
-                        insert_query = """
-                            INSERT INTO inactivity_warnings (group_id, user_id, warning_date, warning_type)
-                            VALUES (%s, %s, CURDATE(), '3day')
-                        """
-                        with get_db_connection() as conn:
-                            cursor = conn.cursor()
-                            cursor.execute(insert_query, (group_id, user_id))
-                            cursor.close()
-                            conn.commit()
+                        db.log_inactivity_warning(group_id, user_id, '3day', member)
 
                         logger.info(
                             f"Warned 3-day inactive user {user_id} in group {group_id}"
@@ -253,11 +231,7 @@ async def check_low_points(context: ContextTypes.DEFAULT_TYPE):
             FROM events e
             WHERE e.is_active = TRUE
         """
-        with get_db_connection() as conn:
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute(query)
-            events = cursor.fetchall()
-            cursor.close()
+        events=execute_query(query)
 
         for event in events:
             group_id = event["group_id"]
@@ -276,20 +250,16 @@ async def check_low_points(context: ContextTypes.DEFAULT_TYPE):
                 AND is_restricted = 0
             """
 
-            with get_db_connection() as conn:
-                cursor = conn.cursor(dictionary=True)
-                cursor.execute(query, (group_id, min_points))
-                low_point_members = cursor.fetchall()
-                cursor.close()
+            low_point_members=execute_query(query,(group_id,min_points))
 
             for member in low_point_members:
                 user_id = member["user_id"]
                 first_name = member.get("first_name", "User")
+                username=member.get("username","User")
+                last_name=member.get("last_name","")
                 current_points = member["current_points"]
 
                 try:
-                    from datetime import datetime, timedelta
-
                     # Kick the user temporarily (1 day)
                     until_date = datetime.now() + timedelta(days=1)
                     await context.bot.ban_chat_member(
@@ -299,14 +269,12 @@ async def check_low_points(context: ContextTypes.DEFAULT_TYPE):
                     # Remove from database
                     db.remove_member(group_id, user_id, "kicked")
 
-                    # Send congratulations and notification
                     await context.bot.send_message(
                         chat_id=group_id,
                         text=f"👋 {first_name}, thank you for your participation!\n"
                         f"🎯 You completed 7 days and earned {current_points} points!\n\n"
                         f"Unfortunately, you didn't reach the minimum {min_points} points required.\n"
-                        f"💪 Keep trying! You're temporarily removed for 1 day.\n"
-                        f"You can rejoin and try again!",
+                        f"💪 Keep trying!"
                     )
 
                     logger.info(
@@ -329,11 +297,7 @@ async def check_mid_slot_warnings(context: ContextTypes.DEFAULT_TYPE):
     try:
         # Gets all groups
         query = "SELECT group_id FROM groups_config"
-        with get_db_connection() as conn:
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute(query)
-            groups = cursor.fetchall()
-            cursor.close()
+        groups=execute_query(query)
 
         for group in groups:
             group_id = group["group_id"]
@@ -344,12 +308,9 @@ async def check_mid_slot_warnings(context: ContextTypes.DEFAULT_TYPE):
             if active_slot:
                 slot_id = active_slot["slot_id"]
                 slot_name = active_slot["slot_name"]
-                start_time = active_slot["start_time"]
                 end_time = active_slot["end_time"]
 
-                # Convert timedelta to datetime.time if needed
-                if hasattr(start_time, "total_seconds"):
-                    start_time = (datetime.min + start_time).time()
+                # Convert timedelta to datetime if needed
                 if hasattr(end_time, "total_seconds"):
                     end_time = (datetime.min + end_time).time()
 
@@ -400,37 +361,29 @@ async def check_mid_slot_warnings(context: ContextTypes.DEFAULT_TYPE):
 async def check_user_day_cycles(context: ContextTypes.DEFAULT_TYPE):
     """Check and update user day cycles, and reset after Day 7."""
     try:
-        from datetime import datetime, timedelta
-
         logger.info("Checking user day cycles...")
 
         # Get all groups
         query = "SELECT group_id FROM groups_config"
-        with get_db_connection() as conn:
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute(query)
-            groups = cursor.fetchall()
-            cursor.close()
+        groups=execute_query(query)
 
         for group in groups:
             group_id = group["group_id"]
 
             # Get all members in this group
             query = """
-                SELECT user_id, username, first_name, user_day_number, cycle_start_date, 
+                SELECT user_id, username, first_name, last_name, user_day_number, cycle_start_date, 
                        is_restricted, current_points
                 FROM group_members
                 WHERE group_id = %s
             """
-            with get_db_connection() as conn:
-                cursor = conn.cursor(dictionary=True)
-                cursor.execute(query, (group_id,))
-                members = cursor.fetchall()
-                cursor.close()
+            members=execute_query(query,(group_id,))
 
             for member in members:
                 user_id = member["user_id"]
                 first_name = member.get("first_name", "User")
+                username=member.get("username","User")
+                last_name=member.get("last_name","")
                 day_number = member["user_day_number"]
                 cycle_start = member["cycle_start_date"]
                 is_restricted = member["is_restricted"]
@@ -460,11 +413,7 @@ async def check_user_day_cycles(context: ContextTypes.DEFAULT_TYPE):
                                 knockout_points = 0
                             WHERE group_id = %s AND user_id = %s
                         """
-                        with get_db_connection() as conn:
-                            cursor = conn.cursor()
-                            cursor.execute(query, (group_id, user_id))
-                            cursor.close()
-                            conn.commit()
+                        execute_query(query,(group_id,user_id))
 
                         try:
                             await context.bot.send_message(
@@ -483,11 +432,7 @@ async def check_user_day_cycles(context: ContextTypes.DEFAULT_TYPE):
                     else:
                         # Just advance the day
                         query = "UPDATE group_members SET user_day_number = %s WHERE group_id = %s AND user_id = %s"
-                        with get_db_connection() as conn:
-                            cursor = conn.cursor()
-                            cursor.execute(query, (new_day, group_id, user_id))
-                            cursor.close()
-                            conn.commit()
+                        execute_query(query,(new_day, group_id, user_id))
 
                         logger.info(
                             f"Advanced user {user_id} in group {group_id} to Day {new_day}"
@@ -498,15 +443,11 @@ async def check_user_day_cycles(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def post_daily_leaderboard(context: ContextTypes.DEFAULT_TYPE):
-    """Post leaderboard automatically at end of day (10 PM)."""
+    """Post leaderboard automatically at end of all the slots for the day."""
     try:
         # Get all group configs
         query = "SELECT group_id FROM groups_config"
-        with get_db_connection() as conn:
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute(query)
-            groups = cursor.fetchall()
-            cursor.close()
+        groups=execute_query(query)
 
         for group in groups:
             group_id = group["group_id"]
@@ -522,7 +463,7 @@ async def post_daily_leaderboard(context: ContextTypes.DEFAULT_TYPE):
             top_members = db.get_leaderboard(group_id, 10)
 
             if top_members:
-                message = "🏆 **End of Day Leaderboard - Top 10**\n\n"
+                message = "🏆 **Leaderboard - Top 10**\n\n"
 
                 for i, member in enumerate(top_members, 1):
                     name = member.get("first_name", member.get("username", "Unknown"))
@@ -538,7 +479,7 @@ async def post_daily_leaderboard(context: ContextTypes.DEFAULT_TYPE):
                     elif i == 3:
                         medal = "🥉"
 
-                    message += f"{medal} {i}. {name}: {total} pts"
+                    message += f"{medal} {i}. {name} :\n{total} points"
                     if knockout > 0:
                         message += f" ({earned} earned - {knockout} lost)"
                     message += "\n"

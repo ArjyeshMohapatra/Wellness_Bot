@@ -35,8 +35,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     group_id = message.chat.id
     user_id = message.from_user.id
-    username = message.from_user.username
-    first_name = message.from_user.first_name
+    username = message.from_user.username or ""
+    first_name = message.from_user.first_name or ""
+    last_name = message.from_user.last_name or ""
 
     if message.text and message.text in ["My Score 💯", "Time Sheet 📅"]:
         if message.text == "My Score 💯":
@@ -177,9 +178,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
                 if warnings >= 2:
                     try:
-                        await context.bot.ban_chat_member(group_id, user_id)
+                        until_date = datetime.now() + timedelta(minutes=1)
 
-                        db.remove_member(group_id, user_id, "banned")
+                        await context.bot.ban_chat_member(
+                            group_id, user_id, until_date=until_date
+                        )
+
+                        db.remove_member(group_id, user_id, "kicked")
+                        logger.warning(f"User {user_id} record has been DELETED from the database.")
+                        
+                        await context.bot.unban_chat_member(group_id, user_id)
 
                         if current_points >= 100:
                             kick_msg = (
@@ -259,25 +267,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await message.delete()
             info_msg = await context.bot.send_message(
                 chat_id=group_id,
-                text=f"✅ {first_name}, you've already completed this slot today!",
+                text=f"⚠️ {first_name}, you've already completed this slot today!",
             )
             context.job_queue.run_once(lambda ctx: info_msg.delete(), when=5)
             return
         except Exception as e:
             logger.error(f"Error handling duplicate submission: {e}")
             return
-
-    """ if slot_type == 'button':
-        try:
-            await message.delete()
-            hint_msg = await context.bot.send_message(
-                chat_id=group_id,
-                text=f"💧 {first_name}, please use the water intake buttons for this slot!"
-            )
-            context.job_queue.run_once(lambda ctx: hint_msg.delete(), when=5)
-        except Exception as e:
-            logger.error(f"Error sending button hint: {e}")
-        return """
 
     # Accept ANY media type for regular slots
     if message.photo:
@@ -309,7 +305,9 @@ async def handle_text_response(
     message = update.message
     group_id = message.chat.id
     user_id = message.from_user.id
-    first_name = message.from_user.first_name
+    first_name = message.from_user.first_name or ""
+    username=message.from_user_username or ""
+    last_name=message.from_user.last_name or ""
     text = sanitize_text(message.text)
 
     slot_id = slot["slot_id"]
@@ -327,7 +325,8 @@ async def handle_text_response(
         points = slot["points_for_text"]
         db.add_points(group_id, user_id, points, event_id)
         db.log_activity(
-            group_id, user_id, slot_name, "text", text, points_earned=points
+            group_id=group_id, user_id=user_id, slot_name=slot_name, activity_type="text", message_content=text, points_earned=points,
+            username=username, first_name=first_name, last_name=last_name
         )
 
         if event_id:
@@ -362,6 +361,9 @@ async def handle_text_response(
 
         context.bot_data["pending_confirmations"][confirmation_msg.message_id] = {
             "user_id": user_id,
+            "username": username,
+            "first_name": first_name,
+            "last_name": last_name,
             "slot_id": slot_id,
             "slot_name": slot_name,
             "event_id": event_id,
@@ -386,8 +388,9 @@ async def handle_photo_response(
     message = update.message
     group_id = message.chat.id
     user_id = message.from_user.id
-    first_name = message.from_user.first_name
-    username = message.from_user.username or f"user{user_id}"
+    first_name = message.from_user.first_name or ""
+    username = message.from_user.username or ""
+    last_name=message.from_user.last_name or ""
 
     slot_id = slot["slot_id"]
     slot_name = slot["slot_name"]
@@ -424,19 +427,22 @@ async def handle_photo_response(
 
             # Award points
             points = slot["points_for_photo"]
-            db.add_points(group_id, user_id, points, event_id)
+            db.add_points(group_id=group_id, user_id=user_id, points=points, event_id=event_id)
             db.log_activity(
-                group_id,
-                user_id,
-                slot_name,
-                "photo",
+                group_id=group_id,
+                user_id=user_id,
+                slot_name=slot_name,
+                username=username,
+                first_name=first_name,
+                last_name=last_name,
+                activity_type="photo",
                 telegram_file_id=file_id,
                 local_file_path=local_path,
                 points_earned=points,
             )
 
             if event_id:
-                db.mark_slot_completed(event_id, slot_id, user_id, "completed")
+                db.mark_slot_completed(event_id=event_id, slot_id=slot_id, user_id=user_id, status="completed")
 
             await message.reply_text(slot["response_positive"] + f"\n{points} points!")
             logger.info(f"User {user_id} completed slot {slot_name} with photo")
@@ -473,6 +479,8 @@ async def handle_photo_response(
 
         context.bot_data["pending_confirmations"][confirmation_msg.message_id] = {
             "user_id": user_id,
+            "first_name": first_name,
+            "last_name": last_name,
             "slot_id": slot_id,
             "slot_name": slot_name,
             "event_id": event_id,
@@ -500,8 +508,9 @@ async def handle_other_media_response(
     message = update.message
     group_id = message.chat.id
     user_id = message.from_user.id
-    first_name = message.from_user.first_name
-    username = message.from_user.username or f"user{user_id}"
+    first_name = message.from_user.first_name or ""
+    username = message.from_user.username or ""
+    last_name=message.from_user.last_name or ""
 
     slot_id = slot["slot_id"]
     slot_name = slot["slot_name"]
@@ -568,9 +577,9 @@ async def handle_other_media_response(
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    points_msg = f" ({points} points)" if points > 0 else " (no points)"
+    # points_msg = f" ({points} points)" if points > 0 else " (no points)"
     confirmation_msg = await message.reply_text(
-        f"{first_name}, Is this your {slot_name} ?{points_msg}",
+        f"{first_name}, Is this your {slot_name} ?",
         reply_markup=reply_markup,
     )
 
@@ -580,6 +589,8 @@ async def handle_other_media_response(
 
     context.bot_data["pending_confirmations"][confirmation_msg.message_id] = {
         "user_id": user_id,
+        "first_name": first_name,
+        "last_name": last_name,
         "slot_id": slot_id,
         "slot_name": slot_name,
         "event_id": event_id,
@@ -603,7 +614,7 @@ async def handle_other_media_response(
 
 
 async def auto_reject_confirmation(context: ContextTypes.DEFAULT_TYPE):
-    """Auto-reject confirmation after timeout."""
+    """Auto-rejects confirmation for a user after timeout."""
     job = context.job
     confirmation_msg_id = job.data["confirmation_msg_id"]
 
@@ -624,7 +635,7 @@ async def auto_reject_confirmation(context: ContextTypes.DEFAULT_TYPE):
                     await context.bot.edit_message_text(
                         chat_id=data["group_id"],
                         message_id=confirmation_msg_id,
-                        text="⏱️ Timeout - Post deleted.",
+                        text="⏱️ Timeout didn't get a confirmation!",
                     )
 
                     # Deletes the "Timeout" message itself after 3 seconds
@@ -632,13 +643,16 @@ async def auto_reject_confirmation(context: ContextTypes.DEFAULT_TYPE):
                         lambda ctx: context.bot.delete_message(
                             data["group_id"], confirmation_msg_id
                         ),
-                        when=3,
+                        when=5,
                     )
 
                     # Logs that the activity was invalid
                     db.log_activity(
                         group_id=data["group_id"],
                         user_id=data["user_id"],
+                        username=data["username"],
+                        first_name=data["first_name"],
+                        last_name=data["last_name"],
                         slot_name=data["slot_name"],
                         activity_type=data.get("type", "text"),
                         message_content=data.get("text", ""),

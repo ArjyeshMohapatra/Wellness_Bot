@@ -109,7 +109,6 @@ def create_default_event_and_slots(group_id):
             event_id = cursor.lastrowid
             logger.info(f"Created wellness event {event_id} for group {group_id}")
 
-            # Create 8 default slots with all response fields
             slots = [
                 (
                     "Good Morning",
@@ -120,7 +119,7 @@ def create_default_event_and_slots(group_id):
                     10,
                     "Its Good morning everyone! Share your morning photo 🌅",
                     "Great start to your day! ✅",
-                    "Is this for the Good Morning slot?",
+                    "Is this your Good Morning ?",
                 ),
                 (
                     "Workout",
@@ -131,7 +130,7 @@ def create_default_event_and_slots(group_id):
                     10,
                     "Its Workout time everyone! Post your exercise photo 💪",
                     "Amazing workout! 💪",
-                    "Is this for the Workout slot?",
+                    "Is this your Workout ?",
                 ),
                 (
                     "Breakfast",
@@ -142,7 +141,7 @@ def create_default_event_and_slots(group_id):
                     10,
                     "Its Breakfast time everyone! Share your delicious & healthy meal 🍳",
                     "Healthy breakfast! 🍳",
-                    "Is this for the Breakfast slot?",
+                    "Is this your Breakfast ?",
                 ),
                 (
                     "Morning Water Intake",
@@ -153,7 +152,7 @@ def create_default_event_and_slots(group_id):
                     10,
                     "Lets checkout your morning hydration everyone! How much water did everyone drink ? 💧",
                     "Great hydration! 💧",
-                    "Did you drink water?",
+                    "Is this the amount of water you drank ?",
                 ),
                 (
                     "Lunch",
@@ -164,7 +163,7 @@ def create_default_event_and_slots(group_id):
                     10,
                     "Its Lunch time everyone! Post your delicious meal 🍱",
                     "Nutritious lunch! 🍱",
-                    "Is this for the Lunch slot?",
+                    "Is this your lunch ?",
                 ),
                 (
                     "Afternoon Water Intake",
@@ -175,7 +174,7 @@ def create_default_event_and_slots(group_id):
                     10,
                     "Lets checkout your afternoon hydration everyone! How much water did everyone drink ? 💧",
                     "Great hydration! 💧",
-                    "Did you drink water?",
+                    "Is this the amount of water you drank ?",
                 ),
                 (
                     "Evening Snacks",
@@ -186,7 +185,7 @@ def create_default_event_and_slots(group_id):
                     10,
                     "Evening snack time! Share your healthy snack 🍎",
                     "Healthy snack! 🍎",
-                    "Is this for the Evening Snacks slot?",
+                    "Is this your evening snacks ?",
                 ),
                 (
                     "Evening Water intake",
@@ -197,7 +196,7 @@ def create_default_event_and_slots(group_id):
                     10,
                     "Lets checkout how hydrated are you in evening! Track your water 💧",
                     "Great hydration! 💧",
-                    "Did you drink water?",
+                    "Is this the amount of water you drank ?",
                 ),
                 (
                     "Dinner",
@@ -208,7 +207,7 @@ def create_default_event_and_slots(group_id):
                     10,
                     "Its Dinner time everyone! Share your healthy meal 🍽️",
                     "Delicious dinner! 🍽️",
-                    "Is this for the Dinner slot?",
+                    "Is this your dinner ?",
                 ),
             ]
 
@@ -286,10 +285,9 @@ def create_default_event_and_slots(group_id):
 
 
 # adds new members and their info to db table
-# In telegram-bot/src/services/database_service.py
-
-
-def add_member(group_id, user_id, username=None, first_name=None, is_admin=False):
+def add_member(
+    group_id, user_id, username=None, first_name=None, last_name=None, is_admin=False
+):
     """
     Adds or updates a member and ALWAYS returns their full record from the database and if it was newly inserted.
     This is critical for the join handler to function correctly.
@@ -305,17 +303,16 @@ def add_member(group_id, user_id, username=None, first_name=None, is_admin=False
         )
         if existing:
             query = """
-                UPDATE group_members SET username = %s, first_name = %s, last_active_timestamp = NOW()
+                UPDATE group_members SET username = %s, first_name = %s, last_name = %s, last_active_timestamp = NOW()
                 WHERE group_id = %s AND user_id = %s
             """
             logger.debug(f"[DEBUG] Executing UPDATE for user {user_id}")
-            execute_query(query, (username, first_name, group_id, user_id))
+            execute_query(query, (username, first_name, last_name, group_id, user_id))
         else:
             is_restricted = 0 if is_admin else 1
             restriction_until = None
             if is_restricted:
                 restriction_until = get_restriction_until_time(group_id)
-                # Convert to MySQL TIMESTAMP format (string, IST)
                 if restriction_until is not None:
                     restriction_until = restriction_until.strftime("%Y-%m-%d %H:%M:%S")
                 logger.info(
@@ -328,8 +325,8 @@ def add_member(group_id, user_id, username=None, first_name=None, is_admin=False
 
             query = """
                 INSERT INTO group_members
-                (user_id, group_id, username, first_name, is_restricted, restriction_until, joined_at, last_active_timestamp)
-                VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())
+                (user_id, group_id, username, first_name, last_name, is_restricted, restriction_until, joined_at, last_active_timestamp)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
             """
             logger.debug(f"[DEBUG] Executing INSERT for user {user_id}")
             execute_query(
@@ -339,25 +336,25 @@ def add_member(group_id, user_id, username=None, first_name=None, is_admin=False
                     group_id,
                     username,
                     first_name,
+                    last_name,
                     is_restricted,
                     restriction_until,
                 ),
             )
             logger.debug(f"[DEBUG] INSERT complete for user {user_id}")
+            # Log to history table
             execute_query(
-                "INSERT INTO member_history (group_id, user_id, action) VALUES (%s, %s, 'joined')",
-                (group_id, user_id),
+                "INSERT INTO member_history (group_id, user_id, username, first_name, last_name, action) VALUES (%s, %s, %s, %s, %s, 'joined')",
+                (group_id, user_id, username, first_name, last_name),
             )
             logger.debug(f"[DEBUG] member_history INSERT complete for user {user_id}")
 
-        # ALWAYS fetch and return the complete member data.
         member_data = get_member(group_id, user_id)
         logger.debug(f"[DEBUG] Final member_data fetched: {member_data}")
         return member_data, is_new
     except Exception as e:
         logger.error(f"Error adding member: {e}")
-        return None  # Return None on failure
-
+        return None, False
 
 def update_member_activity(group_id, user_id):
     query = "UPDATE group_members SET last_active_timestamp = NOW() WHERE group_id = %s AND user_id = %s"
@@ -410,15 +407,41 @@ def get_inactive_members(group_id, days=3):
         """
     return execute_query(query, (group_id, days), fetch=True)
 
+def log_inactivity_warning(group_id, user_id, warning_type, member_details):
+    query = """
+        INSERT INTO inactivity_warnings (group_id, user_id, username, first_name, last_name, warning_date, warning_type)
+        VALUES (%s, %s, %s, %s, %s, CURDATE(), %s)
+    """
+    execute_query(query, (
+        group_id, user_id,
+        member_details.get('username'),
+        member_details.get('first_name'),
+        member_details.get('last_name'),
+        warning_type
+    ))
 
 def remove_member(group_id, user_id, action="kicked"):
     try:
-        execute_query(
-            "INSERT INTO member_history (group_id, user_id, action) VALUES (%s, %s, %s)",
-            (group_id, user_id, action),
-        )
+        # First, get the member's details BEFORE deleting them
+        member = get_member(group_id, user_id)
+        if member:
+            username = member.get("username")
+            first_name = member.get("first_name")
+            last_name = member.get("last_name")
+            
+            # Now, log their details to the history table
+            execute_query(
+                "INSERT INTO member_history (group_id, user_id, username, first_name, last_name, action) VALUES (%s, %s, %s, %s, %s, %s)",
+                (group_id, user_id, username, first_name, last_name, action),
+            )
+        else:
+            # Fallback in case member is not found
+            execute_query(
+                "INSERT INTO member_history (group_id, user_id, action) VALUES (%s, %s, %s)",
+                (group_id, user_id, action),
+            )
 
-        # Delete member
+        # Finally, delete the member from the main table
         execute_query(
             "DELETE FROM group_members WHERE group_id = %s AND user_id = %s",
             (group_id, user_id),
@@ -469,8 +492,11 @@ def get_slot_keywords(slot_id):
 def log_activity(
     group_id,
     user_id,
-    slot_name,
     activity_type,
+    slot_name,
+    username=None,
+    first_name=None,
+    last_name=None,
     message_content=None,
     telegram_file_id=None,
     local_file_path=None,
@@ -479,17 +505,20 @@ def log_activity(
 ):
     query = """
             INSERT INTO user_activity_log 
-            (group_id, user_id, slot_name, activity_type, message_content, 
+            (group_id, user_id, activity_type, slot_name,username, first_name, last_name, message_content, 
              telegram_file_id, local_file_path, points_earned, is_valid)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
     execute_query(
         query,
         (
             group_id,
             user_id,
-            slot_name,
             activity_type,
+            slot_name,
+            username,
+            first_name,
+            last_name,
             message_content,
             telegram_file_id,
             local_file_path,
@@ -505,18 +534,20 @@ def add_points(group_id, user_id, points, event_id=None):
         execute_query(query, (points, group_id, user_id))
 
         if event_id:
-            log_query = """
-                    INSERT INTO daily_points_log (event_id, user_id, log_date, points_scored)
-                    VALUES (%s, %s, CURDATE(), %s)
-                    ON DUPLICATE KEY UPDATE points_scored = points_scored + VALUES(points_scored)
-                """
-            execute_query(log_query, (event_id, user_id, points))
+            # Get member details to log them
+            member = get_member(group_id, user_id)
+            if member:
+                log_query = """
+                        INSERT INTO daily_points_log (event_id, user_id, username, first_name, last_name, log_date, points_scored)
+                        VALUES (%s, %s, %s, %s, %s, CURDATE(), %s)
+                        ON DUPLICATE KEY UPDATE points_scored = points_scored + VALUES(points_scored)
+                    """
+                execute_query(log_query, (event_id, user_id, member.get('username'), member.get('first_name'), member.get('last_name'), points))
 
         return True
     except Exception as e:
         logger.error(f"Error adding points: {e}")
         return False
-
 
 def get_low_point_members(group_id, min_points):
     query = """
@@ -527,13 +558,22 @@ def get_low_point_members(group_id, min_points):
     return execute_query(query, (group_id, min_points), fetch=True)
 
 
-def mark_slot_completed(event_id, slot_id, user_id, status="completed"):
+def mark_slot_completed(group_id, event_id, slot_id, user_id, status="completed"):
+    member = get_member(group_id, user_id)
+
+    if member:
+        username = member.get('username')
+        first_name = member.get('first_name')
+        last_name = member.get('last_name')
+    else:
+        username, first_name, last_name = None, None, None
+
     query = """
-            INSERT INTO daily_slot_tracker (event_id, slot_id, user_id, log_date, status)
-            VALUES (%s, %s, %s, CURDATE(), %s)
+            INSERT INTO daily_slot_tracker (event_id, slot_id, user_id, username, first_name, last_name, log_date, status)
+            VALUES (%s, %s, %s, %s, %s, %s, CURDATE(), %s)
             ON DUPLICATE KEY UPDATE status = VALUES(status), duplicate_submissions = duplicate_submissions + 1
         """
-    execute_query(query, (event_id, slot_id, user_id, status))
+    execute_query(query, (event_id, slot_id, user_id, username, first_name, last_name, status))
 
 
 def check_slot_completed_today(event_id, slot_id, user_id):
@@ -553,11 +593,15 @@ def get_banned_words(group_id):
 
 
 def get_leaderboard(group_id, limit=10):
+    """
+    Fetches the top members for the leaderboard, only including those
+    with a net score greater than 0.
+    """
     query = """
             SELECT user_id, username, first_name, current_points, knockout_points, user_day_number,
                    (current_points - knockout_points) AS net_points
             FROM group_members
-            WHERE group_id = %s
+            WHERE group_id = %s AND (current_points - knockout_points) > 0
             ORDER BY net_points DESC
             LIMIT %s
         """

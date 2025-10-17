@@ -111,15 +111,12 @@ async def track_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
     - Sends welcome
     - Applies temporary restriction until the stored restriction_until (IST) if required
     """
-    # 1) Classify the transition
     was_member, is_member = extract_status_change(update.chat_member)
-
-    # 2) Only act on human users
+    
     user = update.chat_member.new_chat_member.user
     if user.is_bot:
         return
 
-    # 3) Only proceed for real joins (previously out, now in)
     if not (not was_member and is_member):
         return
 
@@ -127,31 +124,31 @@ async def track_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
     group_id = chat.id
     user_id = user.id
     first_name = user.first_name or ""
-    username = user.username
+    username = user.username or ""
+    last_name= user.last_name or ""
 
     logger.info(
         f"👤 New member joining: {user_id} ({first_name} @{username}) in group {group_id}"
     )
 
-    # 4) Load group config; if not configured, stop
     group_config = db.get_group_config(group_id)
     if not group_config:
         logger.warning(f"Group {group_id} not configured - skipping member {user_id}")
         return
 
     try:
-        # 5) Determine if user is Telegram admin/owner; admins should not be restricted
+        # determines if user is Telegram admin/owner; admins should not be restricted
         chat_member = await context.bot.get_chat_member(
             chat_id=group_id, user_id=user_id
         )
         is_admin = chat_member.status in ["administrator", "creator"]
 
-        # 6) Add/update DB member record; your db.add_member returns (member_dict, is_new)
         member, is_new = db.add_member(
             group_id=group_id,
             user_id=user_id,
             username=username,
             first_name=first_name,
+            last_name=last_name,
             is_admin=is_admin,
         )
         if not member:
@@ -160,7 +157,6 @@ async def track_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # 7) Prepare welcome message
         welcome_message = group_config.get("welcome_message", "Welcome!")
         welcome_text = f"Hi {first_name}, {welcome_message}"
         if is_admin:
@@ -169,17 +165,13 @@ async def track_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=group_id, text=welcome_text)
         logger.info(f"✅ Welcome message sent to {user_id} in group {group_id}")
 
-        # 8) Apply temporary restriction only if:
-        #    - DB says member.is_restricted
-        #    - restriction_until present
-        #    - user is NOT a Telegram admin/creator
         restriction_until_value = member.get("restriction_until")
         needs_restrict = (
             member.get("is_restricted") and restriction_until_value and not is_admin
         )
 
         if needs_restrict:
-            # Parse restriction_until (stored as naive IST datetime or string "%Y-%m-%d %H:%M:%S")
+            # Parses restriction_until (stored as naive IST datetime or string "%Y-%m-%d %H:%M:%S")
             if isinstance(restriction_until_value, str):
                 restriction_until_dt_ist = datetime.strptime(
                     restriction_until_value, "%Y-%m-%d %H:%M:%S"
@@ -187,7 +179,7 @@ async def track_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 restriction_until_dt_ist = restriction_until_value
 
-            # Convert IST (UTC+5:30) naive to UTC naive for Telegram until_date
+            # Converts IST (UTC+5:30) naive to UTC naive for Telegram until_date
             utc_restriction = restriction_until_dt_ist - timedelta(hours=5, minutes=30)
 
             logger.debug(
