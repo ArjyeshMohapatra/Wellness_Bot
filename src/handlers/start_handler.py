@@ -35,6 +35,16 @@ async def start(update, context):
             logger.info(f"Non-admin user {user.id} tried to use /start in group {chat.id}")
             return  # Silently ignore
         
+        db.add_member(
+            group_id=chat.id,
+            user_id=user.id,
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            is_admin=True,
+            is_restricted=0
+        )
+        
         # Admin-only code below:
         reply_markup = ReplyKeyboardMarkup(
             [['My Score 💯', 'Time Sheet 📅']],

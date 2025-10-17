@@ -109,7 +109,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 user_id=user_id,
                 permissions=ChatPermissions(
                     can_send_messages=True,
-                    can_send_media_messages=True,
                     can_send_other_messages=True,
                 ),
             )
