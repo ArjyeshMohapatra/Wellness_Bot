@@ -75,15 +75,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         welcome_text = f"Hi {first_name}, {welcome_message}"
 
         restriction_until_str = member.get("restriction_until")
-        if (
-            member.get("is_restricted")
-            and restriction_until_str
-            and not is_telegram_admin
-        ):
+        if (member.get("is_restricted") and restriction_until_str and not is_telegram_admin):
             if isinstance(restriction_until_str, str):
-                restriction_until_dt = datetime.strptime(
-                    restriction_until_str, "%Y-%m-%d %H:%M:%S"
-                )
+                restriction_until_dt = datetime.strptime(restriction_until_str, "%Y-%m-%d %H:%M:%S")
             else:
                 restriction_until_dt = restriction_until_str
             restriction_local_time = restriction_until_dt.strftime("%I:%M %p on %b %d")
@@ -128,9 +122,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         custom_banned = db.get_banned_words(group_id)
 
         if not custom_banned:
-            logger.warning(
-                f"No banned words found for group {group_id}. Check database!"
-            )
+            logger.warning(f"No banned words found for group {group_id}. Check database!")
 
         message_text_lower = message.text.lower()
 
@@ -142,17 +134,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 # Multi-word phrases: substring match
                 if banned_word.lower() in message_text_lower:
                     matched_word = banned_word
-                    logger.warning(
-                        f"BANNED PHRASE MATCH: '{banned_word}' found in '{message.text[:50]}'"
-                    )
+                    logger.warning(f"BANNED PHRASE MATCH: '{banned_word}' found in '{message.text[:50]}'")
                     break
             else:
                 pattern = r"\b" + re.escape(banned_word.lower()) + r"\b"
                 if re.search(pattern, message_text_lower):
                     matched_word = banned_word
-                    logger.warning(
-                        f"BANNED WORD MATCH: '{banned_word}' found in '{message.text[:50]}'"
-                    )
+                    logger.warning(f"BANNED WORD MATCH: '{banned_word}' found in '{message.text[:50]}'")
                     break
 
         if matched_word:
@@ -281,14 +269,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     elif message.text:
         await handle_text_response(update, context, active_slot, event_id)
 
-    elif (
-        message.video
-        or message.document
-        or message.sticker
-        or message.animation
-        or message.voice
-        or message.video_note
-    ):
+    elif (message.video or message.document or message.sticker or message.animation or message.voice or message.video_note):
         # Other media types - ask for confirmation
         await handle_other_media_response(update, context, active_slot, event_id)
 
@@ -297,45 +278,58 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         logger.warning(f"Unknown message type from user {user_id} in group {group_id}")
 
 
-async def handle_text_response(
-    update: Update, context: ContextTypes.DEFAULT_TYPE, slot: dict, event_id: int
-):
+async def handle_text_response(update: Update, context: ContextTypes.DEFAULT_TYPE, slot: dict, event_id: int):
     """Handle text message for a slot."""
     message = update.message
     group_id = message.chat.id
     user_id = message.from_user.id
     first_name = message.from_user.first_name or ""
-    username=message.from_user_username or ""
-    last_name=message.from_user.last_name or ""
+    username = message.from_user.username or ""
+    last_name = message.from_user.last_name or ""
     text = sanitize_text(message.text)
 
     slot_id = slot["slot_id"]
     slot_name = slot["slot_name"]
 
-    # Get slot keywords
     keywords = db.get_slot_keywords(slot_id)
-
-    # Check if text matches keywords
     text_lower = text.lower()
     keyword_match = any(keyword.lower() in text_lower for keyword in keywords)
 
     if keyword_match:
-        # Direct match - award points
+        if event_id:
+            is_first_completion = db.mark_slot_completed(group_id, event_id, slot_id, user_id, "completed")
+        
+            if not is_first_completion:
+                try:
+                    await message.delete()
+                    info_msg = await context.bot.send_message(
+                        chat_id=group_id,
+                        text=f"✅ {first_name}, you've already completed this slot today!",
+                    )
+                    context.job_queue.run_once(lambda ctx: info_msg.delete(), when=5)
+                    return
+                except Exception as e:
+                    logger.error(f"Error handling duplicate submission: {e}")
+                    return
+
         points = slot["slot_points"]
         db.add_points(group_id, user_id, points, event_id)
         db.log_activity(
-            group_id=group_id, user_id=user_id, slot_name=slot_name, activity_type="text", message_content=text, points_earned=points,
-            username=username, first_name=first_name, last_name=last_name
+            group_id=group_id,
+            user_id=user_id,
+            activity_type="text",
+            slot_name=slot_name,
+            username=username,
+            first_name=first_name,
+            last_name=last_name,
+            message_content=text,
+            points_earned=points,
         )
-
-        if event_id:
-            db.mark_slot_completed(event_id, slot_id, user_id, "completed")
 
         await message.reply_text(slot["response_positive"] + f"\n{points} points!")
         logger.info(f"User {user_id} completed slot {slot_name} with text")
 
     else:
-        # No keyword match - ask for confirmation
         keyboard = [
             [
                 InlineKeyboardButton(
@@ -354,7 +348,6 @@ async def handle_text_response(
             slot["response_clarify"], reply_markup=reply_markup
         )
 
-        # Store confirmation data in context
         if "pending_confirmations" not in context.bot_data:
             context.bot_data["pending_confirmations"] = {}
 
@@ -369,20 +362,17 @@ async def handle_text_response(
             "group_id": group_id,
             "original_message_id": message.message_id,
             "text": text,
-            "points": slot["points_for_text"],
+            "points": slot["slot_points"],
+            "type": "text"
         }
 
-        # Auto-select "No" after timeout
         context.job_queue.run_once(
             auto_reject_confirmation,
             when=config.CONFIRMATION_TIMEOUT,
             data={"confirmation_msg_id": confirmation_msg.message_id},
         )
 
-
-async def handle_photo_response(
-    update: Update, context: ContextTypes.DEFAULT_TYPE, slot: dict, event_id: int
-):
+async def handle_photo_response(update: Update, context: ContextTypes.DEFAULT_TYPE, slot: dict, event_id: int):
     """Handle photo message for a slot."""
     message = update.message
     group_id = message.chat.id

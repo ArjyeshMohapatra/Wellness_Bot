@@ -174,74 +174,52 @@ def create_default_event_and_slots(group_id):
         return False
 
 
-# adds new members and their info to db table
 def add_member(group_id, user_id, username=None, first_name=None, last_name=None, is_admin=False):
     """
-    Adds or updates a member and ALWAYS returns their full record from the database and if it was newly inserted.
-    This is critical for the join handler to function correctly.
+    Atomically adds or updates a member using INSERT ... ON DUPLICATE KEY UPDATE.
+    Returns the member's data and a boolean indicating if they were newly inserted.
     """
     try:
-        logger.debug(
-            f"[DEBUG] add_member called for user {user_id} in group {group_id}"
-        )
+        # checks if the member exists to determine if this is a new join
         existing = get_member(group_id, user_id)
         is_new = existing is None
-        logger.debug(
-            f"[DEBUG] Existing member lookup result: {existing}, is_new: {is_new}"
-        )
-        if existing:
-            query = """
-                UPDATE group_members SET username = %s, first_name = %s, last_name = %s, last_active_timestamp = NOW()
-                WHERE group_id = %s AND user_id = %s
-            """
-            logger.debug(f"[DEBUG] Executing UPDATE for user {user_id}")
-            execute_query(query, (username, first_name, last_name, group_id, user_id))
-        else:
-            is_restricted = 0 if is_admin else 1
-            restriction_until = None
-            if is_restricted:
-                restriction_until = get_restriction_until_time(group_id)
-                if restriction_until is not None:
-                    restriction_until = restriction_until.strftime("%Y-%m-%d %H:%M:%S")
-                logger.info(
-                    f"🔒 DB: New member {user_id} marked for restriction until {restriction_until} (IST)"
-                )
-            else:
-                logger.info(
-                    f"Admin {user_id} added to group {group_id} - NO RESTRICTION"
-                )
 
-            query = """
-                INSERT INTO group_members
-                (user_id, group_id, username, first_name, last_name, is_restricted, restriction_until, joined_at, last_active_timestamp)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
-            """
-            logger.debug(f"[DEBUG] Executing INSERT for user {user_id}")
-            execute_query(
-                query,
-                (
-                    user_id,
-                    group_id,
-                    username,
-                    first_name,
-                    last_name,
-                    is_restricted,
-                    restriction_until,
-                ),
-            )
-            logger.debug(f"[DEBUG] INSERT complete for user {user_id}")
-            # Log to history table
+        is_restricted = 0
+        restriction_until = None
+
+        # Only calculate restriction for genuinely new members
+        if is_new and not is_admin:
+            is_restricted = 1
+            restriction_until = get_restriction_until_time(group_id)
+            if restriction_until is not None:
+                restriction_until = restriction_until.strftime("%Y-%m-%d %H:%M:%S")
+            logger.info(f"🔒 DB: New member {user_id} marked for restriction until {restriction_until} (IST)")
+
+        # handles both INSERT for new members and UPDATE for existing ones
+        query = """
+            INSERT INTO group_members (user_id, group_id, username, first_name, last_name, is_restricted, restriction_until, joined_at, last_active_timestamp)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+            ON DUPLICATE KEY UPDATE
+                username = VALUES(username),
+                first_name = VALUES(first_name),
+                last_name = VALUES(last_name),
+                last_active_timestamp = NOW()
+        """
+        execute_query(query, (user_id, group_id, username, first_name, last_name, is_restricted, restriction_until))
+
+        # If they are new, also log to history
+        if is_new:
             execute_query(
                 "INSERT INTO member_history (group_id, user_id, username, first_name, last_name, action) VALUES (%s, %s, %s, %s, %s, 'joined')",
                 (group_id, user_id, username, first_name, last_name),
             )
-            logger.debug(f"[DEBUG] member_history INSERT complete for user {user_id}")
+            logger.debug(f"[DEBUG] member_history INSERT complete for new user {user_id}")
 
         member_data = get_member(group_id, user_id)
-        logger.debug(f"[DEBUG] Final member_data fetched: {member_data}")
         return member_data, is_new
+
     except Exception as e:
-        logger.error(f"Error adding member: {e}")
+        logger.error(f"Error in add_member: {e}")
         return None, False
 
 def update_member_activity(group_id, user_id):
@@ -447,6 +425,11 @@ def get_low_point_members(group_id, min_points):
 
 
 def mark_slot_completed(group_id, event_id, slot_id, user_id, status="completed"):
+    """
+    Attempts to mark a slot as completed.
+    Returns True if a new row was inserted (first completion).
+    Returns False if the row already existed (duplicate submission).
+    """
     member = get_member(group_id, user_id)
 
     if member:
@@ -459,20 +442,26 @@ def mark_slot_completed(group_id, event_id, slot_id, user_id, status="completed"
     query = """
             INSERT INTO daily_slot_tracker (event_id, slot_id, user_id, username, first_name, last_name, log_date, status)
             VALUES (%s, %s, %s, %s, %s, %s, CURDATE(), %s)
-            ON DUPLICATE KEY UPDATE status = VALUES(status), duplicate_submissions = duplicate_submissions + 1
+            ON DUPLICATE KEY UPDATE duplicate_submissions = duplicate_submissions + 1
         """
-    execute_query(query, (event_id, slot_id, user_id, username, first_name, last_name, status))
+        
+    with get_db_connection() as conn:
+        with conn.cursor(dictionary=True) as cursor:
+            cursor.execute(query, (event_id, slot_id, user_id, username, first_name, last_name, status))
+            # cursor.rowcount == 1 means a new row was inserted.
+            # cursor.rowcount == 2 means an existing row was updated.
+            return cursor.rowcount == 1
 
 
 def check_slot_completed_today(event_id, slot_id, user_id):
+    """DEPRECATED: This check is now handled atomically inside mark_slot_completed."""
     query = """
             SELECT COUNT(*) as count FROM daily_slot_tracker
             WHERE event_id = %s AND slot_id = %s AND user_id = %s 
-            AND log_date = CURDATE() AND status = 'completed'
+            AND log_date = CURDATE()
         """
     result = execute_query(query, (event_id, slot_id, user_id), fetch=True)
     return result[0]["count"] > 0 if result else False
-
 
 def get_banned_words(group_id):
     query = "SELECT word FROM banned_words WHERE group_id = %s OR group_id IS NULL"

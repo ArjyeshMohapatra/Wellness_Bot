@@ -3,6 +3,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions
 import logging
 import os
 from datetime import datetime, time, timedelta
+from pytz import timezone
 
 from services import database_service as db
 from db import get_db_connection, execute_query
@@ -18,7 +19,7 @@ async def check_and_announce_slots(context: ContextTypes.DEFAULT_TYPE):
     try:
         # Get all group configs
         query = "SELECT group_id FROM groups_config"
-        groups=execute_query(query)
+        groups=execute_query(query, fetch=True)
 
         for group in groups:
             group_id = group["group_id"]
@@ -140,7 +141,7 @@ async def check_inactive_users(context: ContextTypes.DEFAULT_TYPE):
 
         # Gets all groups
         query = "SELECT group_id FROM groups_config"
-        groups=execute_query(query)
+        groups=execute_query(query, fetch=True)
 
         for group in groups:
             group_id = group["group_id"]
@@ -155,11 +156,11 @@ async def check_inactive_users(context: ContextTypes.DEFAULT_TYPE):
                 username = member.get("username","User")
 
                 # Check if already warned today
-                check_query = """
+                query = """
                     SELECT * FROM inactivity_warnings 
                     WHERE group_id = %s AND user_id = %s AND warning_date = CURDATE() AND warning_type = '3day'
                 """
-                existing= execute_query(query,(group_id,user_id))
+                existing= execute_query(query,(group_id,user_id), fetch=True)
 
                 if not existing:
                     try:
@@ -191,30 +192,23 @@ async def check_inactive_users(context: ContextTypes.DEFAULT_TYPE):
                     # Deduct 20 knockout points for 4-day inactivity before kicking
                     db.deduct_knockout_points(group_id, user_id, 20)
 
-                    # Kick temporarily for a few hours (6 hours)
-                    until_date = datetime.now() + timedelta(hours=6)
-                    await context.bot.ban_chat_member(
-                        group_id, user_id, until_date=until_date
-                    )
+                    await context.bot.ban_chat_member(group_id, user_id)
 
                     # Remove from database
                     db.remove_member(group_id, user_id, "kicked")
+                    
+                    await context.bot.unban_chat_member(group_id, user_id)
 
                     # Send notification
                     await context.bot.send_message(
                         chat_id=group_id,
-                        text=f"🚫 {first_name} has been temporarily removed due to 4 days of inactivity.\n"
-                        f"⚠️ 20 knockout points were deducted.\n",
+                        text=f"🚫 {first_name} has been removed from the group due to 4 days of inactivity.\n"
                     )
 
-                    logger.info(
-                        f"Kicked 4-day inactive user {user_id} from group {group_id}"
-                    )
+                    logger.info(f"Kicked 4-day inactive user {user_id} from group {group_id}")
 
                 except Exception as e:
-                    logger.error(
-                        f"Error kicking user {user_id} from group {group_id}: {e}"
-                    )
+                    logger.error(f"Error kicking user {user_id} from group {group_id}: {e}")
 
     except Exception as e:
         logger.error(f"Error in check_inactive_users: {e}")
@@ -250,7 +244,7 @@ async def check_low_points(context: ContextTypes.DEFAULT_TYPE):
                 AND is_restricted = 0
             """
 
-            low_point_members=execute_query(query,(group_id,min_points))
+            low_point_members=execute_query(query,(group_id,min_points),fetch=True)
 
             for member in low_point_members:
                 user_id = member["user_id"]
@@ -297,7 +291,7 @@ async def check_mid_slot_warnings(context: ContextTypes.DEFAULT_TYPE):
     try:
         # Gets all groups
         query = "SELECT group_id FROM groups_config"
-        groups=execute_query(query)
+        groups=execute_query(query, fetch=True)
 
         for group in groups:
             group_id = group["group_id"]
@@ -365,7 +359,7 @@ async def check_user_day_cycles(context: ContextTypes.DEFAULT_TYPE):
 
         # Get all groups
         query = "SELECT group_id FROM groups_config"
-        groups=execute_query(query)
+        groups=execute_query(query, fetch=True)
 
         for group in groups:
             group_id = group["group_id"]
@@ -377,7 +371,7 @@ async def check_user_day_cycles(context: ContextTypes.DEFAULT_TYPE):
                 FROM group_members
                 WHERE group_id = %s
             """
-            members=execute_query(query,(group_id,))
+            members=execute_query(query,(group_id,), fetch=True)
 
             for member in members:
                 user_id = member["user_id"]
@@ -447,7 +441,7 @@ async def post_daily_leaderboard(context: ContextTypes.DEFAULT_TYPE):
     try:
         # Get all group configs
         query = "SELECT group_id FROM groups_config"
-        groups=execute_query(query)
+        groups=execute_query(query, fetch=True)
 
         for group in groups:
             group_id = group["group_id"]
@@ -496,6 +490,7 @@ async def post_daily_leaderboard(context: ContextTypes.DEFAULT_TYPE):
 def setup_jobs(application):
     """Setup periodic jobs."""
     job_queue = application.job_queue
+    ist=timezone("Asia/Kolkata")
 
     # Check and announce slots every minute
     job_queue.run_repeating(check_and_announce_slots, interval=60, first=0)
@@ -504,15 +499,15 @@ def setup_jobs(application):
     job_queue.run_repeating(check_mid_slot_warnings, interval=60, first=30)
 
     # Check inactive users once daily at 22:00 (10 PM)
-    job_queue.run_daily(check_inactive_users, time=time(hour=22, minute=0))
+    job_queue.run_daily(check_inactive_users, time=time(hour=22, minute=0),tzinfo=ist)
 
     # Check user day cycles daily at 23:15 (just before first slot)
-    job_queue.run_daily(check_user_day_cycles, time=time(hour=9, minute=30))
+    job_queue.run_daily(check_user_day_cycles, time=time(hour=9, minute=30),tzinfo=ist)
 
     # Check low-point users daily at END OF DAY (23:00 - 11 PM)
-    job_queue.run_daily(check_low_points, time=time(hour=23, minute=0))
+    job_queue.run_daily(check_low_points, time=time(hour=23, minute=0),tzinfo=ist)
 
     # Post daily leaderboard at 22:00 (10:00 PM)
-    job_queue.run_daily(post_daily_leaderboard, time=time(hour=11, minute=58))
+    job_queue.run_daily(post_daily_leaderboard, time=time(hour=11, minute=58),tzinfo=ist)
 
     logger.info("Scheduled jobs setup completed")
