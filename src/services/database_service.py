@@ -90,194 +90,84 @@ def create_default_event_and_slots(group_id):
             logger.info(f"Slots already exist for group {group_id}, skipping creation")
             return True
 
-        with get_db_connection() as conn:
-            cursor = conn.cursor(dictionary=True)
+        # Create a 7-day ongoing wellness event
+        start_date = datetime.now().date()
+        end_date = start_date + timedelta(days=7)
+        
+        query="""
+                INSERT INTO events 
+                (group_id, event_name, start_date, end_date, min_pass_points, is_active)
+                VALUES (%s, 'Wellness Challenge', %s, %s, 250, TRUE)
+            """
+        event_id=execute_query(query,(group_id, start_date, end_date))
 
-            # Create a 7-day ongoing wellness event
-            start_date = datetime.now().date()
-            end_date = start_date + timedelta(days=7)
+        logger.info(f"Created wellness event {event_id} for group {group_id}")
 
-            cursor.execute(
+        slots = [
+            ("Good Morning", "04:45:00", "04:50:00", "media", 10,
+                "Its Good morning everyone! Share your morning photo 🌅",
+                "Great start to your day! ✅", "Is this your Good Morning ?"),
+            ("Workout", "04:55:00", "05:00:00", "media", 10,
+                "Its Workout time everyone! Post your exercise photo 💪",
+                "Amazing workout! 💪", "Is this your Workout ?"),
+            ("Breakfast", "05:05:00", "05:10:00", "media", 10,
+                "Its Breakfast time everyone! Share your delicious & healthy meal 🍳",
+                "Healthy breakfast! 🍳", "Is this your Breakfast ?"),
+            ("Morning Water Intake", "05:15:00", "05:20:00", "button", 10,
+                "Lets checkout your morning hydration everyone! How much water did everyone drink ? 💧",
+                "Great hydration! 💧", "Is this the amount of water you drank ?"),
+            ("Lunch", "05:25:00", "05:30:00", "media", 10,
+                "Its Lunch time everyone! Post your delicious meal 🍱",
+                "Nutritious lunch! 🍱", "Is this your lunch ?"),
+            ("Afternoon Water Intake", "05:35:00", "05:40:00", "button", 10,
+                "Lets checkout your afternoon hydration everyone! How much water did everyone drink ? 💧",
+                "Great hydration! 💧", "Is this the amount of water you drank ?"),
+            ("Evening Snacks", "05:45:00", "05:50:00", "media",10,
+                "Evening snack time! Share your healthy snack 🍎",
+                "Healthy snack! 🍎", "Is this your evening snacks ?"),
+            ("Evening Water intake", "05:55:00", "06:00:00", "button", 10,
+                "Lets checkout how hydrated are you in evening! Track your water 💧",
+                "Great hydration! 💧", "Is this the amount of water you drank ?"),
+            ("Dinner", "06:05:00", "06:10:00", "media", 10,
+                "Its Dinner time everyone! Share your healthy meal 🍽️",
+                "Delicious dinner! 🍽️", "Is this your dinner ?"),
+        ]
+
+        slot_keywords = {
+            "Good Morning": ["good morning", "morning"],
+            "Workout": [],
+            "Breakfast": ["breakfast", "morning meal"],
+            "Morning Water Intake": [],
+            "Lunch": ["lunch", "afternoon meal"],
+            "Afternoon Water Intake": [],
+            "Evening Snacks": ["snacks", "evening snack"],
+            "Evening Water Intake": [],
+            "Dinner": ["dinner", "night meal"],
+        }
+
+        for (slot_name,start_time,end_time,slot_type,slot_points,initial_msg,response_pos,response_clar) in slots:
+            is_mandatory = 0 if slot_name == "Evening Snacks" else 1
+            
+            query="""
+                    INSERT INTO group_slots 
+                    (group_id, slot_name, start_time, end_time, slot_type, slot_points, 
+                        initial_message, response_positive, response_clarify, is_mandatory)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
-                    INSERT INTO events 
-                    (group_id, event_name, start_date, end_date, min_pass_points, is_active)
-                    VALUES (%s, 'Wellness Challenge', %s, %s, 250, TRUE)
-                """,
-                (group_id, start_date, end_date),
-            )
+            slot_id=execute_query(query,(group_id,slot_name,start_time,end_time,slot_type,slot_points,
+                                    initial_msg,response_pos,response_clar,is_mandatory))
 
-            event_id = cursor.lastrowid
-            logger.info(f"Created wellness event {event_id} for group {group_id}")
-
-            slots = [
-                (
-                    "Good Morning",
-                    "04:45:00",
-                    "04:50:00",
-                    "text",
-                    10,
-                    10,
-                    "Its Good morning everyone! Share your morning photo 🌅",
-                    "Great start to your day! ✅",
-                    "Is this your Good Morning ?",
-                ),
-                (
-                    "Workout",
-                    "04:55:00",
-                    "05:00:00",
-                    "photo",
-                    10,
-                    10,
-                    "Its Workout time everyone! Post your exercise photo 💪",
-                    "Amazing workout! 💪",
-                    "Is this your Workout ?",
-                ),
-                (
-                    "Breakfast",
-                    "05:05:00",
-                    "05:10:00",
-                    "photo",
-                    10,
-                    10,
-                    "Its Breakfast time everyone! Share your delicious & healthy meal 🍳",
-                    "Healthy breakfast! 🍳",
-                    "Is this your Breakfast ?",
-                ),
-                (
-                    "Morning Water Intake",
-                    "05:15:00",
-                    "05:20:00",
-                    "button",
-                    10,
-                    10,
-                    "Lets checkout your morning hydration everyone! How much water did everyone drink ? 💧",
-                    "Great hydration! 💧",
-                    "Is this the amount of water you drank ?",
-                ),
-                (
-                    "Lunch",
-                    "05:25:00",
-                    "05:30:00",
-                    "photo",
-                    10,
-                    10,
-                    "Its Lunch time everyone! Post your delicious meal 🍱",
-                    "Nutritious lunch! 🍱",
-                    "Is this your lunch ?",
-                ),
-                (
-                    "Afternoon Water Intake",
-                    "05:35:00",
-                    "05:40:00",
-                    "button",
-                    10,
-                    10,
-                    "Lets checkout your afternoon hydration everyone! How much water did everyone drink ? 💧",
-                    "Great hydration! 💧",
-                    "Is this the amount of water you drank ?",
-                ),
-                (
-                    "Evening Snacks",
-                    "05:45:00",
-                    "05:50:00",
-                    "photo",
-                    10,
-                    10,
-                    "Evening snack time! Share your healthy snack 🍎",
-                    "Healthy snack! 🍎",
-                    "Is this your evening snacks ?",
-                ),
-                (
-                    "Evening Water intake",
-                    "05:55:00",
-                    "06:00:00",
-                    "button",
-                    10,
-                    10,
-                    "Lets checkout how hydrated are you in evening! Track your water 💧",
-                    "Great hydration! 💧",
-                    "Is this the amount of water you drank ?",
-                ),
-                (
-                    "Dinner",
-                    "06:05:00",
-                    "06:10:00",
-                    "photo",
-                    10,
-                    10,
-                    "Its Dinner time everyone! Share your healthy meal 🍽️",
-                    "Delicious dinner! 🍽️",
-                    "Is this your dinner ?",
-                ),
-            ]
-
-            # Multilingual keywords for each slot
-            slot_keywords = {
-                "Good Morning": ["good morning", "morning"],
-                "Workout": [],
-                "Breakfast": ["breakfast", "morning meal"],
-                "Morning Water Intake": [],
-                "Lunch": ["lunch", "afternoon meal"],
-                "Afternoon Water Intake": [],
-                "Evening Snacks": ["snacks", "evening snack"],
-                "Evening Water Intake": [],
-                "Dinner": ["dinner", "night meal"],
-            }
-
-            for (
-                slot_name,
-                start_time,
-                end_time,
-                slot_type,
-                pts_text,
-                pts_photo,
-                initial_msg,
-                response_pos,
-                response_clar,
-            ) in slots:
-                is_mandatory = 0 if slot_name == "Evening Snacks" else 1
-
-                cursor.execute(
+            # Add keywords for this slot
+            if slot_name in slot_keywords:
+                for keyword in slot_keywords[slot_name]:
+                    query="""
+                    INSERT INTO slot_keywords (slot_id, keyword) VALUES (%s, %s)
                     """
-                        INSERT INTO group_slots 
-                        (group_id, slot_name, start_time, end_time, slot_type, points_for_text, points_for_photo, 
-                         initial_message, response_positive, response_clarify, is_mandatory)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """,
-                    (
-                        group_id,
-                        slot_name,
-                        start_time,
-                        end_time,
-                        slot_type,
-                        pts_text,
-                        pts_photo,
-                        initial_msg,
-                        response_pos,
-                        response_clar,
-                        is_mandatory,
-                    ),
-                )
-
-                slot_id = cursor.lastrowid
-
-                # Add keywords for this slot
-                if slot_name in slot_keywords:
-                    for keyword in slot_keywords[slot_name]:
-                        cursor.execute(
-                            """
-                                INSERT INTO slot_keywords (slot_id, keyword)
-                                VALUES (%s, %s)
-                            """,
-                            (slot_id, keyword),
-                        )
-
-            cursor.close()
-            conn.commit()
-            logger.info(
-                f"Created {len(slots)} default slots with multilingual keywords for group {group_id}"
-            )
-            return True
+                    execute_query(query,(slot_id, keyword))
+        logger.info(
+            f"Created {len(slots)} default slots with multilingual keywords for group {group_id}"
+        )
+        return True
 
     except Exception as e:
         logger.error(f"Error creating default slots: {e}")
@@ -285,9 +175,7 @@ def create_default_event_and_slots(group_id):
 
 
 # adds new members and their info to db table
-def add_member(
-    group_id, user_id, username=None, first_name=None, last_name=None, is_admin=False
-):
+def add_member(group_id, user_id, username=None, first_name=None, last_name=None, is_admin=False):
     """
     Adds or updates a member and ALWAYS returns their full record from the database and if it was newly inserted.
     This is critical for the join handler to function correctly.

@@ -321,7 +321,7 @@ async def handle_text_response(
 
     if keyword_match:
         # Direct match - award points
-        points = slot["points_for_text"]
+        points = slot["slot_points"]
         db.add_points(group_id, user_id, points, event_id)
         db.log_activity(
             group_id=group_id, user_id=user_id, slot_name=slot_name, activity_type="text", message_content=text, points_earned=points,
@@ -425,7 +425,7 @@ async def handle_photo_response(
             )
 
             # Award points
-            points = slot["points_for_photo"]
+            points = slot["slot_points"]
             db.add_points(group_id=group_id, user_id=user_id, points=points, event_id=event_id)
             db.log_activity(
                 group_id=group_id,
@@ -553,14 +553,10 @@ async def handle_other_media_response(
         file_ext = "mp4"
 
     # Determine points based on media type
-    if media_type in ["video", "document"]:
-        points = slot["points_for_photo"]
-    elif media_type in ["voice", "video_note"]:
-        points = slot["points_for_photo"]
-    elif media_type in ["sticker", "animation"]:
-        points = slot["points_for_photo"]
+    if media_type in ["video", "document", "voice", "video_note", "sticker", "animation"]:
+        points = slot["slot_points"]
     else:
-        points = slot["points_for_photo"]
+        points = slot["slot_points"]
 
     keyboard = [
         [

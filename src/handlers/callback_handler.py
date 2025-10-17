@@ -99,7 +99,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                 await query.edit_message_text("❌ No active slot found.")
                 return
 
-            points = slot["points_for_photo"]  # Photos get photo points (typically 10)
+            points = slot["slot_points"]  # Photos get photo points (typically 10)
 
             try:
                 # Download and save photo
@@ -159,14 +159,10 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                 return
 
             # Determine points based on media type
-            if media_type in ["video", "document"]:
-                points = slot["points_for_photo"]
-            elif media_type in ["voice", "video_note"]:
-                points = slot["points_for_text"]
-            elif media_type in ["sticker", "animation"]:
-                points = slot["points_for_photo"]
+            if media_type in ["video", "document","voice", "video_note", "sticker", "animation"]:
+                points = slot["slot_points"]
             else:
-                points = slot["points_for_photo"]
+                points = slot["slot_points"]
 
             try:
                 # Download and save media
@@ -236,7 +232,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                 await query.edit_message_text("❌ No active slot found.")
                 return
 
-            points = slot["points_for_text"]
+            points = slot["slot_points"]
 
             db.add_points(group_id, expected_user_id, points, event_id)
             db.log_activity(
@@ -375,7 +371,7 @@ async def handle_water_button(update: Update, context: ContextTypes.DEFAULT_TYPE
             context.job_queue.run_once(lambda ctx: response_msg.delete(), when=5)
             return
 
-        points = active_slot["points_for_photo"]
+        points = active_slot["slot_points"]
         slot_name = active_slot["slot_name"]
 
         # Award points

@@ -174,8 +174,7 @@ async def schedule(update, context):
             start = slot['start_time']
             end = slot['end_time']
             name = slot['slot_name']
-            points_text = slot['points_for_text']
-            points_photo = slot['points_for_photo']
+            points = slot['slot_points']
             
             # Convert timedelta to time string if needed
             if hasattr(start, 'total_seconds'):
@@ -185,7 +184,7 @@ async def schedule(update, context):
             
             message += f"{name}\n"
             message += f"⏰ {start.strftime('%H:%M')} - {end.strftime('%H:%M')}\n"
-            message += f"🔖 Points : {points_photo}\n\n"
+            message += f"🔖 Points : {points}\n\n"
         
         await update.message.reply_text(message)
     else:

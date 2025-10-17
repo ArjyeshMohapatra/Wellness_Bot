@@ -50,8 +50,7 @@ CREATE TABLE IF NOT EXISTS group_slots (
     response_clarify TEXT,
     image_file_path TEXT,
     slot_type VARCHAR(50) DEFAULT 'default',
-    points_for_text INT DEFAULT 0,
-    points_for_photo INT DEFAULT 0,
+    slot_points INT DEFAULT 10,
     is_mandatory BOOLEAN DEFAULT FALSE,
     FOREIGN KEY (group_id) REFERENCES groups_config(group_id) ON DELETE CASCADE,
     FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE
