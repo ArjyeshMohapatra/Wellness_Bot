@@ -292,22 +292,6 @@ async def handle_text_response(update: Update, context: ContextTypes.DEFAULT_TYP
     keyword_match = any(keyword.lower() in text_lower for keyword in keywords)
 
     if keyword_match:
-        if event_id:
-            is_first_completion = db.mark_slot_completed(group_id, event_id, slot_id, user_id, "completed")
-        
-            if not is_first_completion:
-                try:
-                    await message.delete()
-                    info_msg = await context.bot.send_message(
-                        chat_id=group_id,
-                        text=f"✅ {first_name}, you've already completed this slot today!",
-                    )
-                    context.job_queue.run_once(lambda ctx: info_msg.delete(), when=5)
-                    return
-                except Exception as e:
-                    logger.error(f"Error handling duplicate submission: {e}")
-                    return
-
         points = slot["slot_points"]
         
         db.add_points(group_id, user_id, points, event_id)
