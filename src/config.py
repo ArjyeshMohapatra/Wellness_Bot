@@ -28,9 +28,9 @@ except ValueError:
 
 # Confirmation Timeout
 try:
-    CONFIRMATION_TIMEOUT = int(os.getenv("CONFIRMATION_TIMEOUT", "15"))
+    CONFIRMATION_TIMEOUT = int(os.getenv("CONFIRMATION_TIMEOUT", "60"))
 except ValueError:
-    CONFIRMATION_TIMEOUT = 15
+    CONFIRMATION_TIMEOUT = 60
 
 # Storage Path
 STORAGE_PATH = os.getenv("STORAGE_PATH", "storage")

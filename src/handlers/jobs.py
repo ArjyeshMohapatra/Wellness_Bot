@@ -34,8 +34,7 @@ async def check_and_announce_slots(context: ContextTypes.DEFAULT_TYPE):
                 end_time = active_slot["end_time"]
 
                 if active_slot_announcements.get(group_id) != slot_id:
-                    if hasattr(start_time, "total_seconds"):
-                        start_str = (datetime.min + start_time).strftime("%H:%M")
+                    if hasattr(start_time, "total_seconds"): start_str = (datetime.min + start_time).strftime("%H:%M")
                     else:
                         start_str = (
                             start_time.strftime("%H:%M")
@@ -43,8 +42,7 @@ async def check_and_announce_slots(context: ContextTypes.DEFAULT_TYPE):
                             else str(start_time)
                         )
 
-                    if hasattr(end_time, "total_seconds"):
-                        end_str = (datetime.min + end_time).strftime("%H:%M")
+                    if hasattr(end_time, "total_seconds"): end_str = (datetime.min + end_time).strftime("%H:%M")
                     else:
                         end_str = (
                             end_time.strftime("%H:%M")
@@ -54,9 +52,7 @@ async def check_and_announce_slots(context: ContextTypes.DEFAULT_TYPE):
 
                     # Build message with time
                     message = f"⏰ {slot_name} - Time: {start_str} to {end_str}\n\n"
-                    message += active_slot.get(
-                        "initial_message", f"{slot_name} has started!"
-                    )
+                    message += active_slot.get("initial_message", f"{slot_name} has started!")
 
                     # For water slots with buttons
                     if slot_type == "button":
@@ -83,51 +79,47 @@ async def check_and_announce_slots(context: ContextTypes.DEFAULT_TYPE):
                         ]
                         reply_markup = InlineKeyboardMarkup(keyboard)
 
-                        slot_msg = await context.bot.send_message(
-                            chat_id=group_id, text=message, reply_markup=reply_markup
-                        )
+                        slot_msg = await context.bot.send_message(chat_id=group_id, text=message, reply_markup=reply_markup)
                     else:
                         image_path = active_slot.get("image_file_path")
 
                         if image_path and os.path.exists(image_path):
                             with open(image_path, "rb") as photo:
-                                slot_msg = await context.bot.send_photo(
-                                    chat_id=group_id, photo=photo, caption=message
-                                )
+                                slot_msg = await context.bot.send_photo(chat_id=group_id, photo=photo, caption=message)
                         else:
-                            slot_msg = await context.bot.send_message(
-                                chat_id=group_id, text=message
-                            )
+                            slot_msg = await context.bot.send_message(chat_id=group_id, text=message)
 
                     # Unpin all previous messages before pinning new slot
                     try:
                         await context.bot.unpin_all_chat_messages(group_id)
                         logger.info(f"Unpinned previous messages in group {group_id}")
                     except Exception as unpin_error:
-                        logger.warning(
-                            f"Could not unpin previous messages: {unpin_error}"
-                        )
+                        logger.warning(f"Could not unpin previous messages: {unpin_error}")
 
                     # Pin the slot announcement
                     try:
-                        await context.bot.pin_chat_message(
-                            group_id, slot_msg.message_id
-                        )
-                        logger.info(
-                            f"Pinned slot {slot_name} announcement in group {group_id}"
-                        )
+                        await context.bot.pin_chat_message(group_id, slot_msg.message_id)
+                        logger.info(f"Pinned slot {slot_name} announcement in group {group_id}")
                     except Exception as pin_error:
                         logger.warning(f"Could not pin slot announcement: {pin_error}")
 
-                    active_slot_announcements[group_id] = slot_id
-                    logger.info(
-                        f"Announced and pinned slot {slot_name} in group {group_id}"
-                    )
+                    active_slot_announcements[group_id] = {"slot_id": slot_id, "message_id": slot_msg.message_id}
+                    logger.info(f"Announced and pinned slot {slot_name} in group {group_id}")
 
             else:
                 # No active slot
                 if group_id in active_slot_announcements:
-                    del active_slot_announcements[group_id]
+                    try:
+                        message_id_to_delete = active_slot_announcements[group_id]["message_id"]
+
+                        await context.bot.delete_message(chat_id=group_id, message_id=message_id_to_delete)
+                        logger.info(f"Deleted slot announcement message in group {group_id}")
+
+                    except Exception as e:
+                        logger.warning(f"Could not delete slot message: {e}")
+
+                # clear the tracker
+                del active_slot_announcements[group_id]
 
     except Exception as e:
         logger.error(f"Error in check_and_announce_slots: {e}")
