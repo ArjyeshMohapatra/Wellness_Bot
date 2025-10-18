@@ -477,6 +477,21 @@ async def post_daily_leaderboard(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error in post_daily_leaderboard: {e}")
 
+async def check_daily_participation(contect: ContextTypes.DEFAULT_TYPE):
+    """Checks for users with zero points for the day and applies a penalty."""
+    try:
+        logger.info("Checking for zero-participation members...")
+        query="""
+        SELECT group_id, event_id from events WHERE is_active=TRUE
+        """
+        events=execute_query(query,fetch=True)
+        for event in events:
+            group_id=event['group_id']
+            event_id=event['event_id']
+            
+            db.penalize_zero_activity_members(group_id, event_id, 10)
+    except Exception as e:
+        logger.error(f"Error in check_daily_participation job: {e}")
 
 def setup_jobs(application):
     """Setup periodic jobs."""
@@ -499,5 +514,8 @@ def setup_jobs(application):
 
     # Post daily leaderboard at 22:00 (10:00 PM)
     job_queue.run_daily(post_daily_leaderboard, time=time(hour=11, minute=58))
+    
+    # Checks daily for zero activity users after leaderboard gets posted
+    job_queue.run_daily(check_daily_participation, time=time(hours=20,minutes=30))
 
     logger.info("Scheduled jobs setup completed")

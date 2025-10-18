@@ -194,7 +194,14 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
         except Exception as e:
             logger.warning(f"Could not delete original message: {e}")
 
-    context.job_queue.run_once(lambda ctx: message.delete(), when=3)
+    async def delete_message(context: ContextTypes.DEFAULT_TYPE):
+        """Awaits the message deletion coroutine."""
+        try:
+            await message.delete()
+        except Exception as e:
+            logger.warning(f"Could not delete confirmation message: {e}")
+
+    context.job_queue.run_once(delete_message, when=3)
 
 
 async def handle_water_button(update: Update, context: ContextTypes.DEFAULT_TYPE):

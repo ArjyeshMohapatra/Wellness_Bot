@@ -72,7 +72,6 @@ CREATE TABLE IF NOT EXISTS group_members (
     username VARCHAR(255),
     first_name VARCHAR(255),
     last_name  VARCHAR(255),
-    current_event_points INT DEFAULT 0,
     current_points INT DEFAULT 0,
     knockout_points INT DEFAULT 0,
     general_warnings INT DEFAULT 0,

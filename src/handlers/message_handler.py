@@ -59,7 +59,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     db.update_member_activity(group_id, user_id)
 
     # Check if user is admin first - admins are NEVER restricted and EXEMPT from all penalties
-    member = db.get_member(group_id, user_id)
+    member = db.get_member(group_id, user_id, username, first_name)
+    
+    if member and member.get("is_restricted") and member.get("restriction_until"):
+        restriction_until_dt = member.get("restriction_until")
+        if isinstance(restriction_until_dt, str):
+            restriction_until_dt = datetime.strptime(restriction_until_dt, "%Y-%m-%d %H:%M:%S")
+
+        if datetime.now() > restriction_until_dt:
+            # Restriction has expired, update the database
+            query = "UPDATE group_members SET is_restricted = 0, restriction_until = NULL WHERE group_id = %s AND user_id = %s"
+            execute_query(query, (group_id, user_id))
+            # Refresh member data to reflect the change
+            member = db.get_member(group_id, user_id)
+            logger.info(f"Lifted expired restriction for user {user_id} in group {group_id}.")
 
     # Also check if user is currently a Telegram admin/creator
     try:

@@ -483,3 +483,34 @@ def get_leaderboard(group_id, limit=10):
             LIMIT %s
         """
     return execute_query(query, (group_id, limit), fetch=True)
+
+def penalize_zero_activity_members(group_id, event_id, points_to_deduct):
+    """Finds members with no points for today and deducts knockout points."""
+    try:
+        query_1="""
+        SELECT DISTINCT user_id FROM daily_points_log WHERE event_id = %s and log_date = CURDATE()
+        """
+        active_members_result = execute_query(query_1,(event_id,),fetch=True)
+        active_user_ids={row['user_id'] for row in active_members_result}
+        
+        # get all non-restricted members in the group
+        query_2="""
+        SELECT user_id, first_name FROM group_members where group_id = %s AND is_restricted= 0
+        """
+        non_restricted_members=execute_query(query_2,(group_id,),fetch=True)
+        
+        inactive_members=[]
+        for member in non_restricted_members:
+            if member['user_id'] not in active_user_ids:
+                inactive_members.append(member)
+                
+        # apply penalty to each and every inactive member per day
+        for member in inactive_members:
+            user_id=member['user_id']
+            first_name=member.get("first_name", member.get("username",f"User_{user_id}"))
+            deduct_knockout_points(group_id, user_id, points_to_deduct)
+            logger.info(f"Penalized {first_name} ({user_id}) with {points_to_deduct} knockout points for zero activity today.")
+        return inactive_members
+    except Exception as e:
+        logger.error(f"Error in penalize_zero_activity_members: {e}")
+        return []
