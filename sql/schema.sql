@@ -173,10 +173,11 @@ CREATE TABLE IF NOT EXISTS inactivity_warnings (
 
 CREATE TABLE IF NOT EXISTS runtime_state (
     state_id INT AUTO_INCREMENT PRIMARY KEY,
-    group_id BIGINT NOT NULL UNIQUE,
-    state_key VARCHAR(100) NOT NULL UNIQUE,
+    group_id BIGINT NOT NULL,
+    state_key VARCHAR(100) NOT NULL,
     state_value VARCHAR(255),
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE(group_id,state_key)
 );
 
 INSERT IGNORE INTO banned_words (group_id, word) VALUES 

@@ -3,7 +3,7 @@ from telegram.ext import MessageHandler, filters, ContextTypes
 import logging
 from datetime import datetime, timedelta
 import re
-
+from pytz import timezone
 from services import database_service as db
 from services.file_storage import FileStorage
 import config
@@ -12,12 +12,11 @@ from db import execute_query
 
 logger = logging.getLogger(__name__)
 storage = FileStorage(config.STORAGE_PATH)
-
+ist=timezone("Asia/Kolkata")
 
 def sanitize_text(text):
     """Remove HTML tags and URLs from text."""
-    if not text:
-        return ""
+    if not text: return ""
     # Remove HTML tags
     text = re.sub(r"<[^>]+>", "", text)
     # Remove URLs
@@ -40,10 +39,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     last_name = message.from_user.last_name or ""
 
     if message.text and message.text in ["My Score 💯", "Time Sheet 📅"]:
-        if message.text == "My Score 💯":
-            await points(update, context)
-        elif message.text == "Time Sheet 📅":
-            await schedule(update, context)
+        if message.text == "My Score 💯": await points(update, context)
+        elif message.text == "Time Sheet 📅": await schedule(update, context)
         return
 
     # Check if group is configured
@@ -66,7 +63,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if isinstance(restriction_until_dt, str):
             restriction_until_dt = datetime.strptime(restriction_until_dt, "%Y-%m-%d %H:%M:%S")
 
-        if datetime.now() > restriction_until_dt:
+        if datetime.now(ist) > restriction_until_dt:
             # Restriction has expired, update the database
             query = "UPDATE group_members SET is_restricted = 0, restriction_until = NULL WHERE group_id = %s AND user_id = %s"
             execute_query(query, (group_id, user_id))
@@ -111,22 +108,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if is_admin and member and member.get("is_restricted", 0) == 1:
         try:
             # Unrestrict the admin
-            await context.bot.restrict_chat_member(
-                chat_id=group_id,
-                user_id=user_id,
-                permissions=ChatPermissions(
-                    can_send_messages=True,
-                    can_send_other_messages=True,
-                ),
-            )
+            await context.bot.restrict_chat_member(chat_id=group_id, user_id=user_id,
+                                                   permissions=ChatPermissions(can_send_messages=True,
+                                                                               can_send_other_messages=True)
+                                                   )
 
             # Update database
             query = "UPDATE group_members SET is_restricted = 0, restriction_until = NULL WHERE group_id = %s AND user_id = %s"
             execute_query(query, (group_id, user_id))
 
-            logger.info(
-                f"Admin {user_id} was restricted but has now been unrestricted in group {group_id}"
-            )
+            logger.info(f"Admin {user_id} was restricted but has now been unrestricted in group {group_id}")
         except Exception as e:
             logger.error(f"Error unrestricting admin: {e}")
 
@@ -134,8 +125,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if message.text and not is_admin:
         custom_banned = db.get_banned_words(group_id)
 
-        if not custom_banned:
-            logger.warning(f"No banned words found for group {group_id}. Check database!")
+        if not custom_banned: logger.warning(f"No banned words found for group {group_id}. Check database!")
 
         message_text_lower = message.text.lower()
 
@@ -178,11 +168,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
                 if warnings >= 2:
                     try:
-                        until_date = datetime.now() + timedelta(minutes=1)
+                        until_date = datetime.now(ist) + timedelta(minutes=1)
 
-                        await context.bot.ban_chat_member(
-                            group_id, user_id, until_date=until_date
-                        )
+                        await context.bot.ban_chat_member(group_id, user_id, until_date=until_date)
 
                         db.remove_member(group_id, user_id, "kicked")
                         logger.warning(f"User {user_id} record has been DELETED from the database.")
@@ -201,22 +189,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                             )
 
                         await context.bot.send_message(chat_id=group_id, text=kick_msg)
-                        logger.warning(
-                            f"User {user_id} ({first_name}) kicked for 2 banned word violations"
-                        )
+                        logger.warning(f"User {user_id} ({first_name}) kicked for 2 banned word violations")
 
                     except Exception as ban_error:
-                        logger.error(
-                            f"Failed to apply 24-hour ban for user {user_id}: {ban_error}"
-                        )
+                        logger.error(f"Failed to apply 24-hour ban for user {user_id}: {ban_error}")
                         await context.bot.send_message(
                             chat_id=group_id,
                             text=f"⚠️ Could not ban {first_name}. Please check my admin permissions.",
                         )
 
-                logger.warning(
-                    f"Banned word detected from user {user_id}: {matched_word}"
-                )
+                logger.warning(f"Banned word detected from user {user_id}: {matched_word}")
                 return
 
             except Exception as e:
@@ -243,9 +225,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             # Delete warning after 10 seconds
             context.job_queue.run_once(lambda ctx: warning_msg.delete(), when=10)
 
-            logger.info(
-                f"Message outside slot from user {user_id} - knockout points deducted"
-            )
+            logger.info(f"Message outside slot from user {user_id} - knockout points deducted")
             return
 
         except Exception as e:
@@ -329,57 +309,31 @@ async def handle_text_response(update: Update, context: ContextTypes.DEFAULT_TYP
                     return
 
         points = slot["slot_points"]
+        
         db.add_points(group_id, user_id, points, event_id)
-        db.log_activity(
-            group_id=group_id,
-            user_id=user_id,
-            activity_type="text",
-            slot_name=slot_name,
-            username=username,
-            first_name=first_name,
-            last_name=last_name,
-            message_content=text,
-            points_earned=points,
-        )
+        db.log_activity(group_id=group_id, user_id=user_id, activity_type="text", slot_name=slot_name,
+                        username=username, first_name=first_name, last_name=last_name, message_content=text,
+                        points_earned=points)
 
         await message.reply_text(slot["response_positive"] + f"\n{points} points!")
         logger.info(f"User {user_id} completed slot {slot_name} with text")
 
     else:
         keyboard = [
-            [
-                InlineKeyboardButton(
-                    "✅ Yes",
-                    callback_data=f"confirm_yes_{slot_id}_{user_id}_{message.message_id}",
-                ),
-                InlineKeyboardButton(
-                    "❌ No",
-                    callback_data=f"confirm_no_{slot_id}_{user_id}_{message.message_id}",
-                ),
-            ]
+            [InlineKeyboardButton("✅ Yes", callback_data=f"confirm_yes_{slot_id}_{user_id}_{message.message_id}"),
+             InlineKeyboardButton("❌ No", callback_data=f"confirm_no_{slot_id}_{user_id}_{message.message_id}")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        confirmation_msg = await message.reply_text(
-            slot["response_clarify"], reply_markup=reply_markup
-        )
+        confirmation_msg = await message.reply_text(slot["response_clarify"], reply_markup=reply_markup)
 
         if "pending_confirmations" not in context.bot_data:
             context.bot_data["pending_confirmations"] = {}
 
         context.bot_data["pending_confirmations"][confirmation_msg.message_id] = {
-            "user_id": user_id,
-            "username": username,
-            "first_name": first_name,
-            "last_name": last_name,
-            "slot_id": slot_id,
-            "slot_name": slot_name,
-            "event_id": event_id,
-            "group_id": group_id,
-            "original_message_id": message.message_id,
-            "text": text,
-            "points": slot["slot_points"],
-            "type": "text"
+            "user_id": user_id, "username": username, "first_name": first_name, "last_name": last_name,
+            "slot_id": slot_id, "slot_name": slot_name, "event_id": event_id, "group_id": group_id,
+            "original_message_id": message.message_id, "text": text, "points": slot["slot_points"], "type": "text"
         }
 
         context.job_queue.run_once(
@@ -422,29 +376,19 @@ async def handle_photo_response(update: Update, context: ContextTypes.DEFAULT_TY
             file = await context.bot.get_file(file_id)
 
             # Create formatted filename: {username}_{slotname}_{YYYY_MM_DD_HH_MM_SS_am/pm}.jpg
-            timestamp = datetime.now().strftime("%Y_%m_%d_%I_%M_%S_%p").lower()
+            timestamp = datetime.now(ist).strftime("%Y_%m_%d_%I_%M_%S_%p").lower()
             filename = f"{username}_{slot_name}_{timestamp}.jpg"
 
             # Save file with new structure
-            local_path = await storage.save_photo(
-                group_id, user_id, username, slot_name, file, filename
-            )
+            local_path = await storage.save_photo(group_id, user_id, username, slot_name, file, filename)
 
             # Award points
             points = slot["slot_points"]
             db.add_points(group_id=group_id, user_id=user_id, points=points, event_id=event_id)
-            db.log_activity(
-                group_id=group_id,
-                user_id=user_id,
-                slot_name=slot_name,
-                username=username,
-                first_name=first_name,
-                last_name=last_name,
-                activity_type="photo",
-                telegram_file_id=file_id,
-                local_file_path=local_path,
-                points_earned=points,
-            )
+            db.log_activity(group_id=group_id, user_id=user_id, slot_name=slot_name, username=username,
+                            first_name=first_name, last_name=last_name, activity_type="photo", 
+                            telegram_file_id=file_id, local_file_path=local_path, points_earned=points,
+                            )
 
             if event_id:
                 db.mark_slot_completed(event_id=event_id, slot_id=slot_id, user_id=user_id, status="completed")
@@ -454,47 +398,26 @@ async def handle_photo_response(update: Update, context: ContextTypes.DEFAULT_TY
 
         except Exception as e:
             logger.error(f"Error handling photo: {e}")
-            await message.reply_text(
-                "Sorry, there was an error processing your photo. Please try again."
-            )
+            await message.reply_text("Sorry, there was an error processing your photo. Please try again.")
 
     else:
         # Keywords exist but no match - ask for confirmation
         keyboard = [
-            [
-                InlineKeyboardButton(
-                    "✅ Yes",
-                    callback_data=f"confirm_yes_{slot_id}_{user_id}_{message.message_id}",
-                ),
-                InlineKeyboardButton(
-                    "❌ No",
-                    callback_data=f"confirm_no_{slot_id}_{user_id}_{message.message_id}",
-                ),
-            ]
+            [InlineKeyboardButton("✅ Yes", callback_data=f"confirm_yes_{slot_id}_{user_id}_{message.message_id}"),
+             InlineKeyboardButton("❌ No", callback_data=f"confirm_no_{slot_id}_{user_id}_{message.message_id}")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        confirmation_msg = await message.reply_text(
-            slot["response_clarify"], reply_markup=reply_markup
-        )
+        confirmation_msg = await message.reply_text(slot["response_clarify"], reply_markup=reply_markup)
 
         # Store confirmation data in context
         if "pending_confirmations" not in context.bot_data:
             context.bot_data["pending_confirmations"] = {}
 
         context.bot_data["pending_confirmations"][confirmation_msg.message_id] = {
-            "user_id": user_id,
-            "first_name": first_name,
-            "last_name": last_name,
-            "slot_id": slot_id,
-            "slot_name": slot_name,
-            "event_id": event_id,
-            "group_id": group_id,
-            "original_message_id": message.message_id,
-            "photo_file_id": file_id,
-            "username": username,
-            "caption": caption,
-            "points": slot["points_for_photo"],
+            "user_id": user_id, "first_name": first_name, "last_name": last_name, "slot_id": slot_id,
+            "slot_name": slot_name, "event_id": event_id, "group_id": group_id, "original_message_id": message.message_id,
+            "photo_file_id": file_id, "username": username, "caption": caption, "points": slot["points_for_photo"],
             "type": "photo",
         }
 
@@ -534,11 +457,7 @@ async def handle_other_media_response(
         file_id = message.document.file_id
         # Get original filename extension if available
         if message.document.file_name:
-            file_ext = (
-                message.document.file_name.split(".")[-1]
-                if "." in message.document.file_name
-                else "file"
-            )
+            file_ext = (message.document.file_name.split(".")[-1] if "." in message.document.file_name else "file")
         else:
             file_ext = "file"
     elif message.sticker:
@@ -559,51 +478,27 @@ async def handle_other_media_response(
         file_ext = "mp4"
 
     # Determine points based on media type
-    if media_type in ["video", "document", "voice", "video_note", "sticker", "animation"]:
-        points = slot["slot_points"]
-    else:
-        points = slot["slot_points"]
+    if media_type in ["video", "document", "voice", "video_note", "sticker", "animation"]: points = slot["slot_points"]
+    else: points = slot["slot_points"]
 
     keyboard = [
-        [
-            InlineKeyboardButton(
-                "✅ Yes",
-                callback_data=f"confirm_yes_{slot_id}_{user_id}_{message.message_id}",
-            ),
-            InlineKeyboardButton(
-                "❌ No",
-                callback_data=f"confirm_no_{slot_id}_{user_id}_{message.message_id}",
-            ),
-        ]
+        [InlineKeyboardButton("✅ Yes", callback_data=f"confirm_yes_{slot_id}_{user_id}_{message.message_id}"),
+         InlineKeyboardButton("❌ No", callback_data=f"confirm_no_{slot_id}_{user_id}_{message.message_id}")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     # points_msg = f" ({points} points)" if points > 0 else " (no points)"
-    confirmation_msg = await message.reply_text(
-        f"{first_name}, Is this your {slot_name} ?",
-        reply_markup=reply_markup,
-    )
+    confirmation_msg = await message.reply_text(f"{first_name}, Is this your {slot_name} ?", reply_markup=reply_markup)
 
     # Store confirmation data in context
     if "pending_confirmations" not in context.bot_data:
         context.bot_data["pending_confirmations"] = {}
 
     context.bot_data["pending_confirmations"][confirmation_msg.message_id] = {
-        "user_id": user_id,
-        "first_name": first_name,
-        "last_name": last_name,
-        "slot_id": slot_id,
-        "slot_name": slot_name,
-        "event_id": event_id,
-        "group_id": group_id,
-        "original_message_id": message.message_id,
-        "file_id": file_id,
-        "username": username,
-        "caption": message.caption if message.caption else "",
-        "points": points,
-        "type": "media",
-        "media_type": media_type,
-        "file_ext": file_ext,
+        "user_id": user_id, "first_name": first_name, "last_name": last_name, "slot_id": slot_id,
+        "slot_name": slot_name, "event_id": event_id, "group_id": group_id, "original_message_id": message.message_id,
+        "file_id": file_id, "username": username, "caption": message.caption if message.caption else "",
+        "points": points, "type": "media", "media_type": media_type, "file_ext": file_ext,
     }
 
     # Auto-select "No" after timeout
@@ -628,9 +523,7 @@ async def auto_reject_confirmation(context: ContextTypes.DEFAULT_TYPE):
                     # Deletes the user's original message that was rejected
                     original_message_id = data.get("original_message_id")
                     if original_message_id:
-                        await context.bot.delete_message(
-                            chat_id=data["group_id"], message_id=original_message_id
-                        )
+                        await context.bot.delete_message(chat_id=data["group_id"], message_id=original_message_id)
                         logger.info(f"Deleted timed-out message {original_message_id}")
 
                     await context.bot.edit_message_text(
@@ -641,25 +534,13 @@ async def auto_reject_confirmation(context: ContextTypes.DEFAULT_TYPE):
 
                     # Deletes the "Timeout" message itself after 3 seconds
                     context.job_queue.run_once(
-                        lambda ctx: context.bot.delete_message(
-                            data["group_id"], confirmation_msg_id
-                        ),
-                        when=5,
-                    )
+                        lambda ctx: context.bot.delete_message(data["group_id"], confirmation_msg_id),when=5)
 
                     # Logs that the activity was invalid
-                    db.log_activity(
-                        group_id=data["group_id"],
-                        user_id=data["user_id"],
-                        username=data["username"],
-                        first_name=data["first_name"],
-                        last_name=data["last_name"],
-                        slot_name=data["slot_name"],
-                        activity_type=data.get("type", "text"),
-                        message_content=data.get("text", ""),
-                        points_earned=0,
-                        is_valid=False,
-                    )
+                    db.log_activity(group_id=data["group_id"], user_id=data["user_id"], username=data["username"],
+                                    first_name=data["first_name"], last_name=data["last_name"], 
+                                    slot_name=data["slot_name"], activity_type=data.get("type", "text"),
+                                    message_content=data.get("text", ""), points_earned=0, is_valid=False)
 
                 except Exception as e:
                     logger.error(f"Error in auto-reject: {e}")

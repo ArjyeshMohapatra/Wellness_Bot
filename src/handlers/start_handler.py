@@ -265,6 +265,8 @@ async def test_leaderboard(update, context):
     else:
         await update.message.reply_text("📊 No participants yet!")
 
+async def 
+
 start_handler = CommandHandler("start", start)
 points_handler = CommandHandler("points", points)
 schedule_handler = CommandHandler("schedule", schedule)

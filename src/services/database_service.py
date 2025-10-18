@@ -518,7 +518,7 @@ def penalize_zero_activity_members(group_id, event_id, points_to_deduct):
 def set_runtime_state(group_id, key, value):
     """Sets or updates a runtime state variable for a group."""
     query="""
-    INSERT INTO runtime_state (group_id,state,key) VALUES (%s,%s,%s) ON DUPLICATE KEY UPDATE state_value=VALUES(state_value)
+    INSERT INTO runtime_state (group_id,state_key,state_value) VALUES (%s,%s,%s) ON DUPLICATE KEY UPDATE state_value=VALUES(state_value)
     """
     execute_query(query,(group_id, key, str(value) if value is not None else None))
 

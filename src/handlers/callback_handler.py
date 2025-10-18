@@ -6,9 +6,10 @@ from services import database_service as db
 from db import execute_query
 from services.file_storage import FileStorage
 import config
+from pytz import timezone
 
 logger = logging.getLogger(__name__)
-
+ist=timezone("Asia/Kolkata")
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle callback queries from inline keyboards."""
@@ -93,7 +94,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                 # Download and save photo
                 file = await context.bot.get_file(photo_file_id)
 
-                timestamp = datetime.now().strftime("%Y_%m_%d_%I_%M_%S_%p").lower()
+                timestamp = datetime.now(ist).strftime("%Y_%m_%d_%I_%M_%S_%p").lower()
                 filename = f"{username}_{slot_name}_{timestamp}.jpg"
 
                 storage = FileStorage(config.STORAGE_PATH)
@@ -134,7 +135,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                 # Download and save media
                 file = await context.bot.get_file(file_id)
 
-                timestamp = datetime.now().strftime("%Y_%m_%d_%I_%M_%S_%p").lower()
+                timestamp = datetime.now(ist).strftime("%Y_%m_%d_%I_%M_%S_%p").lower()
                 filename = f"{username}_{slot_name}_{timestamp}.{file_ext}"
 
                 storage = FileStorage(config.STORAGE_PATH)
@@ -218,7 +219,7 @@ async def handle_water_button(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if member and member.get("is_restricted", 0) == 1:
         restriction_until = member.get("restriction_until")
-        if restriction_until and datetime.now() > restriction_until:
+        if restriction_until and datetime.now(ist) > restriction_until:
             query_text = "UPDATE group_members SET is_restricted = 0, restriction_until = NULL WHERE group_id = %s AND user_id = %s"
             execute_query(query_text, (group_id, user_id))
             logger.info(f"User {user_id}'s restriction has expired. Unrestricted in DB.")
@@ -239,7 +240,7 @@ async def handle_water_button(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Add in-memory lock to prevent spam clicking
     if "button_locks" not in context.bot_data: context.bot_data["button_locks"] = set()
 
-    lock_key = f"{group_id}_{user_id}_{slot_id}_{datetime.now().date()}"
+    lock_key = f"{group_id}_{user_id}_{slot_id}_{datetime.now(ist).date()}"
 
     if lock_key in context.bot_data["button_locks"]:
         await query.answer("⏳ Processing your previous click, please wait...", show_alert=True)

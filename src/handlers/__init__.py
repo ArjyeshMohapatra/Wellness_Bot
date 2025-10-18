@@ -1,21 +1,8 @@
-from .start_handler import (
-    start_handler,
-    points_handler,
-    schedule_handler,
-    help_handler,
-    test_leaderboard_handler,
-)
+from .start_handler import (start_handler, points_handler, schedule_handler, help_handler, test_leaderboard_handler)
 from .join_handler import bot_join_handler, member_join_handler
-from .message_handler import (
-    text_message_handler,
-    photo_message_handler,
-    video_message_handler,
-    document_message_handler,
-    sticker_message_handler,
-    animation_message_handler,
-    voice_message_handler,
-    video_note_message_handler,
-)
+from .message_handler import (text_message_handler, photo_message_handler, video_message_handler, 
+                              document_message_handler, sticker_message_handler, animation_message_handler,
+                              voice_message_handler, video_note_message_handler)
 from .callback_handler import callback_handler
 from .jobs import setup_jobs
 

@@ -63,7 +63,6 @@ async def check_and_announce_slots(context: ContextTypes.DEFAULT_TYPE):
                                 slot_msg = await context.bot.send_photo(chat_id=group_id, photo=photo, caption=message)
                         else:
                             slot_msg = await context.bot.send_message(chat_id=group_id, text=message)
-                    # --- End of message formatting logic ---
 
                     # Unpin previous messages
                     try:
