@@ -514,3 +514,18 @@ def penalize_zero_activity_members(group_id, event_id, points_to_deduct):
     except Exception as e:
         logger.error(f"Error in penalize_zero_activity_members: {e}")
         return []
+    
+def set_runtime_state(group_id, key, value):
+    """Sets or updates a runtime state variable for a group."""
+    query="""
+    INSERT INTO runtime_state (group_id,state,key) VALUES (%s,%s,%s) ON DUPLICATE KEY UPDATE state_value=VALUES(state_value)
+    """
+    execute_query(query,(group_id, key, str(value) if value is not None else None))
+
+def get_runtime_state(group_id,key):
+    """Gets a runtime state variable for a group."""
+    query = """
+    SELECT state_value FROM runtime_state WHERE group_id = %s AND state_key = %s
+    """
+    result=execute_query(query,(group_id,key),fetch=True)
+    return result[0]['state_value'] if result else None

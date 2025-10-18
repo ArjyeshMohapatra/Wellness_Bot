@@ -171,6 +171,14 @@ CREATE TABLE IF NOT EXISTS inactivity_warnings (
     UNIQUE(group_id, user_id, warning_date, warning_type)
 );
 
+CREATE TABLE IF NOT EXISTS runtime_state (
+    state_id INT AUTO_INCREMENT PRIMARY KEY,
+    group_id BIGINT NOT NULL UNIQUE,
+    state_key VARCHAR(100) NOT NULL UNIQUE,
+    state_value VARCHAR(255),
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+);
+
 INSERT IGNORE INTO banned_words (group_id, word) VALUES 
 -- English
 (NULL, 'fuck'),(NULL, 'fucking'),(NULL, 'fucked'),(NULL, 'fucker'),(NULL, 'fck'),(NULL, 'fuk'),(NULL, 'f**k'),(NULL, 'shit'),

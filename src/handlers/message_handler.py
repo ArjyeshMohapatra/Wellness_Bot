@@ -59,7 +59,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     db.update_member_activity(group_id, user_id)
 
     # Check if user is admin first - admins are NEVER restricted and EXEMPT from all penalties
-    member = db.get_member(group_id, user_id, username, first_name)
+    member = db.get_member(group_id, user_id)
     
     if member and member.get("is_restricted") and member.get("restriction_until"):
         restriction_until_dt = member.get("restriction_until")
@@ -262,18 +262,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     event_id = event["event_id"] if event else None
 
     # Check if already completed today
-    if event_id and db.check_slot_completed_today(event_id, slot_id, user_id):
-        try:
-            await message.delete()
-            info_msg = await context.bot.send_message(
-                chat_id=group_id,
-                text=f"⚠️ {first_name}, you've already completed this slot today!",
-            )
-            context.job_queue.run_once(lambda ctx: info_msg.delete(), when=5)
-            return
-        except Exception as e:
-            logger.error(f"Error handling duplicate submission: {e}")
-            return
+    if event_id:
+            is_first_completion = db.mark_slot_completed(group_id, event_id, slot_id, user_id, "completed")
+        
+            if not is_first_completion:
+                try:
+                    await message.delete()
+                    info_msg = await context.bot.send_message(
+                        chat_id=group_id,
+                        text=f"✅ {first_name}, you've already completed this slot today!",
+                    )
+                    context.job_queue.run_once(lambda ctx: info_msg.delete(), when=5)
+                    return
+                except Exception as e:
+                    logger.error(f"Error handling duplicate submission: {e}")
+                    return
 
     # Accept ANY media type for regular slots
     if message.photo:
