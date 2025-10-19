@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from pytz import timezone
 from config import NEW_MEMBER_RESTRICTION_MINUTES
 from db import execute_query, get_db_connection
+import mysql.connector
 
 logger = logging.getLogger(__name__)
 
@@ -32,12 +33,16 @@ def get_restriction_until_time(group_id):
 
     if not first_slot_timedelta:
         # Fallback if no slots are defined: restrict for a few minutes.
-        return (now_ist + timedelta(minutes=NEW_MEMBER_RESTRICTION_MINUTES)).replace(tzinfo=None)
+        return (now_ist + timedelta(minutes=NEW_MEMBER_RESTRICTION_MINUTES)).replace(
+            tzinfo=None
+        )
 
     first_slot_time = (datetime.min + first_slot_timedelta).time()
 
     # Get the time of the first slot on today's date
-    first_slot_today_ist = ist.localize(datetime.combine(now_ist.date(), first_slot_time))
+    first_slot_today_ist = ist.localize(
+        datetime.combine(now_ist.date(), first_slot_time)
+    )
 
     if now_ist < first_slot_today_ist:
         # If the user joins BEFORE the first slot today, restrict them until that slot starts.
@@ -45,7 +50,9 @@ def get_restriction_until_time(group_id):
     else:
         # If the user joins AFTER the first slot today, restrict them until the first slot TOMORROW.
         tomorrow_date = (now_ist + timedelta(days=1)).date()
-        first_slot_tomorrow_ist = ist.localize(datetime.combine(tomorrow_date, first_slot_time))
+        first_slot_tomorrow_ist = ist.localize(
+            datetime.combine(tomorrow_date, first_slot_time)
+        )
         return first_slot_tomorrow_ist.replace(tzinfo=None)
 
 
@@ -78,7 +85,7 @@ def create_group_config(group_id, admin_user_id):
 
         return True
     except Exception as e:
-        logger.error(f"Error creating group config: {e}")
+        logger.error(f"Error creating group config: {e}",exc_info=True)
         return False
 
 
@@ -93,44 +100,107 @@ def create_default_event_and_slots(group_id):
         # Create a 7-day ongoing wellness event
         start_date = datetime.now().date()
         end_date = start_date + timedelta(days=7)
-        
-        query="""
+
+        query = """
                 INSERT INTO events 
                 (group_id, event_name, start_date, end_date, min_pass_points, is_active)
                 VALUES (%s, 'Wellness Challenge', %s, %s, 250, TRUE)
             """
-        event_id=execute_query(query,(group_id, start_date, end_date))
+        event_id = execute_query(query, (group_id, start_date, end_date))
 
         logger.info(f"Created wellness event {event_id} for group {group_id}")
 
         slots = [
-            ("Good Morning", "10:30:00", "10:35:00", "media", 10,
+            (
+                "Good Morning",
+                "10:30:00",
+                "10:35:00",
+                "media",
+                10,
                 "Its Good morning everyone! Share your morning photo 🌅",
-                "Great start to your day! ✅", "Is this your Good Morning ?"),
-            ("Workout", "10:40:00", "10:45:00", "media", 10,
+                "Great start to your day! ✅",
+                "Is this your Good Morning ?",
+            ),
+            (
+                "Workout",
+                "10:40:00",
+                "10:45:00",
+                "media",
+                10,
                 "Its Workout time everyone! Post your exercise photo 💪",
-                "Amazing workout! 💪", "Is this your Workout ?"),
-            ("Breakfast", "10:50:00", "10:55:00", "media", 10,
+                "Amazing workout! 💪",
+                "Is this your Workout ?",
+            ),
+            (
+                "Breakfast",
+                "10:50:00",
+                "10:55:00",
+                "media",
+                10,
                 "Its Breakfast time everyone! Share your delicious & healthy meal 🍳",
-                "Healthy breakfast! 🍳", "Is this your Breakfast ?"),
-            ("Morning Water Intake", "11:00:00", "11:05:00", "button", 10,
+                "Healthy breakfast! 🍳",
+                "Is this your Breakfast ?",
+            ),
+            (
+                "Morning Water Intake",
+                "11:00:00",
+                "11:05:00",
+                "button",
+                10,
                 "Lets checkout your morning hydration everyone! How much water did everyone drink ? 💧",
-                "Great hydration! 💧", "Is this the amount of water you drank ?"),
-            ("Lunch", "11:10:00", "11:15:00", "media", 10,
+                "Great hydration! 💧",
+                "Is this the amount of water you drank ?",
+            ),
+            (
+                "Lunch",
+                "11:10:00",
+                "11:15:00",
+                "media",
+                10,
                 "Its Lunch time everyone! Post your delicious meal 🍱",
-                "Nutritious lunch! 🍱", "Is this your lunch ?"),
-            ("Afternoon Water Intake", "11:20:00", "11:25:00", "button", 10,
+                "Nutritious lunch! 🍱",
+                "Is this your lunch ?",
+            ),
+            (
+                "Afternoon Water Intake",
+                "11:20:00",
+                "11:25:00",
+                "button",
+                10,
                 "Lets checkout your afternoon hydration everyone! How much water did everyone drink ? 💧",
-                "Great hydration! 💧", "Is this the amount of water you drank ?"),
-            ("Evening Snacks", "11:30:00", "11:35:00", "media",10,
+                "Great hydration! 💧",
+                "Is this the amount of water you drank ?",
+            ),
+            (
+                "Evening Snacks",
+                "11:30:00",
+                "11:35:00",
+                "media",
+                10,
                 "Evening snack time! Share your healthy snack 🍎",
-                "Healthy snack! 🍎", "Is this your evening snacks ?"),
-            ("Evening Water intake", "11:40:00", "11:45:00", "button", 10,
+                "Healthy snack! 🍎",
+                "Is this your evening snacks ?",
+            ),
+            (
+                "Evening Water intake",
+                "11:40:00",
+                "11:45:00",
+                "button",
+                10,
                 "Lets checkout how hydrated are you in evening! Track your water 💧",
-                "Great hydration! 💧", "Is this the amount of water you drank ?"),
-            ("Dinner", "11:50:00", "11:55:00", "media", 10,
+                "Great hydration! 💧",
+                "Is this the amount of water you drank ?",
+            ),
+            (
+                "Dinner",
+                "11:50:00",
+                "11:55:00",
+                "media",
+                10,
                 "Its Dinner time everyone! Share your healthy meal 🍽️",
-                "Delicious dinner! 🍽️", "Is this your dinner ?"),
+                "Delicious dinner! 🍽️",
+                "Is this your dinner ?",
+            ),
         ]
 
         slot_keywords = {
@@ -145,32 +215,56 @@ def create_default_event_and_slots(group_id):
             "Dinner": ["dinner", "night meal"],
         }
 
-        for (slot_name,start_time,end_time,slot_type,slot_points,initial_msg,response_pos,response_clar) in slots:
+        for (
+            slot_name,
+            start_time,
+            end_time,
+            slot_type,
+            slot_points,
+            initial_msg,
+            response_pos,
+            response_clar,
+        ) in slots:
             is_mandatory = 0 if slot_name == "Evening Snacks" else 1
-            
-            query="""
+
+            query = """
                     INSERT INTO group_slots 
                     (group_id, event_id, slot_name, start_time, end_time, 
                         initial_message, response_positive, response_clarify, image_file_path, slot_type, slot_points, is_mandatory)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
-            slot_id=execute_query(query,(group_id, event_id, slot_name,start_time,end_time,
-                                    initial_msg,response_pos,response_clar, None, slot_type, slot_points, is_mandatory))
+            slot_id = execute_query(
+                query,
+                (
+                    group_id,
+                    event_id,
+                    slot_name,
+                    start_time,
+                    end_time,
+                    initial_msg,
+                    response_pos,
+                    response_clar,
+                    None,
+                    slot_type,
+                    slot_points,
+                    is_mandatory,
+                ),
+            )
 
             # Add keywords for this slot
             if slot_name in slot_keywords:
                 for keyword in slot_keywords[slot_name]:
-                    query="""
+                    query = """
                     INSERT INTO slot_keywords (slot_id, keyword) VALUES (%s, %s)
                     """
-                    execute_query(query,(slot_id, keyword))
+                    execute_query(query, (slot_id, keyword))
         logger.info(
             f"Created {len(slots)} default slots with multilingual keywords for group {group_id}"
         )
         return True
 
     except Exception as e:
-        logger.error(f"Error creating default slots: {e}")
+        logger.error(f"Error creating default slots: {e}",exc_info=True)
         return False
 
 
@@ -196,31 +290,37 @@ def add_member(group_id, user_id, username=None, first_name=None, last_name=None
             logger.info(f"🔒 DB: New member {user_id} marked for restriction until {restriction_until} (IST)")
 
         # handles both INSERT for new members and UPDATE for existing ones
-        query = """
-            INSERT INTO group_members (user_id, group_id, username, first_name, last_name, is_restricted, restriction_until, joined_at, last_active_timestamp)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+        query_1= """
+            INSERT INTO group_members (user_id, group_id, username, first_name, last_name, is_admin, is_restricted, restriction_until, joined_at, last_active_timestamp)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
             ON DUPLICATE KEY UPDATE
                 username = VALUES(username),
                 first_name = VALUES(first_name),
                 last_name = VALUES(last_name),
+                is_admin = VALUES(is_admin),
                 last_active_timestamp = NOW()
         """
-        execute_query(query, (user_id, group_id, username, first_name, last_name, is_restricted, restriction_until))
+        execute_query(query_1, (user_id,group_id,username,first_name,last_name,1 if is_admin else 0,is_restricted,restriction_until))
 
         # If they are new, also log to history
         if is_new:
-            execute_query(
-                "INSERT INTO member_history (group_id, user_id, username, first_name, last_name, action) VALUES (%s, %s, %s, %s, %s, 'joined')",
-                (group_id, user_id, username, first_name, last_name),
-            )
+            query_2="""
+            INSERT INTO member_history (group_id, user_id, username, first_name, last_name, action) VALUES (%s, %s, %s, %s, %s, 'joined')
+            """
+            execute_query(query_2, (group_id, user_id, username, first_name, last_name))
             logger.debug(f"[DEBUG] member_history INSERT complete for new user {user_id}")
 
         member_data = get_member(group_id, user_id)
         return member_data, is_new
 
-    except Exception as e:
-        logger.error(f"Error in add_member: {e}")
+    except mysql.connector.Error as e:
+        logger.error("DATABASE ERROR during transaction in add_member for user %s: %s",user_id, e,exc_info=True)
         return None, False
+
+    except Exception as e:
+        logger.error("UNEXPECTED ERROR in add_member for user %s: %s",user_id, e,exc_info=True)
+        return None, False
+
 
 def update_member_activity(group_id, user_id):
     query = "UPDATE group_members SET last_active_timestamp = NOW() WHERE group_id = %s AND user_id = %s"
@@ -260,7 +360,7 @@ def deduct_knockout_points(group_id, user_id, points):
         )
         return True
     except Exception as e:
-        logger.error(f"Error deducting knockout points: {e}")
+        logger.error(f"Error deducting knockout points: {e}",exc_info=True)
         return False
 
 
@@ -273,18 +373,24 @@ def get_inactive_members(group_id, days=3):
         """
     return execute_query(query, (group_id, days), fetch=True)
 
+
 def log_inactivity_warning(group_id, user_id, warning_type, member_details):
     query = """
         INSERT INTO inactivity_warnings (group_id, user_id, username, first_name, last_name, warning_date, warning_type)
         VALUES (%s, %s, %s, %s, %s, CURDATE(), %s)
     """
-    execute_query(query, (
-        group_id, user_id,
-        member_details.get('username'),
-        member_details.get('first_name'),
-        member_details.get('last_name'),
-        warning_type
-    ))
+    execute_query(
+        query,
+        (
+            group_id,
+            user_id,
+            member_details.get("username"),
+            member_details.get("first_name"),
+            member_details.get("last_name"),
+            warning_type,
+        ),
+    )
+
 
 def remove_member(group_id, user_id, action="kicked"):
     try:
@@ -294,7 +400,7 @@ def remove_member(group_id, user_id, action="kicked"):
             username = member.get("username")
             first_name = member.get("first_name")
             last_name = member.get("last_name")
-            
+
             # Now, log their details to the history table
             execute_query(
                 "INSERT INTO member_history (group_id, user_id, username, first_name, last_name, action) VALUES (%s, %s, %s, %s, %s, %s)",
@@ -314,7 +420,7 @@ def remove_member(group_id, user_id, action="kicked"):
         )
         return True
     except Exception as e:
-        logger.error(f"Error removing member: {e}")
+        logger.error(f"Error removing member: {e}",exc_info=True)
         return False
 
 
@@ -408,12 +514,23 @@ def add_points(group_id, user_id, points, event_id=None):
                         VALUES (%s, %s, %s, %s, %s, CURDATE(), %s)
                         ON DUPLICATE KEY UPDATE points_scored = points_scored + VALUES(points_scored)
                     """
-                execute_query(log_query, (event_id, user_id, member.get('username'), member.get('first_name'), member.get('last_name'), points))
+                execute_query(
+                    log_query,
+                    (
+                        event_id,
+                        user_id,
+                        member.get("username"),
+                        member.get("first_name"),
+                        member.get("last_name"),
+                        points,
+                    ),
+                )
 
         return True
     except Exception as e:
-        logger.error(f"Error adding points: {e}")
+        logger.error(f"Error adding points: {e}",exc_info=True)
         return False
+
 
 def get_low_point_members(group_id, min_points):
     query = """
@@ -433,9 +550,9 @@ def mark_slot_completed(group_id, event_id, slot_id, user_id, status="completed"
     member = get_member(group_id, user_id)
 
     if member:
-        username = member.get('username')
-        first_name = member.get('first_name')
-        last_name = member.get('last_name')
+        username = member.get("username")
+        first_name = member.get("first_name")
+        last_name = member.get("last_name")
     else:
         username, first_name, last_name = None, None, None
 
@@ -444,10 +561,13 @@ def mark_slot_completed(group_id, event_id, slot_id, user_id, status="completed"
             VALUES (%s, %s, %s, %s, %s, %s, CURDATE(), %s)
             ON DUPLICATE KEY UPDATE duplicate_submissions = duplicate_submissions + 1
         """
-        
+
     with get_db_connection() as conn:
         with conn.cursor(dictionary=True) as cursor:
-            cursor.execute(query, (event_id, slot_id, user_id, username, first_name, last_name, status))
+            cursor.execute(
+                query,
+                (event_id, slot_id, user_id, username, first_name, last_name, status),
+            )
             # cursor.rowcount == 1 means a new row was inserted.
             # cursor.rowcount == 2 means an existing row was updated.
             return cursor.rowcount == 1
@@ -462,6 +582,7 @@ def check_slot_completed_today(event_id, slot_id, user_id):
         """
     result = execute_query(query, (event_id, slot_id, user_id), fetch=True)
     return result[0]["count"] > 0 if result else False
+
 
 def get_banned_words(group_id):
     query = "SELECT word FROM banned_words WHERE group_id = %s OR group_id IS NULL"
@@ -484,48 +605,77 @@ def get_leaderboard(group_id, limit=10):
         """
     return execute_query(query, (group_id, limit), fetch=True)
 
+
 def penalize_zero_activity_members(group_id, event_id, points_to_deduct):
     """Finds members with no points for today and deducts knockout points."""
     try:
-        query_1="""
+        query_1 = """
         SELECT DISTINCT user_id FROM daily_points_log WHERE event_id = %s and log_date = CURDATE()
         """
-        active_members_result = execute_query(query_1,(event_id,),fetch=True)
-        active_user_ids={row['user_id'] for row in active_members_result}
-        
+        active_members_result = execute_query(query_1, (event_id,), fetch=True)
+        active_user_ids = {row["user_id"] for row in active_members_result}
+
         # get all non-restricted members in the group
-        query_2="""
+        query_2 = """
         SELECT user_id, first_name FROM group_members where group_id = %s AND is_restricted= 0
         """
-        non_restricted_members=execute_query(query_2,(group_id,),fetch=True)
-        
-        inactive_members=[]
+        non_restricted_members = execute_query(query_2, (group_id,), fetch=True)
+
+        inactive_members = []
         for member in non_restricted_members:
-            if member['user_id'] not in active_user_ids:
+            if member["user_id"] not in active_user_ids:
                 inactive_members.append(member)
-                
+
         # apply penalty to each and every inactive member per day
         for member in inactive_members:
-            user_id=member['user_id']
-            first_name=member.get("first_name", member.get("username",f"User_{user_id}"))
+            user_id = member["user_id"]
+            first_name = member.get(
+                "first_name", member.get("username", f"User_{user_id}")
+            )
             deduct_knockout_points(group_id, user_id, points_to_deduct)
-            logger.info(f"Penalized {first_name} ({user_id}) with {points_to_deduct} knockout points for zero activity today.")
+            logger.info(
+                f"Penalized {first_name} ({user_id}) with {points_to_deduct} knockout points for zero activity today."
+            )
         return inactive_members
     except Exception as e:
-        logger.error(f"Error in penalize_zero_activity_members: {e}")
+        logger.error(f"Error in penalize_zero_activity_members: {e}",exc_info=True)
         return []
-    
+
+
 def set_runtime_state(group_id, key, value):
     """Sets or updates a runtime state variable for a group."""
-    query="""
+    query = """
     INSERT INTO runtime_state (group_id,state_key,state_value) VALUES (%s,%s,%s) ON DUPLICATE KEY UPDATE state_value=VALUES(state_value)
     """
-    execute_query(query,(group_id, key, str(value) if value is not None else None))
+    execute_query(query, (group_id, key, str(value) if value is not None else None))
 
-def get_runtime_state(group_id,key):
+
+def get_runtime_state(group_id, key):
     """Gets a runtime state variable for a group."""
     query = """
     SELECT state_value FROM runtime_state WHERE group_id = %s AND state_key = %s
     """
-    result=execute_query(query,(group_id,key),fetch=True)
-    return result[0]['state_value'] if result else None
+    result = execute_query(query, (group_id, key), fetch=True)
+    return result[0]["state_value"] if result else None
+
+def update_admin_status(group_id, admin_user_ids):
+    """
+    Synchronizes the admin status for all members in a group within a single transaction.
+    Sets is_admin = 1 for users in the admin_user_ids list and 0 for all others.
+    """
+    try:
+        query_1="""
+        UPDATE group_members SET is_admin = 0 WHERE group_id = %s
+        """
+        execute_query(query_1,(group_id,))
+        
+        if admin_user_ids:
+            placeholders = ', '.join(['%s'] * len(admin_user_ids))
+            query_2=f"UPDATE group_members SET is_admin = 1 WHERE group_id = %s AND user_id IN ({placeholders})"
+            params=(group_id,)+tuple(admin_user_ids)
+            execute_query(query_2,params)
+            logger.info(f"Successfully synchronized admin status for group {group_id}.")
+            return True
+    except Exception as e:
+        logger.error(f"Failed to synchronize admin status for group {group_id}: {e}", exc_info=True)
+        return False

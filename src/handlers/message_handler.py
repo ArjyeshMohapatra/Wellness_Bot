@@ -9,6 +9,8 @@ from services.file_storage import FileStorage
 import config
 from handlers.start_handler import points, schedule
 from db import execute_query
+import asyncio
+from bot_utils import safe_send_message
 
 logger = logging.getLogger(__name__)
 storage = FileStorage(config.STORAGE_PATH)
@@ -63,6 +65,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if isinstance(restriction_until_dt, str):
             restriction_until_dt = datetime.strptime(restriction_until_dt, "%Y-%m-%d %H:%M:%S")
 
+    
+        if restriction_until_dt.tzinfo is None or restriction_until_dt.tzinfo.utcoffset(restriction_until_dt) is None:
+            restriction_until_dt = ist.localize(restriction_until_dt)
+
         if datetime.now(ist) > restriction_until_dt:
             # Restriction has expired, update the database
             query = "UPDATE group_members SET is_restricted = 0, restriction_until = NULL WHERE group_id = %s AND user_id = %s"
@@ -72,12 +78,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             logger.info(f"Lifted expired restriction for user {user_id} in group {group_id}.")
 
     # Also check if user is currently a Telegram admin/creator
-    try:
-        chat_member = await context.bot.get_chat_member(group_id, user_id)
-        is_telegram_admin = chat_member.status in ["administrator", "creator"]
-    except Exception as e:
-        logger.error(f"Error checking admin status: {e}")
-        is_telegram_admin = False
+    is_telegram_admin = member and member.get("is_admin", 0) == 1
 
     # Send welcome if new member
     if is_new:
@@ -90,13 +91,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 restriction_until_dt = datetime.strptime(restriction_until_str, "%Y-%m-%d %H:%M:%S")
             else:
                 restriction_until_dt = restriction_until_str
-            restriction_local_time = restriction_until_dt.strftime("%I:%M %p on %b %d")
-            welcome_text += f"\n\nJust a heads-up, new members are restricted from messaging until **{restriction_local_time} (IST)**."
 
         if is_telegram_admin:
             welcome_text += "\n\nAs an admin, you have full access immediately! 💼"
 
-        await context.bot.send_message(chat_id=group_id, text=welcome_text)
+        await safe_send_message(context=context, chat_id=group_id, text=welcome_text)
 
     # Check database admin
     is_db_admin = group_config and group_config.get("admin_user_id") == user_id
@@ -107,11 +106,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # If user is admin but was restricted, unrestrict them immediately
     if is_admin and member and member.get("is_restricted", 0) == 1:
         try:
-            # Unrestrict the admin
-            await context.bot.restrict_chat_member(chat_id=group_id, user_id=user_id,
-                                                   permissions=ChatPermissions(can_send_messages=True,
-                                                                               can_send_other_messages=True)
-                                                   )
+            chat_member = await context.bot.get_chat_member(group_id, user_id)
+        
+            # Only try to change admin permissions if the user is not the creator
+            if chat_member.status != 'creator':
+                await context.bot.restrict_chat_member(
+                    chat_id=group_id,
+                    user_id=user_id,
+                    permissions=ChatPermissions(can_send_messages=True, can_send_other_messages=True)
+                )
 
             # Update database
             query = "UPDATE group_members SET is_restricted = 0, restriction_until = NULL WHERE group_id = %s AND user_id = %s"
@@ -119,7 +122,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
             logger.info(f"Admin {user_id} was restricted but has now been unrestricted in group {group_id}")
         except Exception as e:
-            logger.error(f"Error unrestricting admin: {e}")
+            logger.error(f"Error unrestricting admin: {e}",exc_info=True)
 
     # Check for banned words FIRST - ALWAYS ban on 2 warnings regardless of points (EXCEPT ADMINS)
     if message.text and not is_admin:
@@ -158,7 +161,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 warnings = member["banned_word_count"] if member else 1
                 current_points = member["current_points"] if member else 0
 
-                warning_msg = await context.bot.send_message(
+                warning_msg = await safe_send_message(
+                    context=context, 
                     chat_id=group_id,
                     text=f"⚠️ {first_name}, please avoid using inappropriate language!\n"
                     f"Warning {warnings}/2. Using banned word: '{matched_word}'\n",
@@ -188,12 +192,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                                 f"Reason: 2 warnings for using banned words.\n"
                             )
 
-                        await context.bot.send_message(chat_id=group_id, text=kick_msg)
+                        await safe_send_message(context=context, chat_id=group_id, text=kick_msg)
                         logger.warning(f"User {user_id} ({first_name}) kicked for 2 banned word violations")
 
                     except Exception as ban_error:
                         logger.error(f"Failed to apply 24-hour ban for user {user_id}: {ban_error}")
-                        await context.bot.send_message(
+                        await safe_send_message(
+                            context=context, 
                             chat_id=group_id,
                             text=f"⚠️ Could not ban {first_name}. Please check my admin permissions.",
                         )
@@ -202,7 +207,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 return
 
             except Exception as e:
-                logger.error(f"Error handling banned word: {e}")
+                logger.error(f"Error handling banned word: {e}",exc_info=True)
 
     # Get active slot
     active_slot = db.get_active_slot(group_id)
@@ -216,7 +221,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             # Deduct 5 knockout points for posting outside slot
             db.deduct_knockout_points(group_id, user_id, 5)
 
-            warning_msg = await context.bot.send_message(
+            warning_msg = await safe_send_message(
+                context=context, 
                 chat_id=group_id,
                 text=f"⏰ {first_name}, no active slot right now!\n"
                 f"Please only post during designated time slots.\n",
@@ -229,7 +235,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             return
 
         except Exception as e:
-            logger.error(f"Error deleting message: {e}")
+            logger.error(f"Error deleting message: {e}",exc_info=True)
             return
 
     # Handle message based on slot type and content
@@ -248,14 +254,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             if not is_first_completion:
                 try:
                     await message.delete()
-                    info_msg = await context.bot.send_message(
+                    info_msg = await safe_send_message(
+                        context=context, 
                         chat_id=group_id,
                         text=f"✅ {first_name}, you've already completed this slot today!",
                     )
                     context.job_queue.run_once(lambda ctx: info_msg.delete(), when=5)
                     return
                 except Exception as e:
-                    logger.error(f"Error handling duplicate submission: {e}")
+                    logger.error(f"Error handling duplicate submission: {e}",exc_info=True)
                     return
 
     # Accept ANY media type for regular slots
@@ -381,7 +388,7 @@ async def handle_photo_response(update: Update, context: ContextTypes.DEFAULT_TY
             logger.info(f"User {user_id} completed slot {slot_name} with photo")
 
         except Exception as e:
-            logger.error(f"Error handling photo: {e}")
+            logger.error(f"Error handling photo: {e}",exc_info=True)
             await message.reply_text("Sorry, there was an error processing your photo. Please try again.")
 
     else:
@@ -527,7 +534,7 @@ async def auto_reject_confirmation(context: ContextTypes.DEFAULT_TYPE):
                                     message_content=data.get("text", ""), points_earned=0, is_valid=False)
 
                 except Exception as e:
-                    logger.error(f"Error in auto-reject: {e}")
+                    logger.error(f"Error in auto-reject: {e}",exc_info=True)
 
 
 # Create message handlers

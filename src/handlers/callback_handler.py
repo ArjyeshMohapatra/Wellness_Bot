@@ -7,6 +7,7 @@ from db import execute_query
 from services.file_storage import FileStorage
 import config
 from pytz import timezone
+from bot_utils import safe_send_message, safe_edit_message_text, safe_callback_reply_text
 
 logger = logging.getLogger(__name__)
 ist=timezone("Asia/Kolkata")
@@ -42,7 +43,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Parse callback data: confirm_yes/no_<slot_id>_<user_id>_<original_msg_id>
     parts = data.split("_")
     if len(parts) < 4:
-        await query.edit_message_text("❌ Invalid confirmation.")
+        await safe_edit_message_text(context, chat_id=query.message.message_id, text="❌ Invalid confirmation.")
         return
 
     expected_user_id = int(parts[3])
@@ -52,12 +53,12 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
     confirmation_data = pending_confirmations.get(query.message.message_id)
 
     if not confirmation_data:
-        await query.edit_message_text("⏱️ This confirmation has expired or already processed.")
+        await safe_edit_message_text(context, chat_id=query.message.message_id, text="⏱️ This confirmation has expired or already processed.")
         return
 
     # Verify it's the right user
     if query.from_user.id != expected_user_id:
-        response_msg = await query.message.reply_text(f"{first_name}, this confirmation is not for you!")
+        response_msg = await safe_callback_reply_text(query, context, text = f"{first_name}, this confirmation is not for you!")
         context.job_queue.run_once(lambda _: context.bot.delete_message(chat_id=response_msg.chat_id, message_id=response_msg.message_id),when=5)
         return
 
@@ -85,7 +86,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
             # Get slot configuration to determine points
             slot = db.get_active_slot(group_id)
             if not slot:
-                await query.edit_message_text("❌ No active slot found.")
+                await safe_edit_message_text(context, chat_id=query.message.message_id, text="❌ No active slot found.")
                 return
 
             points = slot["slot_points"]  # Photos get photo points (typically 10)
@@ -108,12 +109,12 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
 
                 if event_id: db.mark_slot_completed(event_id, slot_id, expected_user_id, "completed")
 
-                await query.edit_message_text(f"✅ You scored {points} points!")
+                await safe_edit_message_text(context, chat_id=query.message.message_id, text=f"✅ You scored {points} points!")
                 logger.info(f"User {expected_user_id} confirmed photo for slot {slot_name}, awarded {points} points")
 
             except Exception as e:
-                logger.error(f"Error saving confirmed photo: {e}")
-                await query.edit_message_text("❌ Error saving photo. Please try again.")
+                logger.error(f"Error saving confirmed photo: {e}",exc_info=True)
+                await safe_edit_message_text(context, chat_id=query.message.message_id, text="❌ Error saving photo. Please try again.")
 
         elif content_type == "media":
             # Handle other media types (video, document, voice, etc.)
@@ -124,7 +125,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
             # Get slot configuration to determine points
             slot = db.get_active_slot(group_id)
             if not slot:
-                await query.edit_message_text("❌ No active slot found.")
+                await safe_edit_message_text(context, chat_id=query.message.message_id, text="❌ No active slot found.")
                 return
 
             # Determine points based on media type
@@ -149,13 +150,13 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
 
                 if event_id and points > 0: db.mark_slot_completed(event_id, slot_id, expected_user_id, "completed")
 
-                points_msg = (f"{points} points!" if points > 0 else " (no points awarded)")
-                await query.edit_message_text(f"✅ {media_type.capitalize()} confirmed!{points_msg}")
+                points_msg = (f"{points} points!" if points > 0 else " no points awarded)")
+                await safe_edit_message_text(context, chat_id=query.message.message_id, text=f"✅ {media_type.capitalize()} confirmed!{points_msg}")
                 logger.info(f"User {expected_user_id} confirmed {media_type} for slot {slot_name}, awarded {points} points")
 
             except Exception as e:
-                logger.error(f"Error saving confirmed {media_type}: {e}")
-                await query.edit_message_text(f"❌ Error saving {media_type}. Please try again.")
+                logger.error(f"Error saving confirmed {media_type}: {e}",exc_info=True)
+                await safe_edit_message_text(context, chat_id=query.message.message_id, text=f"❌ Error saving {media_type}. Please try again.")
 
         else:
             # Text confirmation
@@ -164,7 +165,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
             # Get slot configuration to determine points
             slot = db.get_active_slot(group_id)
             if not slot:
-                await query.edit_message_text("❌ No active slot found.")
+                await safe_edit_message_text(context, chat_id=query.message.message_id, text="❌ No active slot found.")
                 return
 
             points = slot["slot_points"]
@@ -175,7 +176,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
 
             if event_id: db.mark_slot_completed(event_id, slot_id, expected_user_id, "completed")
 
-            await query.edit_message_text(f"✅ You scored {points} points!")
+            await safe_edit_message_text(context, chat_id=query.message.message_id, text=f"✅ You scored {points} points!")
             logger.info(f"User {expected_user_id} confirmed text for slot {slot_name}, awarded {points} points")
 
     else:
@@ -183,7 +184,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
         db.log_activity(group_id=group_id, user_id=expected_user_id, slot_name=slot_name, username=username, first_name=first_name, last_name=last_name,
                         activity_type=content_type, message_content=confirmation_data.get("text", ""), points_earned=0, is_valid=False)
 
-        await query.edit_message_text("❌ Cancelled. No points awarded.")
+        await safe_edit_message_text(context, chat_id=query.message.message_id, text="❌ Cancelled. No points awarded.")
         logger.info(f"User {expected_user_id} rejected confirmation for slot {slot_name}")
 
         # Delete the original message that was rejected
@@ -193,14 +194,14 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                 await context.bot.delete_message(chat_id=group_id, message_id=original_message_id)
                 logger.info(f"Deleted rejected message {original_message_id}")
         except Exception as e:
-            logger.warning(f"Could not delete original message: {e}")
+            logger.warning(f"Could not delete original message: {e}",exc_info=True)
 
     async def delete_message(context: ContextTypes.DEFAULT_TYPE):
         """Awaits the message deletion coroutine."""
         try:
             await message.delete()
         except Exception as e:
-            logger.warning(f"Could not delete confirmation message: {e}")
+            logger.warning(f"Could not delete confirmation message: {e}",exc_info=True)
 
     context.job_queue.run_once(delete_message, when=3)
 
@@ -266,7 +267,8 @@ async def handle_water_button(update: Update, context: ContextTypes.DEFAULT_TYPE
             await query.answer("Already completed!", show_alert=True)
             # Send visible message in chat
             slot_name = active_slot["slot_name"]
-            response_msg = await context.bot.send_message(
+            response_msg = await safe_send_message(
+                context=context, 
                 chat_id=group_id,
                 text=f"⚠️ {first_name}, you have already completed {slot_name} slot for today!",
                 reply_to_message_id=query.message.message_id,
@@ -289,7 +291,7 @@ async def handle_water_button(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.answer(f"✅ {liters}L logged! {points} points!", show_alert=True)
 
         # Send a separate message to show who completed (doesn't replace buttons)
-        response_msg = await context.bot.send_message(chat_id=group_id, text=f"💧 {first_name} drank {liters}L of water! {points} points!")
+        response_msg = await safe_send_message(context=context, chat_id=group_id, text=f"💧 {first_name} drank {liters}L of water! {points} points!")
 
         logger.info(f"User {user_id} logged {liters}L water for slot {slot_name}")
 

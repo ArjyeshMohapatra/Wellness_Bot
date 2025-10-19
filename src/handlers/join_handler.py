@@ -4,6 +4,7 @@ import logging
 import time
 from datetime import datetime, timedelta
 from pytz import timezone
+from bot_utils import safe_send_message
 
 from config import NEW_MEMBER_RESTRICTION_MINUTES
 from services import database_service as db
@@ -36,7 +37,8 @@ async def track_chats(update, context):
                     success = db.create_group_config(group_id, admin_user_id)
 
                     if success:
-                        welcome_msg = await context.bot.send_message(
+                        welcome_msg = await safe_send_message(
+                            context=context, 
                             chat_id=group_id,
                             text=f"👋 Hello! I'm now managing this group!\n\n"
                             f"✅ **Auto-Setup Complete!**\n\n"
@@ -66,7 +68,8 @@ async def track_chats(update, context):
                         logger.error(f"Failed to create config for group {group_id}")
 
                 else:
-                    await context.bot.send_message(
+                    await safe_send_message(
+                        context=context, 
                         chat_id=group_id,
                         text="⚠️ I need admin rights to function properly!\n"
                         "Please make me an admin first.",
@@ -74,7 +77,7 @@ async def track_chats(update, context):
                     logger.warning(f"Bot is not admin in group {group_id}")
 
         except Exception as e:
-            logger.error(f"Error setting up group {group_id}: {e}")
+            logger.error(f"Error setting up group {group_id}: {e}",exc_info=True)
 
     elif was_member and not is_member:
         logger.info(f"Bot removed from group {group_id}")
@@ -162,7 +165,7 @@ async def track_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if is_admin:
             welcome_text += "\n\nAs an admin, you have full access immediately! 💼"
 
-        await context.bot.send_message(chat_id=group_id, text=welcome_text)
+        await safe_send_message(context=context, chat_id=group_id, text=welcome_text)
         logger.info(f"✅ Welcome message sent to {user_id} in group {group_id}")
 
         restriction_until_value = member.get("restriction_until")
@@ -201,9 +204,7 @@ async def track_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
 
     except Exception as e:
-        logger.error(
-            f"❌ CRITICAL ERROR in track_members for {user_id}: {e}", exc_info=True
-        )
+        logger.error(f"❌ CRITICAL ERROR in track_members for {user_id}: {e}",exc_info=True)
 
 
 # Handler definitions

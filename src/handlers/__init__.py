@@ -1,4 +1,4 @@
-from .start_handler import (start_handler, points_handler, schedule_handler, help_handler, test_leaderboard_handler)
+from .start_handler import (start_handler, points_handler, schedule_handler, help_handler, test_leaderboard_handler, health_check_handler)
 from .join_handler import bot_join_handler, member_join_handler
 from .message_handler import (text_message_handler, photo_message_handler, video_message_handler, 
                               document_message_handler, sticker_message_handler, animation_message_handler,
@@ -16,7 +16,7 @@ def setup_handlers(application):
     application.add_handler(schedule_handler)
     application.add_handler(help_handler)
     application.add_handler(test_leaderboard_handler)  # Admin-only test command
-    # keyboard_handler removed - keyboard now appears automatically
+    application.add_handler(health_check_handler)
 
     # Chat member handlers (for tracking joins/leaves)
     application.add_handler(bot_join_handler)

@@ -6,6 +6,7 @@ from datetime import datetime, time, timedelta
 from pytz import timezone
 from services import database_service as db
 from db import get_db_connection, execute_query
+from bot_utils import safe_send_message
 
 logger = logging.getLogger(__name__)
 ist = timezone("Asia/Kolkata")
@@ -55,14 +56,14 @@ async def check_and_announce_slots(context: ContextTypes.DEFAULT_TYPE):
                              InlineKeyboardButton("5L 💧💧💧💧💧", callback_data=f"water_5_{slot_id}")]
                         ]
                         reply_markup = InlineKeyboardMarkup(keyboard)
-                        slot_msg = await context.bot.send_message(chat_id=group_id, text=message, reply_markup=reply_markup)
+                        slot_msg = await safe_send_message(context=context ,chat_id=group_id, text=message, reply_markup=reply_markup)
                     else:
                         image_path = active_slot.get("image_file_path")
                         if image_path and os.path.exists(image_path):
                             with open(image_path, "rb") as photo:
                                 slot_msg = await context.bot.send_photo(chat_id=group_id, photo=photo, caption=message)
                         else:
-                            slot_msg = await context.bot.send_message(chat_id=group_id, text=message)
+                            slot_msg = await safe_send_message(context=context, chat_id=group_id, text=message)
 
                     # Unpin previous messages
                     try:
@@ -91,14 +92,14 @@ async def check_and_announce_slots(context: ContextTypes.DEFAULT_TYPE):
                         await context.bot.delete_message(chat_id=group_id, message_id=int(pinned_message_id_str))
                         logger.info(f"Deleted slot announcement message in group {group_id}")
                     except Exception as e:
-                        logger.warning(f"Could not delete slot message: {e}")
+                        logger.warning(f"Could not delete slot message: {e}",exc_info=True)
                     
                     # Clear the state from the database since there's no active slot
                     db.set_runtime_state(group_id, "pinned_slot_id", None)
                     db.set_runtime_state(group_id, "pinned_slot_message_id", None)
 
     except Exception as e:
-        logger.error(f"Error in check_and_announce_slots: {e}")
+        logger.error(f"Error in check_and_announce_slots: {e}",exc_info=True)
 
 
 async def check_inactive_users(context: ContextTypes.DEFAULT_TYPE):
@@ -132,11 +133,12 @@ async def check_inactive_users(context: ContextTypes.DEFAULT_TYPE):
                 if not existing:
                     try:
                         # Send warning
-                        await context.bot.send_message(
+                        await safe_send_message(
+                            context=context, 
                             chat_id=group_id,
                             text=f"⚠️ {first_name}, you've been inactive for 3 days!\n"
-                            f"Please participate in today's activities or you'll be removed tomorrow.",
-                        )
+                            f"Please participate in today's activities or you'll be removed tomorrow."
+                            )
 
                         # Log warning
                         db.log_inactivity_warning(group_id, user_id, '3day', member)
@@ -144,7 +146,7 @@ async def check_inactive_users(context: ContextTypes.DEFAULT_TYPE):
                         logger.info(f"Warned 3-day inactive user {user_id} in group {group_id}")
 
                     except Exception as e:
-                        logger.error(f"Error warning user {user_id}: {e}")
+                        logger.error(f"Error warning user {user_id}: {e}",exc_info=True)
 
             # Check for 4-day inactive (kick temporarily)
             inactive_4day = db.get_inactive_members(group_id, 4)
@@ -165,7 +167,8 @@ async def check_inactive_users(context: ContextTypes.DEFAULT_TYPE):
                     await context.bot.unban_chat_member(group_id, user_id)
 
                     # Send notification
-                    await context.bot.send_message(
+                    await safe_send_message(
+                        context=context,
                         chat_id=group_id,
                         text=f"🚫 {first_name} has been removed from the group due to 4 days of inactivity.\n"
                     )
@@ -173,10 +176,10 @@ async def check_inactive_users(context: ContextTypes.DEFAULT_TYPE):
                     logger.info(f"Kicked 4-day inactive user {user_id} from group {group_id}")
 
                 except Exception as e:
-                    logger.error(f"Error kicking user {user_id} from group {group_id}: {e}")
+                    logger.error(f"Error kicking user {user_id} from group {group_id}: {e}",exc_info=True)
 
     except Exception as e:
-        logger.error(f"Error in check_inactive_users: {e}")
+        logger.error(f"Error in check_inactive_users: {e}",exc_info=True)
 
 
 async def check_low_points(context: ContextTypes.DEFAULT_TYPE):
@@ -225,7 +228,8 @@ async def check_low_points(context: ContextTypes.DEFAULT_TYPE):
                     
                     await context.bot.unban_chat_member(group_id,user_id)
 
-                    await context.bot.send_message(
+                    await safe_send_message(
+                        context=context, 
                         chat_id=group_id,
                         text=f"👋 {first_name}, thank you for your participation!\n"
                         f"🎯 You completed 7 days and earned {current_points} points!\n\n"
@@ -236,10 +240,10 @@ async def check_low_points(context: ContextTypes.DEFAULT_TYPE):
                     logger.info(f"Kicked low-point user {user_id} from group {group_id} after 7 days with {current_points} points")
 
                 except Exception as e:
-                    logger.error(f"Error kicking user {user_id}: {e}")
+                    logger.error(f"Error kicking user {user_id}: {e}",exc_info=True)
 
     except Exception as e:
-        logger.error(f"Error in check_low_points: {e}")
+        logger.error(f"Error in check_low_points: {e}",exc_info=True)
         
 
 async def check_mid_slot_warnings(context: ContextTypes.DEFAULT_TYPE):
@@ -271,7 +275,8 @@ async def check_mid_slot_warnings(context: ContextTypes.DEFAULT_TYPE):
                     
                     # Check if warning has already been sent by checking the database
                     if not db.get_runtime_state(group_id, warning_key):
-                        await context.bot.send_message(
+                        await safe_send_message(
+                            context=context, 
                             chat_id=group_id,
                             text=f"⏰ *{slot_name}* - Final Reminder!\n\n"
                                  f"⚠️ Only 10 minutes remaining!\n"
@@ -282,7 +287,7 @@ async def check_mid_slot_warnings(context: ContextTypes.DEFAULT_TYPE):
                         db.set_runtime_state(group_id, warning_key, "sent")
                         logger.info(f"Sent mid-slot warning for {slot_name} in group {group_id}")
     except Exception as e:
-        logger.error(f"Error in check_mid_slot_warnings: {e}")
+        logger.error(f"Error in check_mid_slot_warnings: {e}",exc_info=True)
 
 
 async def check_user_day_cycles(context: ContextTypes.DEFAULT_TYPE):
@@ -342,7 +347,8 @@ async def check_user_day_cycles(context: ContextTypes.DEFAULT_TYPE):
                         execute_query(query,(group_id,user_id))
 
                         try:
-                            await context.bot.send_message(
+                            await safe_send_message(
+                                context=context, 
                                 chat_id=group_id,
                                 text=f"🎊 {first_name}, congratulations!\n\n"
                                 f"You completed your 7-day wellness cycle with {current_points} points! 🏆\n\n"
@@ -351,7 +357,7 @@ async def check_user_day_cycles(context: ContextTypes.DEFAULT_TYPE):
                             )
                             logger.info(f"Reset 7-day cycle for user {user_id} in group {group_id}")
                         except Exception as e:
-                            logger.error(f"Error sending cycle reset message: {e}")
+                            logger.error(f"Error sending cycle reset message: {e}",exc_info=True)
 
                     else:
                         # Just advance the day
@@ -361,7 +367,7 @@ async def check_user_day_cycles(context: ContextTypes.DEFAULT_TYPE):
                         logger.info(f"Advanced user {user_id} in group {group_id} to Day {new_day}")
 
     except Exception as e:
-        logger.error(f"Error in check_user_day_cycles: {e}")
+        logger.error(f"Error in check_user_day_cycles: {e}",exc_info=True)
 
 
 async def post_daily_leaderboard(context: ContextTypes.DEFAULT_TYPE):
@@ -403,11 +409,11 @@ async def post_daily_leaderboard(context: ContextTypes.DEFAULT_TYPE):
 
                 message += "\n📅 Great job everyone! See you tomorrow! 🌟"
 
-                await context.bot.send_message(chat_id=group_id, text=message)
+                await safe_send_message(context=context, chat_id=group_id, text=message)
                 logger.info(f"Posted daily leaderboard for group {group_id}")
 
     except Exception as e:
-        logger.error(f"Error in post_daily_leaderboard: {e}")
+        logger.error(f"Error in post_daily_leaderboard: {e}",exc_info=True)
 
 async def check_daily_participation(contect: ContextTypes.DEFAULT_TYPE):
     """Checks for users with zero points for the day and applies a penalty."""
@@ -424,7 +430,31 @@ async def check_daily_participation(contect: ContextTypes.DEFAULT_TYPE):
             db.penalize_zero_activity_members(group_id, event_id, 10)
             logger.info("Penalized non-restricted inactive members for the day.")
     except Exception as e:
-        logger.error(f"Error in check_daily_participation job: {e}")
+        logger.error(f"Error in check_daily_participation job: {e}",exc_info=True)
+
+async def sync_admin_status(context: ContextTypes.DEFAULT_TYPE):
+    """Periodically fetches the list of admins for each group and updates the database."""
+    logger.info("Running hourly job to synchronize admin statuses...")
+    try:
+        query = "SELECT group_id FROM groups_config"
+        groups = execute_query(query, fetch=True)
+
+        for group in groups:
+            group_id = group["group_id"]
+            try:
+                # Get the list of admins directly from the Telegram API
+                administrators = await context.bot.get_chat_administrators(group_id)
+                # Extract just the user IDs from the list of ChatMember objects
+                admin_user_ids = [admin.user.id for admin in administrators]
+
+                # Update the database in a single, efficient transaction
+                db.update_admin_status(group_id, admin_user_ids)
+
+            except Exception as e:
+                logger.error(f"Could not sync admins for group {group_id}: {e}", exc_info=True)
+
+    except Exception as e:
+        logger.error(f"Critical error in the admin synchronization job: {e}", exc_info=True)
 
 def setup_jobs(application):
     """Setup periodic jobs."""
@@ -450,5 +480,8 @@ def setup_jobs(application):
     
     # Checks daily for zero activity users after leaderboard gets posted
     job_queue.run_daily(check_daily_participation, time=time(hour=23,minute=30))
+    
+    # Runs 10s after startup, then hourly
+    job_queue.run_repeating(sync_admin_status, interval=3600, first=10)
 
     logger.info("Scheduled jobs setup completed")

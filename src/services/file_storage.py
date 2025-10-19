@@ -28,7 +28,7 @@ class FileStorage:
             return str(file_path)
         
         except Exception as e:
-            logger.error(f"Error saving photo: {e}")
+            logger.error(f"Error saving photo: {e}",exc_info=True)
             raise
     
     async def save_media(self, group_id, user_id, username, slot_name, file, filename, media_type):
@@ -49,5 +49,5 @@ class FileStorage:
             return str(file_path)
         
         except Exception as e:
-            logger.error(f"Error saving {media_type}: {e}")
+            logger.error(f"Error saving {media_type}: {e}",exc_info=True)
             raise
