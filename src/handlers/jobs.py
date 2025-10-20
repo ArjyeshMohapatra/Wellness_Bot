@@ -384,8 +384,6 @@ async def post_daily_leaderboard(context: ContextTypes.DEFAULT_TYPE):
             event = db.get_active_event(group_id)
             if not event: continue
 
-            event_id = event["event_id"]
-
             # Get leaderboard
             top_members = db.get_leaderboard(group_id, 10)
 
@@ -415,7 +413,7 @@ async def post_daily_leaderboard(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error in post_daily_leaderboard: {e}",exc_info=True)
 
-async def check_daily_participation(contect: ContextTypes.DEFAULT_TYPE):
+async def check_daily_participation(context: ContextTypes.DEFAULT_TYPE):
     """Checks for users with zero points for the day and applies a penalty."""
     try:
         logger.info("Checking for zero-participation members...")
