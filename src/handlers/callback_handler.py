@@ -119,7 +119,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                                 telegram_file_id=photo_file_id, local_file_path=local_path, points_earned=points, is_valid=True,
                                 username=username, first_name=first_name, last_name=last_name)
 
-                if event_id: db.mark_slot_completed(event_id, slot_id, expected_user_id, "completed", points)
+                if event_id: db.mark_slot_completed(group_id, event_id, slot_id, expected_user_id, "completed", points)
 
                 await safe_edit_message_text(
                     context, 
@@ -167,12 +167,11 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                 local_path = await storage.save_media(group_id, expected_user_id, username, slot_name, file, filename, media_type)
 
                 # Award points
-                if points > 0: db.add_points(group_id, expected_user_id, points, event_id)
-
+                if event_id and points > 0: db.mark_slot_completed(group_id, event_id, slot_id, expected_user_id, "completed", points)
+                
                 db.log_activity(group_id, expected_user_id, media_type, slot_name, message_content=caption, username=username, first_name=first_name,
                                 last_name=last_name, telegram_file_id=file_id, local_file_path=local_path, points_earned=points, is_valid=True)
 
-                if event_id and points > 0: db.mark_slot_completed(event_id, slot_id, expected_user_id, "completed", points)
 
                 points_msg = (f"{points} points!" if points > 0 else " no points awarded)")
                 await safe_edit_message_text(
@@ -211,7 +210,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
             db.log_activity(group_id, expected_user_id, "text", slot_name, message_content=text, username=username, first_name=first_name,
                             last_name=last_name, points_earned=points, is_valid=True)
 
-            if event_id: db.mark_slot_completed(event_id, slot_id, expected_user_id, "completed", points)
+            if event_id: db.mark_slot_completed(group_id, event_id, slot_id, expected_user_id, "completed", points)
 
             await safe_edit_message_text(
                 context, 
@@ -222,16 +221,20 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     else:
         content_type = confirmation_data.get("type", "text")
+        if content_type == "media":
+            # If it's media, get the specific type like 'animation', 'video', etc.
+            content_type = confirmation_data.get("media_type", "media")
+
         db.log_activity(group_id=group_id, user_id=expected_user_id, slot_name=slot_name, username=username, first_name=first_name, last_name=last_name,
                         activity_type=content_type, message_content=confirmation_data.get("text", ""), points_earned=0, is_valid=False)
 
         await safe_edit_message_text(
-            context, 
-            chat_id=query.message.chat_id, 
-            message_id=query.message.message_id, 
+            context,
+            chat_id=query.message.chat_id,
+            message_id=query.message.message_id,
             text="❌ Cancelled. No points awarded.")
         logger.info(f"User {expected_user_id} rejected confirmation for slot {slot_name}")
-
+        
         # Delete the original message that was rejected
         try:
             original_message_id = confirmation_data.get("original_message_id")
@@ -331,7 +334,7 @@ async def handle_water_button(update: Update, context: ContextTypes.DEFAULT_TYPE
                         message_content=f"{liters}L water", username=username, first_name=first_name, last_name=last_name, 
                         points_earned=points)
         if event_id:
-            db.mark_slot_completed(event_id, slot_id, user_id, "completed", points)
+            db.mark_slot_completed(group_id, event_id, slot_id, user_id, "completed", points)
 
         # Send confirmation to telegram
         await query.answer(f"✅ {liters}L logged! {points} points!", show_alert=True)

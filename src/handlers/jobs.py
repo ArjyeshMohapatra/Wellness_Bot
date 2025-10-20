@@ -476,7 +476,7 @@ def setup_jobs(application):
     job_queue.run_daily(check_low_points, time=time(hour=23, minute=0))
 
     # Post daily leaderboard at 22:00 (10:00 PM)
-    job_queue.run_daily(post_daily_leaderboard, time=time(hour=11, minute=58))
+    job_queue.run_daily(post_daily_leaderboard, time=time(hour=18, minute=40))
     
     # Checks daily for zero activity users after leaderboard gets posted
     job_queue.run_daily(check_daily_participation, time=time(hour=23,minute=30))

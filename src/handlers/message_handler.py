@@ -383,7 +383,7 @@ async def handle_photo_response(update: Update, context: ContextTypes.DEFAULT_TY
                             )
 
             if event_id:
-                db.mark_slot_completed(event_id=event_id, slot_id=slot_id, user_id=user_id, status="completed", points=points)
+                db.mark_slot_completed(group_id=group_id, event_id=event_id, slot_id=slot_id, user_id=user_id, status="completed", points=points)
 
             await message.reply_text(slot["response_positive"] + f"\n{points} points!")
             logger.info(f"User {user_id} completed slot {slot_name} with photo")
@@ -409,7 +409,7 @@ async def handle_photo_response(update: Update, context: ContextTypes.DEFAULT_TY
         context.bot_data["pending_confirmations"][confirmation_msg.message_id] = {
             "user_id": user_id, "first_name": first_name, "last_name": last_name, "slot_id": slot_id,
             "slot_name": slot_name, "event_id": event_id, "group_id": group_id, "original_message_id": message.message_id,
-            "photo_file_id": file_id, "username": username, "caption": caption, "points": slot["points_for_photo"],
+            "photo_file_id": file_id, "username": username, "caption": caption, "points": slot["slot_points"],
             "type": "photo",
         }
 

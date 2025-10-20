@@ -113,8 +113,8 @@ def create_default_event_and_slots(group_id):
         slots = [
             (
                 "Good Morning",
-                "10:30:00",
-                "10:35:00",
+                "17:10:00",
+                "17:15:00",
                 "media",
                 10,
                 "Its Good morning everyone! Share your morning photo 🌅",
@@ -123,8 +123,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Workout",
-                "10:40:00",
-                "10:45:00",
+                "17:20:00",
+                "17:25:00",
                 "media",
                 10,
                 "Its Workout time everyone! Post your exercise photo 💪",
@@ -133,8 +133,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Breakfast",
-                "10:50:00",
-                "10:55:00",
+                "17:30:00",
+                "17:35:00",
                 "media",
                 10,
                 "Its Breakfast time everyone! Share your delicious & healthy meal 🍳",
@@ -143,8 +143,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Morning Water Intake",
-                "11:00:00",
-                "11:05:00",
+                "17:40:00",
+                "17:45:00",
                 "button",
                 10,
                 "Lets checkout your morning hydration everyone! How much water did everyone drink ? 💧",
@@ -153,8 +153,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Lunch",
-                "11:10:00",
-                "11:15:00",
+                "17:50:00",
+                "17:55:00",
                 "media",
                 10,
                 "Its Lunch time everyone! Post your delicious meal 🍱",
@@ -163,8 +163,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Afternoon Water Intake",
-                "11:20:00",
-                "11:25:00",
+                "18:00:00",
+                "18:05:00",
                 "button",
                 10,
                 "Lets checkout your afternoon hydration everyone! How much water did everyone drink ? 💧",
@@ -173,8 +173,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Evening Snacks",
-                "11:30:00",
-                "11:35:00",
+                "18:10:00",
+                "18:15:00",
                 "media",
                 10,
                 "Evening snack time! Share your healthy snack 🍎",
@@ -183,8 +183,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Evening Water intake",
-                "11:40:00",
-                "11:45:00",
+                "18:20:00",
+                "18:25:00",
                 "button",
                 10,
                 "Lets checkout how hydrated are you in evening! Track your water 💧",
@@ -193,8 +193,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Dinner",
-                "11:50:00",
-                "11:55:00",
+                "18:30:00",
+                "18:35:00",
                 "media",
                 10,
                 "Its Dinner time everyone! Share your healthy meal 🍽️",
