@@ -70,9 +70,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             restriction_until_dt = ist.localize(restriction_until_dt)
 
         if datetime.now(ist) > restriction_until_dt:
+            start_date = datetime.now(ist).date()
+            end_date = start_date + timedelta(days=7)
             # Restriction has expired, update the database
-            query = "UPDATE group_members SET is_restricted = 0, restriction_until = NULL WHERE group_id = %s AND user_id = %s"
-            execute_query(query, (group_id, user_id))
+            query = "UPDATE group_members SET is_restricted = 0, restriction_until = NULL, cycle_start_date = %s, cycle_end_date = %s WHERE group_id = %s AND user_id = %s"
+            execute_query(query, (start_date, end_date, group_id, user_id))
             # Refresh member data to reflect the change
             member = db.get_member(group_id, user_id)
             logger.info(f"Lifted expired restriction for user {user_id} in group {group_id}.")
@@ -159,7 +161,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
                 member = db.get_member(group_id, user_id)
                 warnings = member["banned_word_count"] if member else 1
-                current_points = member["current_points"] if member else 0
+                total_points = member["total_points"] if member else 0
 
                 warning_msg = await safe_send_message(
                     context=context, 
@@ -181,9 +183,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         
                         await context.bot.unban_chat_member(group_id, user_id)
 
-                        if current_points >= 100:
+                        if total_points >= 100:
                             kick_msg = (
-                                f"👋 {first_name} earned {current_points} points but has been REMOVED from the group.\n"
+                                f"👋 {first_name} earned {total_points} points but has been REMOVED from the group.\n"
                                 f"Reason: 2 warnings for using banned words.\n"
                             )
                         else:
@@ -248,22 +250,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     event_id = event["event_id"] if event else None
 
     # Check if already completed today
-    if event_id:
-            is_first_completion = db.mark_slot_completed(group_id, event_id, slot_id, user_id, "completed")
-        
-            if not is_first_completion:
-                try:
-                    await message.delete()
-                    info_msg = await safe_send_message(
-                        context=context, 
-                        chat_id=group_id,
-                        text=f"✅ {first_name}, you've already completed this slot today!",
-                    )
-                    context.job_queue.run_once(lambda ctx: info_msg.delete(), when=5)
-                    return
-                except Exception as e:
-                    logger.error(f"Error handling duplicate submission: {e}",exc_info=True)
-                    return
+    if event_id and db.check_slot_completed_today(event_id, slot_id, user_id):
+        try:
+            # If it's a duplicate, delete the message and inform the user.
+            await message.delete()
+            info_msg = await safe_send_message(
+                context=context,
+                chat_id=group_id,
+                text=f"✅ {first_name}, you've already completed this slot today!",
+            )
+            # This check is now self-contained and only handles duplicates.
+            context.job_queue.run_once(lambda ctx: info_msg.delete() if info_msg else None, when=5)
+            return
+        except Exception as e:
+            logger.error(f"Error handling duplicate submission: {e}", exc_info=True)
+            return
 
     # Accept ANY media type for regular slots
     if message.photo:
@@ -382,7 +383,7 @@ async def handle_photo_response(update: Update, context: ContextTypes.DEFAULT_TY
                             )
 
             if event_id:
-                db.mark_slot_completed(event_id=event_id, slot_id=slot_id, user_id=user_id, status="completed")
+                db.mark_slot_completed(event_id=event_id, slot_id=slot_id, user_id=user_id, status="completed", points=points)
 
             await message.reply_text(slot["response_positive"] + f"\n{points} points!")
             logger.info(f"User {user_id} completed slot {slot_name} with photo")

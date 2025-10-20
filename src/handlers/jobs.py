@@ -203,10 +203,10 @@ async def check_low_points(context: ContextTypes.DEFAULT_TYPE):
 
             # Get members who COMPLETED 7 days but are below minimum
             query = """
-                SELECT user_id, username, first_name, current_points, user_day_number
+                SELECT user_id, username, first_name, total_points, user_day_number
                 FROM group_members
                 WHERE group_id = %s 
-                AND current_points < %s 
+                AND total_points < %s 
                 AND user_day_number >= 7
                 AND is_restricted = 0
             """
@@ -218,7 +218,7 @@ async def check_low_points(context: ContextTypes.DEFAULT_TYPE):
                 first_name = member.get("first_name", "User")
                 username=member.get("username","User")
                 last_name=member.get("last_name","")
-                current_points = member["current_points"]
+                total_points = member["total_points"]
 
                 try:
                     await context.bot.ban_chat_member(group_id, user_id)
@@ -232,12 +232,12 @@ async def check_low_points(context: ContextTypes.DEFAULT_TYPE):
                         context=context, 
                         chat_id=group_id,
                         text=f"👋 {first_name}, thank you for your participation!\n"
-                        f"🎯 You completed 7 days and earned {current_points} points!\n\n"
+                        f"🎯 You completed 7 days and earned {total_points} points!\n\n"
                         f"Unfortunately, you didn't reach the minimum {min_points} points required.\n"
                         f"💪 Keep trying!"
                     )
 
-                    logger.info(f"Kicked low-point user {user_id} from group {group_id} after 7 days with {current_points} points")
+                    logger.info(f"Kicked low-point user {user_id} from group {group_id} after 7 days with {total_points} points")
 
                 except Exception as e:
                     logger.error(f"Error kicking user {user_id}: {e}",exc_info=True)
@@ -305,7 +305,7 @@ async def check_user_day_cycles(context: ContextTypes.DEFAULT_TYPE):
             # Get all members in this group
             query = """
                 SELECT user_id, username, first_name, last_name, user_day_number, cycle_start_date, 
-                       is_restricted, current_points
+                       is_restricted, total_points
                 FROM group_members
                 WHERE group_id = %s
             """
@@ -319,7 +319,7 @@ async def check_user_day_cycles(context: ContextTypes.DEFAULT_TYPE):
                 day_number = member["user_day_number"]
                 cycle_start = member["cycle_start_date"]
                 is_restricted = member["is_restricted"]
-                current_points = member["current_points"]
+                total_points = member["total_points"]
 
                 if not cycle_start:
                     continue
@@ -340,7 +340,7 @@ async def check_user_day_cycles(context: ContextTypes.DEFAULT_TYPE):
                             UPDATE group_members 
                             SET user_day_number = 1, 
                                 cycle_start_date = CURDATE(),
-                                current_points = 0,
+                                total_points = 0,
                                 knockout_points = 0
                             WHERE group_id = %s AND user_id = %s
                         """
@@ -351,7 +351,7 @@ async def check_user_day_cycles(context: ContextTypes.DEFAULT_TYPE):
                                 context=context, 
                                 chat_id=group_id,
                                 text=f"🎊 {first_name}, congratulations!\n\n"
-                                f"You completed your 7-day wellness cycle with {current_points} points! 🏆\n\n"
+                                f"You completed your 7-day wellness cycle with {total_points} points! 🏆\n\n"
                                 f"🔄 Starting a fresh Day 1 cycle.\n"
                                 f"Your points have been reset. Let's go again! 💪",
                             )
@@ -394,7 +394,7 @@ async def post_daily_leaderboard(context: ContextTypes.DEFAULT_TYPE):
 
                 for i, member in enumerate(top_members, 1):
                     name = member.get("first_name", member.get("username", "Unknown"))
-                    earned = member.get("current_points", 0)
+                    earned = member.get("total_points", 0)
                     knockout = member.get("knockout_points", 0)
                     total = earned - knockout
 

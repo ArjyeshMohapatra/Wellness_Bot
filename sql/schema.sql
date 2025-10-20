@@ -73,12 +73,13 @@ CREATE TABLE IF NOT EXISTS group_members (
     first_name VARCHAR(255),
     last_name  VARCHAR(255),
     is_admin TINYINT(1) DEFAULT 0,
-    current_points INT DEFAULT 0,
+    total_points INT DEFAULT 0,
     knockout_points INT DEFAULT 0,
     general_warnings INT DEFAULT 0,
     banned_word_count INT DEFAULT 0,
     user_day_number INT DEFAULT 1,
     cycle_start_date DATE,
+    cycle_end_date DATE,
     is_restricted TINYINT(1) DEFAULT 0,
     restriction_until TIMESTAMP NULL DEFAULT NULL,
     last_active_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -95,8 +96,17 @@ CREATE TABLE IF NOT EXISTS member_history (
     username VARCHAR(255),
     first_name VARCHAR(255),
     last_name VARCHAR(255),
+    total_points INT,
+    knockout_points INT,
+    general_warnings INT,
+    banned_word_count INT,
+    user_day_number INT,
+    cycle_start_date DATE,
+    cycle_end_date DATE,
+    joined_at TIMESTAMP NULL,
+    last_active_timestamp TIMESTAMP NULL,
     action ENUM('joined', 'left', 'kicked', 'banned') NOT NULL,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    action_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (group_id) REFERENCES groups_config(group_id) ON DELETE CASCADE
 );
 
@@ -128,19 +138,6 @@ CREATE TABLE IF NOT EXISTS user_activity_log (
     FOREIGN KEY (group_id) REFERENCES groups_config(group_id) ON DELETE CASCADE
 );
 
--- DAILY POINTS LOG TABLE
-CREATE TABLE IF NOT EXISTS daily_points_log (
-    log_id INT AUTO_INCREMENT PRIMARY KEY,
-    event_id INT NOT NULL,
-    user_id BIGINT NOT NULL,
-    username VARCHAR(255),
-    first_name VARCHAR(255),
-    last_name VARCHAR(255),
-    log_date DATE NOT NULL,
-    points_scored INT NOT NULL,
-    FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE
-);
-
 -- DAILY SLOT TRACKER TABLE
 CREATE TABLE IF NOT EXISTS daily_slot_tracker (
     log_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -151,7 +148,9 @@ CREATE TABLE IF NOT EXISTS daily_slot_tracker (
     first_name VARCHAR(255),
     last_name VARCHAR(255),
     log_date DATE NOT NULL,
-    status ENUM('completed', 'missed') NOT NULL,
+    status ENUM('completed', 'missed', 'invalid') NOT NULL,
+    points_scored INT DEFAULT 0,
+    completion_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     duplicate_submissions INT DEFAULT 0,
     UNIQUE(event_id, slot_id, user_id, log_date),
     FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE,

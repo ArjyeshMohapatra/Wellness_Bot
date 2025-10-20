@@ -280,19 +280,26 @@ def add_member(group_id, user_id, username=None, first_name=None, last_name=None
 
         is_restricted = 0
         restriction_until = None
+        cycle_start_date = None
+        cycle_end_date = None
 
-        # Only calculate restriction for genuinely new members
-        if is_new and not is_admin:
-            is_restricted = 1
-            restriction_until = get_restriction_until_time(group_id)
-            if restriction_until is not None:
-                restriction_until = restriction_until.strftime("%Y-%m-%d %H:%M:%S")
-            logger.info(f"🔒 DB: New member {user_id} marked for restriction until {restriction_until} (IST)")
+        if is_new:
+            if is_admin:
+                # Admins are not restricted, so their cycle starts immediately.
+                cycle_start_date = datetime.now().date()
+                cycle_end_date = cycle_start_date + timedelta(days=7)
+            else:
+                # Regular new members are restricted, so their cycle dates are left NULL for now.
+                is_restricted = 1
+                restriction_until = get_restriction_until_time(group_id)
+                if restriction_until is not None:
+                    restriction_until = restriction_until.strftime("%Y-%m-%d %H:%M:%S")
+                logger.info(f"🔒 DB: New member {user_id} will be restricted until {restriction_until} (IST). Cycle will start after restriction lifts.")
 
         # handles both INSERT for new members and UPDATE for existing ones
-        query_1= """
-            INSERT INTO group_members (user_id, group_id, username, first_name, last_name, is_admin, is_restricted, restriction_until, joined_at, last_active_timestamp)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+        query_1 = """
+            INSERT INTO group_members (user_id, group_id, username, first_name, last_name, is_admin, is_restricted, restriction_until, cycle_start_date, cycle_end_date, joined_at, last_active_timestamp)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
             ON DUPLICATE KEY UPDATE
                 username = VALUES(username),
                 first_name = VALUES(first_name),
@@ -300,16 +307,20 @@ def add_member(group_id, user_id, username=None, first_name=None, last_name=None
                 is_admin = VALUES(is_admin),
                 last_active_timestamp = NOW()
         """
-        execute_query(query_1, (user_id,group_id,username,first_name,last_name,1 if is_admin else 0,is_restricted,restriction_until))
-
-        # If they are new, also log to history
+        execute_query(query_1, (user_id, group_id, username, first_name, last_name, 1 if is_admin else 0, is_restricted, restriction_until, cycle_start_date, cycle_end_date))
+        
+        # If member is new, also log to member_history table
         if is_new:
-            query_2="""
-            INSERT INTO member_history (group_id, user_id, username, first_name, last_name, action) VALUES (%s, %s, %s, %s, %s, 'joined')
+            query_2 = """
+                INSERT INTO member_history (
+                    group_id, user_id, username, first_name, last_name, 
+                    total_points, knockout_points, general_warnings, banned_word_count,
+                    user_day_number, cycle_start_date, cycle_end_date, joined_at,
+                    last_active_timestamp, action
+                ) VALUES (%s, %s, %s, %s, %s, 0, 0, 0, 0, 1, %s, %s, NOW(), NOW(), 'joined')
             """
-            execute_query(query_2, (group_id, user_id, username, first_name, last_name))
-            logger.debug(f"[DEBUG] member_history INSERT complete for new user {user_id}")
-
+            execute_query(query_2, (group_id, user_id, username, first_name, last_name, cycle_start_date, cycle_end_date))
+            logger.debug(f"[DEBUG] Complete 'joined' record created for new user {user_id}")
         member_data = get_member(group_id, user_id)
         return member_data, is_new
 
@@ -351,7 +362,7 @@ def deduct_knockout_points(group_id, user_id, points):
         query = """
                 UPDATE group_members 
                 SET knockout_points = knockout_points + %s,
-                    current_points = GREATEST(0, current_points - %s)
+                    total_points = GREATEST(0, total_points - %s)
                 WHERE group_id = %s AND user_id = %s
             """
         execute_query(query, (points, points, group_id, user_id))
@@ -391,36 +402,37 @@ def log_inactivity_warning(group_id, user_id, warning_type, member_details):
         ),
     )
 
-
+# Stores a complete snapshot of a member to member_history and then deletes them from group_members
 def remove_member(group_id, user_id, action="kicked"):
     try:
-        # First, get the member's details BEFORE deleting them
         member = get_member(group_id, user_id)
-        if member:
-            username = member.get("username")
-            first_name = member.get("first_name")
-            last_name = member.get("last_name")
+        if not member:
+            # If member is already gone, just log it as a safety measure.
+            execute_query("INSERT INTO member_history (group_id, user_id, action) VALUES (%s, %s, %s)", (group_id, user_id, action))
+            return True
 
-            # Now, log their details to the history table
-            execute_query(
-                "INSERT INTO member_history (group_id, user_id, username, first_name, last_name, action) VALUES (%s, %s, %s, %s, %s, %s)",
-                (group_id, user_id, username, first_name, last_name, action),
-            )
-        else:
-            # Fallback in case member is not found
-            execute_query(
-                "INSERT INTO member_history (group_id, user_id, action) VALUES (%s, %s, %s)",
-                (group_id, user_id, action),
-            )
+        # Archive all relevant data to the history table
+        archive_query = """
+            INSERT INTO member_history (
+                group_id, user_id, username, first_name, last_name,
+                total_points, knockout_points, general_warnings, banned_word_count,
+                user_day_number, cycle_start_date, cycle_end_date, joined_at, 
+                last_active_timestamp, action
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        execute_query(archive_query, (
+            member['group_id'], member['user_id'], member.get('username'), member.get('first_name'), member.get('last_name'),
+            member.get('total_points'), member.get('knockout_points'), member.get('general_warnings'), member.get('banned_word_count'),
+            member.get('user_day_number'), member.get('cycle_start_date'), member.get('cycle_end_date'), member.get('joined_at'),
+            member.get('last_active_timestamp'), action
+        ))
 
         # Finally, delete the member from the main table
-        execute_query(
-            "DELETE FROM group_members WHERE group_id = %s AND user_id = %s",
-            (group_id, user_id),
-        )
+        execute_query("DELETE FROM group_members WHERE group_id = %s AND user_id = %s", (group_id, user_id))
+        logger.info(f"Archived and removed member {user_id} from group {group_id}.")
         return True
     except Exception as e:
-        logger.error(f"Error removing member: {e}",exc_info=True)
+        logger.error(f"Error removing member {user_id}: {e}", exc_info=True)
         return False
 
 
@@ -461,87 +473,39 @@ def get_slot_keywords(slot_id):
     return [r["keyword"] for r in results] if results else []
 
 
-def log_activity(
-    group_id,
-    user_id,
-    activity_type,
-    slot_name,
-    username=None,
-    first_name=None,
-    last_name=None,
-    message_content=None,
-    telegram_file_id=None,
-    local_file_path=None,
-    points_earned=0,
-    is_valid=True,
-):
+def log_activity(group_id, user_id, activity_type, slot_name, username=None, first_name=None, last_name=None, message_content=None,
+                 telegram_file_id=None, local_file_path=None, points_earned=0, is_valid=True):
     query = """
             INSERT INTO user_activity_log 
             (group_id, user_id, activity_type, slot_name,username, first_name, last_name, message_content, 
              telegram_file_id, local_file_path, points_earned, is_valid)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
-    execute_query(
-        query,
-        (
-            group_id,
-            user_id,
-            activity_type,
-            slot_name,
-            username,
-            first_name,
-            last_name,
-            message_content,
-            telegram_file_id,
-            local_file_path,
-            points_earned,
-            is_valid,
-        ),
-    )
+    execute_query(query, (group_id, user_id, activity_type, slot_name, username, first_name, last_name, message_content, telegram_file_id,
+                          local_file_path, points_earned, is_valid))
 
 
 def add_points(group_id, user_id, points, event_id=None):
+    """Adds points to a user's total score."""
     try:
-        query = "UPDATE group_members SET current_points = current_points + %s WHERE group_id = %s AND user_id = %s"
+        query = "UPDATE group_members SET total_points = total_points + %s WHERE group_id = %s AND user_id = %s"
         execute_query(query, (points, group_id, user_id))
-
-        if event_id:
-            # Get member details to log them
-            member = get_member(group_id, user_id)
-            if member:
-                log_query = """
-                        INSERT INTO daily_points_log (event_id, user_id, username, first_name, last_name, log_date, points_scored)
-                        VALUES (%s, %s, %s, %s, %s, CURDATE(), %s)
-                        ON DUPLICATE KEY UPDATE points_scored = points_scored + VALUES(points_scored)
-                    """
-                execute_query(
-                    log_query,
-                    (
-                        event_id,
-                        user_id,
-                        member.get("username"),
-                        member.get("first_name"),
-                        member.get("last_name"),
-                        points,
-                    ),
-                )
-
         return True
     except Exception as e:
-        logger.error(f"Error adding points: {e}",exc_info=True)
+        logger.error(f"Error adding points: {e}", exc_info=True)
         return False
 
 
 def get_low_point_members(group_id, min_points):
     query = """
-            SELECT user_id, username, first_name, current_points
+            SELECT user_id, username, first_name, total_points
             FROM group_members
-            WHERE group_id = %s AND current_points < %s
+            WHERE group_id = %s AND total_points < %s
         """
     return execute_query(query, (group_id, min_points), fetch=True)
 
 
-def mark_slot_completed(group_id, event_id, slot_id, user_id, status="completed"):
+def mark_slot_completed(group_id, event_id, slot_id, user_id, status="completed", points=0):
     """
     Attempts to mark a slot as completed.
     Returns True if a new row was inserted (first completion).
@@ -557,19 +521,14 @@ def mark_slot_completed(group_id, event_id, slot_id, user_id, status="completed"
         username, first_name, last_name = None, None, None
 
     query = """
-            INSERT INTO daily_slot_tracker (event_id, slot_id, user_id, username, first_name, last_name, log_date, status)
-            VALUES (%s, %s, %s, %s, %s, %s, CURDATE(), %s)
-            ON DUPLICATE KEY UPDATE duplicate_submissions = duplicate_submissions + 1
-        """
+        INSERT INTO daily_slot_tracker (event_id, slot_id, user_id, username, first_name, last_name, log_date, status, points_scored)
+        VALUES (%s, %s, %s, %s, %s, %s, CURDATE(), %s, %s)
+        ON DUPLICATE KEY UPDATE duplicate_submissions = duplicate_submissions + 1
+    """
 
     with get_db_connection() as conn:
         with conn.cursor(dictionary=True) as cursor:
-            cursor.execute(
-                query,
-                (event_id, slot_id, user_id, username, first_name, last_name, status),
-            )
-            # cursor.rowcount == 1 means a new row was inserted.
-            # cursor.rowcount == 2 means an existing row was updated.
+            cursor.execute(query, (event_id, slot_id, user_id, username, first_name, last_name, status, points))
             return cursor.rowcount == 1
 
 
@@ -596,10 +555,10 @@ def get_leaderboard(group_id, limit=10):
     with a net score greater than 0.
     """
     query = """
-            SELECT user_id, username, first_name, current_points, knockout_points, user_day_number,
-                   (current_points - knockout_points) AS net_points
+            SELECT user_id, username, first_name, total_points, knockout_points, user_day_number,
+                   (total_points - knockout_points) AS net_points
             FROM group_members
-            WHERE group_id = %s AND (current_points - knockout_points) > 0
+            WHERE group_id = %s AND (total_points - knockout_points) > 0
             ORDER BY net_points DESC
             LIMIT %s
         """
@@ -607,38 +566,40 @@ def get_leaderboard(group_id, limit=10):
 
 
 def penalize_zero_activity_members(group_id, event_id, points_to_deduct):
-    """Finds members with no points for today and deducts knockout points."""
+    """Finds members with no slot completions for today and deducts knockout points."""
     try:
         query_1 = """
-        SELECT DISTINCT user_id FROM daily_points_log WHERE event_id = %s and log_date = CURDATE()
+            SELECT DISTINCT user_id 
+            FROM daily_slot_tracker 
+            WHERE event_id = %s AND log_date = CURDATE() AND status = 'completed'
         """
         active_members_result = execute_query(query_1, (event_id,), fetch=True)
         active_user_ids = {row["user_id"] for row in active_members_result}
 
-        # get all non-restricted members in the group
+        # Get all non-restricted members in the group.
         query_2 = """
-        SELECT user_id, first_name FROM group_members where group_id = %s AND is_restricted= 0
+            SELECT user_id, first_name 
+            FROM group_members 
+            WHERE group_id = %s AND is_restricted = 0
         """
-        non_restricted_members = execute_query(query_2, (group_id,), fetch=True)
+        all_members = execute_query(query_2, (group_id,), fetch=True)
 
         inactive_members = []
-        for member in non_restricted_members:
+        for member in all_members:
             if member["user_id"] not in active_user_ids:
                 inactive_members.append(member)
 
-        # apply penalty to each and every inactive member per day
+        # Apply a penalty to each inactive member.
         for member in inactive_members:
             user_id = member["user_id"]
-            first_name = member.get(
-                "first_name", member.get("username", f"User_{user_id}")
-            )
+            first_name = member.get("first_name", f"User_{user_id}")
             deduct_knockout_points(group_id, user_id, points_to_deduct)
             logger.info(
                 f"Penalized {first_name} ({user_id}) with {points_to_deduct} knockout points for zero activity today."
             )
         return inactive_members
     except Exception as e:
-        logger.error(f"Error in penalize_zero_activity_members: {e}",exc_info=True)
+        logger.error(f"Error in penalize_zero_activity_members: {e}", exc_info=True)
         return []
 
 

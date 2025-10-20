@@ -149,7 +149,7 @@ async def points(update, context):
     member = db.get_member(group_id, user_id)
 
     if member:
-        earned_points = member.get("current_points", 0)  # Points earned
+        earned_points = member.get("total_points", 0)  # Points earned
         knockout = member.get("knockout_points", 0)  # Points lost
         total_points = earned_points - knockout  # Net points
         day_num = member.get("user_day_number", 1)
@@ -254,7 +254,7 @@ async def test_leaderboard(update, context):
 
         for i, member in enumerate(top_members, 1):
             name = member.get("first_name", member.get("username", "Unknown"))
-            earned = member.get("current_points", 0)
+            earned = member.get("total_points", 0)
             knockout = member.get("knockout_points", 0)
             total = earned - knockout
 
