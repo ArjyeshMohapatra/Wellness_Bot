@@ -115,9 +115,9 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
 
                 # Award points
                 db.add_points(group_id, expected_user_id, points, event_id)
-                db.log_activity(group_id=group_id, user_id=expected_user_id, activity_type="text", slot_name=slot_name,
-                                message_content=text, username=username, first_name=first_name, last_name=last_name,
-                                points_earned=points, is_valid=True)
+                db.log_activity(group_id=group_id, user_id=expected_user_id, activity_type="photo", slot_name=slot_name,
+                                telegram_file_id=photo_file_id, local_file_path=local_path, points_earned=points, is_valid=True,
+                                username=username, first_name=first_name, last_name=last_name)
 
                 if event_id: db.mark_slot_completed(event_id, slot_id, expected_user_id, "completed", points)
 
@@ -169,7 +169,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                 # Award points
                 if points > 0: db.add_points(group_id, expected_user_id, points, event_id)
 
-                db.log_activity(group_id, expected_user_id, slot_name, media_type, message_content=caption, username=username, first_name=first_name,
+                db.log_activity(group_id, expected_user_id, media_type, slot_name, message_content=caption, username=username, first_name=first_name,
                                 last_name=last_name, telegram_file_id=file_id, local_file_path=local_path, points_earned=points, is_valid=True)
 
                 if event_id and points > 0: db.mark_slot_completed(event_id, slot_id, expected_user_id, "completed", points)
@@ -207,7 +207,8 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
             points = slot["slot_points"]
 
             db.add_points(group_id, expected_user_id, points, event_id)
-            db.log_activity(group_id, expected_user_id, slot_name, "text", message_content=text, username=username, first_name=first_name,
+            # THE FIX:
+            db.log_activity(group_id, expected_user_id, "text", slot_name, message_content=text, username=username, first_name=first_name,
                             last_name=last_name, points_earned=points, is_valid=True)
 
             if event_id: db.mark_slot_completed(event_id, slot_id, expected_user_id, "completed", points)
