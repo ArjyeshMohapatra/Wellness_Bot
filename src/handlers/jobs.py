@@ -95,7 +95,7 @@ async def check_and_announce_slots(context: ContextTypes.DEFAULT_TYPE):
                     
                     if ended_slot_id_str and active_event:
                         try:
-                            db.log_missed_slots_for_group(group_id, active_event['event_id'], int(ended_slot_id_str))
+                            db.log_missed_slots(group_id, active_event['event_id'], int(ended_slot_id_str))
                         except Exception as e:
                             logger.error(f"Failed to log missed slots: {e}", exc_info=True)
                             

@@ -671,7 +671,7 @@ def log_missed_slots(group_id, event_id, slot_id):
                     ))
         if missed_members_data:
             insert_query="""
-            INSERT IGNORE INTO dailt_slot_tracker (
+            INSERT IGNORE INTO daily_slot_tracker (
                 event_id, slot_id, user_id, username, first_name, last_name, 
                 log_date, status, points_scored) VALUES (%s, %s, %s, %s, %s, %s, CURDATE(), %s, 0)
             """
