@@ -16,7 +16,6 @@ logging.getLogger("handlers.join_handler").setLevel(logging.DEBUG)
 
 logger = logging.getLogger(__name__)
 
-
 def main():
     """Start the bot."""
     try:
@@ -39,7 +38,7 @@ def main():
         logger.info("All handlers registered")
 
         logger.info("Bot is starting... Press Ctrl+C to stop")
-
+        
         # Run the bot until the user presses Ctrl-C
         application.run_polling(allowed_updates=["message", "chat_member", "callback_query"])
 
