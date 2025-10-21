@@ -88,6 +88,17 @@ async def check_and_announce_slots(context: ContextTypes.DEFAULT_TYPE):
                 # No active slot. Check if there is a pinned message that we need to clean up.
                 pinned_message_id_str = db.get_runtime_state(group_id, "pinned_slot_message_id")
                 if pinned_message_id_str:
+                    
+                    # A slot just ended. Log 'missed' for non-participants.
+                    ended_slot_id_str = db.get_runtime_state(group_id, "pinned_slot_id")
+                    active_event = db.get_active_event(group_id)
+                    
+                    if ended_slot_id_str and active_event:
+                        try:
+                            db.log_missed_slots_for_group(group_id, active_event['event_id'], int(ended_slot_id_str))
+                        except Exception as e:
+                            logger.error(f"Failed to log missed slots: {e}", exc_info=True)
+                            
                     try:
                         await context.bot.delete_message(chat_id=group_id, message_id=int(pinned_message_id_str))
                         logger.info(f"Deleted slot announcement message in group {group_id}")

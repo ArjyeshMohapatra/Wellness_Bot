@@ -640,3 +640,45 @@ def update_admin_status(group_id, admin_user_ids):
     except Exception as e:
         logger.error(f"Failed to synchronize admin status for group {group_id}: {e}", exc_info=True)
         return False
+    
+def log_missed_slots(group_id, event_id, slot_id):
+    """
+    Finds all non-restricted members who did not complete a slot
+    and marks it as 'missed' in the daily_slot_tracker.
+    """
+    try:
+        get_query="""
+        SELECT user_id, username, first_name, last_name FROM group_members WHERE group_id = %s AND is_restricted = 0
+        """
+        non_restricted_members=execute_query(get_query, (group_id,), fetch=True)
+        if not non_restricted_members:
+            return # no active members to log
+        completed_query="""
+        SELECT DISTINCT user_id FROM daily_slot_tracker WHERE event_id = %s AND slot_id = %s AND log_date = CURDATE()
+        """
+        completed_result=execute_query(completed_query, (event_id, slot_id), fetch=True)
+        completed_user_ids={row['user_id'] for row in completed_result}
+        
+        missed_members_data = []
+        for member in non_restricted_members:
+            if member['user_id'] not in completed_user_ids:
+                missed_members_data.append((
+                    event_id, slot_id, 
+                    member['user_id'], 
+                    member.get('username'), 
+                    member.get('first_name'), 
+                    member.get('last_name'), 'missed'
+                    ))
+        if missed_members_data:
+            insert_query="""
+            INSERT IGNORE INTO dailt_slot_tracker (
+                event_id, slot_id, user_id, username, first_name, last_name, 
+                log_date, status, points_scored) VALUES (%s, %s, %s, %s, %s, %s, CURDATE(), %s, 0)
+            """
+            with get_db_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.executemany(insert_query, missed_members_data)
+            
+            logger.info(f"Logged {len(missed_members_data)} 'missed' entries for slot {slot_id} in group {group_id}", exc_info=True)
+    except Exception as e:
+        logger.error(f"Error in log_missed_slots_for_group: {e}", exc_info=True)
