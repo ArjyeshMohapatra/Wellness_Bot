@@ -51,7 +51,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     # Ensure member exists in database
-    member, is_new = db.add_member(group_id, user_id, username, first_name)
+    member, is_new = db.add_member(group_id, user_id, username, first_name, restrict_new=False)
 
     # Update member activity
     db.update_member_activity(group_id, user_id)
@@ -172,7 +172,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     f"Warning {warnings}/2. Using banned word: '{matched_word}'\n",
                 )
 
-                context.job_queue.run_once(warning_msg.delete(), when=5)
+                context.job_queue.run_once(lambda _: warning_msg.delete(), when=5)
 
                 if warnings >= 2:
                     try:
@@ -233,8 +233,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
 
             # Delete warning after 10 seconds
-            context.job_queue.run_once(warning_msg.delete(), when=10)
-
+            context.job_queue.run_once(lambda _: warning_msg.delete(), when=10)
             logger.info(f"Message outside slot from user {user_id} - knockout points deducted")
             return
 

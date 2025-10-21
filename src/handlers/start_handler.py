@@ -91,7 +91,7 @@ async def start(update, context):
                 if success:
                     
                     db.add_member(group_id=chat.id, user_id=user.id, username=user.username, first_name=user.first_name, 
-                                  last_name=user.last_name, is_admin=True)
+                                  last_name=user.last_name, is_admin=True, restrict_new=False)
                     
                     welcome_text = (
                         f"👋 Hello! I'm now managing this group!\n\n"
@@ -137,7 +137,7 @@ async def points(update, context):
     user_id = user.id
 
     # Ensure member exists
-    db.add_member(group_id, user_id, user.username, user.first_name)
+    db.add_member(group_id, user_id, user.username, user.first_name, restrict_new=False)
 
     member = db.get_member(group_id, user_id)
 

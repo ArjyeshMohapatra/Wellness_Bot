@@ -257,7 +257,7 @@ def get_returning_member_info(group_id, user_id):
     result = execute_query(query, (group_id, user_id), fetch=True)
     return result[0] if result else None # Returns {'is_restricted': 0, 'action': 'kicked'} or None
 
-def add_member(group_id, user_id, username=None, first_name=None, last_name=None, is_admin=False):
+def add_member(group_id, user_id, username=None, first_name=None, last_name=None, is_admin=False, restrict_new=True):
     """
     Atomically adds or updates a member using INSERT ... ON DUPLICATE KEY UPDATE.
     Returns the member's data and a boolean indicating if they were newly inserted.
@@ -285,8 +285,8 @@ def add_member(group_id, user_id, username=None, first_name=None, last_name=None
 
             elif last_record is None:
                 # Truly new member
-                apply_restriction = True
-                logger.info(f"🔒 DB: New member {user_id}. Applying restriction.")
+                apply_restriction = restrict_new
+                logger.info(f"🔒 DB: New member {user_id}. Applying restriction." if restrict_new else f"👋 DB: Existing member {user_id} added without restriction.")
 
             elif last_record['action'] in ['kicked', 'banned']:
                 # Kicked or banned members are ALWAYS re-restricted
