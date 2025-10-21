@@ -205,13 +205,13 @@ def create_default_event_and_slots(group_id):
 
         slot_keywords = {
             "Good Morning": ["good morning", "morning"],
-            "Workout": [],
+            "Workout": ["workout", "running"],
             "Breakfast": ["breakfast", "morning meal"],
-            "Morning Water Intake": [],
+            "Morning Water Intake": ["100ml", "200ml", "300ml", "400ml", "500ml", "600ml", "700ml", "800ml", "900ml", "1l", "2l", "3l", "4l", "5l"],
             "Lunch": ["lunch", "afternoon meal"],
-            "Afternoon Water Intake": [],
+            "Afternoon Water Intake": ["100ml", "200ml", "300ml", "400ml", "500ml", "600ml", "700ml", "800ml", "900ml", "1l", "2l", "3l", "4l", "5l"],
             "Evening Snacks": ["snacks", "evening snack"],
-            "Evening Water Intake": [],
+            "Evening Water Intake": ["100ml", "200ml", "300ml", "400ml", "500ml", "600ml", "700ml", "800ml", "900ml", "1l", "2l", "3l", "4l", "5l"],
             "Dinner": ["dinner", "night meal"],
         }
 
