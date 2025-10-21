@@ -77,6 +77,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             # Refresh member data to reflect the change
             member = db.get_member(group_id, user_id)
             logger.info(f"Lifted expired restriction for user {user_id} in group {group_id}.")
+        else:
+            logger.info(f"Ignoring message from still-restricted user {user_id}.")
+            return
 
     # Also check if user is currently a Telegram admin/creator
     is_telegram_admin = member and member.get("is_admin", 0) == 1

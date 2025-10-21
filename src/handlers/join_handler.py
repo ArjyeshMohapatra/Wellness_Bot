@@ -5,7 +5,6 @@ import time
 from datetime import datetime, timedelta
 from pytz import timezone
 from bot_utils import safe_send_message
-
 from config import NEW_MEMBER_RESTRICTION_MINUTES
 from services import database_service as db
 from db import execute_query
@@ -26,9 +25,7 @@ async def track_chats(update, context):
         try:
             admins = await context.bot.get_chat_administrators(group_id)
             owner = next((admin for admin in admins if admin.status == "creator"), None)
-            admin_user_id = (
-                owner.user.id if owner else admins[0].user.id if admins else None
-            )
+            admin_user_id = (owner.user.id if owner else admins[0].user.id if admins else None)
 
             if admin_user_id:
                 bot_member = await context.bot.get_chat_member(group_id, context.bot.id)
@@ -57,15 +54,13 @@ async def track_chats(update, context):
                         )
 
                         try:
-                            await context.bot.pin_chat_message(
-                                group_id, welcome_msg.message_id
-                            )
+                            await context.bot.pin_chat_message(group_id, welcome_msg.message_id)
                         except Exception as pin_error:
-                            logger.warning(f"Could not pin message: {pin_error}")
+                            logger.warning(f"Could not pin message: {pin_error}", exc_info=True)
 
                         logger.info(f"Group {group_id} fully auto-configured")
                     else:
-                        logger.error(f"Failed to create config for group {group_id}")
+                        logger.error(f"Failed to create config for group {group_id}", exc_info=True)
 
                 else:
                     await safe_send_message(
@@ -74,13 +69,13 @@ async def track_chats(update, context):
                         text="⚠️ I need admin rights to function properly!\n"
                         "Please make me an admin first.",
                     )
-                    logger.warning(f"Bot is not admin in group {group_id}")
+                    logger.warning(f"Bot is not admin in group {group_id}", exc_info=True)
 
         except Exception as e:
             logger.error(f"Error setting up group {group_id}: {e}",exc_info=True)
 
     elif was_member and not is_member:
-        logger.info(f"Bot removed from group {group_id}")
+        logger.info(f"Bot removed from group {group_id}",exc_info=True)
 
 
 def extract_status_change(chat_member_update):
@@ -93,13 +88,9 @@ def extract_status_change(chat_member_update):
     new = chat_member_update.new_chat_member
 
     def in_chat(cm):
-        st = (
-            cm.status
-        )  # 'creator','administrator','member','restricted','left','kicked'
-        if st in ("creator", "administrator", "member"):
-            return True
-        if st == "restricted":
-            return bool(getattr(cm, "is_member", False))
+        st = cm.status  # 'creator','administrator','member','restricted','left','kicked'
+        if st in ("creator", "administrator", "member"): return True
+        if st == "restricted": return bool(getattr(cm, "is_member", False))
         return False  # left or kicked
 
     return in_chat(old), in_chat(new)
@@ -117,8 +108,7 @@ async def track_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
     was_member, is_member = extract_status_change(update.chat_member)
     
     user = update.chat_member.new_chat_member.user
-    if user.is_bot:
-        return
+    if user.is_bot: return
     
     chat = update.effective_chat
     group_id = chat.id
@@ -130,8 +120,7 @@ async def track_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # if an existing member leaves or gets kicked
     if was_member and not is_member:
         action = update.chat_member.new_chat_member.status
-        if action not in ['left', 'kicked', 'banned']:
-            action = 'left' 
+        if action not in ['left', 'kicked', 'banned']: action = 'left' 
 
         logger.info(f"👤 Member {action}: {user_id} ({first_name} @{username}) from group {group_id}")
 
@@ -149,58 +138,46 @@ async def track_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     group_config = db.get_group_config(group_id)
     if not group_config:
-        logger.warning(f"Group {group_id} not configured - skipping member {user_id}")
+        logger.warning(f"Group {group_id} not configured - skipping member {user_id}", exc_info=True)
         return
 
     try:
         # determines if user is Telegram admin/owner; admins should not be restricted
-        chat_member = await context.bot.get_chat_member(
-            chat_id=group_id, user_id=user_id
-        )
+        chat_member = await context.bot.get_chat_member(chat_id=group_id, user_id=user_id)
         is_admin = chat_member.status in ["administrator", "creator"]
 
-        member, is_new = db.add_member(
-            group_id=group_id,
-            user_id=user_id,
-            username=username,
-            first_name=first_name,
-            last_name=last_name,
-            is_admin=is_admin,
-        )
+        member, is_new = db.add_member(group_id=group_id, user_id=user_id, username=username, first_name=first_name, last_name=last_name, is_admin=is_admin)
         if not member:
-            logger.error(
-                f"CRITICAL: Failed to add/update member {user_id} in DB. Aborting join flow."
-            )
+            logger.error(f"CRITICAL: Failed to add/update member {user_id} in DB. Aborting join flow.",exc_info=True)
             return
 
         welcome_message = group_config.get("welcome_message", "Welcome!")
         welcome_text = f"Hi {first_name}, {welcome_message}"
-        if is_admin:
-            welcome_text += "\n\nAs an admin, you have full access immediately! 💼"
-
-        await safe_send_message(context=context, chat_id=group_id, text=welcome_text)
-        logger.info(f"✅ Welcome message sent to {user_id} in group {group_id}")
+        if is_admin: welcome_text += "\n\nAs an admin, you have full access immediately! 💼"
+        
+        reply_markup=ReplyKeyboardMarkup(
+            [["My Score 💯", "Time Sheet 📅"]],
+            resize_keyboard=True,
+            one_time_keyboard=False
+        )
+        
+        await safe_send_message(context=context, chat_id=group_id, text=welcome_text, reply_markup=reply_markup)
+        logger.info(f"✅ Welcome message sent to {user_id} in group {group_id}", exc_info=True)
 
         restriction_until_value = member.get("restriction_until")
-        needs_restrict = (
-            member.get("is_restricted") and restriction_until_value and not is_admin
-        )
+        needs_restrict = (member.get("is_restricted") and restriction_until_value and not is_admin)
 
         if needs_restrict:
             # Parses restriction_until (stored as naive IST datetime or string "%Y-%m-%d %H:%M:%S")
             if isinstance(restriction_until_value, str):
-                restriction_until_dt_ist = datetime.strptime(
-                    restriction_until_value, "%Y-%m-%d %H:%M:%S"
-                )
+                restriction_until_dt_ist = datetime.strptime(restriction_until_value, "%Y-%m-%d %H:%M:%S")
             else:
                 restriction_until_dt_ist = restriction_until_value
 
             # Converts IST (UTC+5:30) naive to UTC naive for Telegram until_date
             utc_restriction = restriction_until_dt_ist - timedelta(hours=5, minutes=30)
 
-            logger.debug(
-                f"[DEBUG] Restricting user {user_id} in group {group_id} until {utc_restriction} UTC"
-            )
+            logger.debug(f"[DEBUG] Restricting user {user_id} in group {group_id} until {utc_restriction} UTC",exc_info=True)
             try:
                 await context.bot.restrict_chat_member(
                     chat_id=group_id,
@@ -208,13 +185,9 @@ async def track_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     permissions=ChatPermissions(can_send_messages=False),
                     until_date=utc_restriction,
                 )
-                logger.info(
-                    f"🔒 Applied restriction for {user_id} until {utc_restriction} UTC"
-                )
+                logger.info(f"🔒 Applied restriction for {user_id} until {utc_restriction} UTC", exc_info=True)
             except Exception as restrict_e:
-                logger.warning(
-                    f"⚠️ Could not restrict {user_id}. Check bot admin permissions. Error: {restrict_e}"
-                )
+                logger.warning(f"⚠️ Could not restrict {user_id}. Check bot admin permissions. Error: {restrict_e}",exc_info=True)
 
     except Exception as e:
         logger.error(f"❌ CRITICAL ERROR in track_members for {user_id}: {e}",exc_info=True)

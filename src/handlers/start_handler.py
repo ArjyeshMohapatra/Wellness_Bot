@@ -37,9 +37,7 @@ async def start(update, context):
 
         # Only allow admins to use /start in groups
         if not is_admin:
-            logger.info(
-                f"Non-admin user {user.id} tried to use /start in group {chat.id}"
-            )
+            logger.info(f"Non-admin user {user.id} tried to use /start in group {chat.id}",exc_info=True)
             return  # Silently ignore
 
         # Admin-only code below:
@@ -111,14 +109,9 @@ async def start(update, context):
                     )
 
                     try:
-                        welcome_msg = await safe_send_message(
-                            context=context, 
-                            chat_id=group_id, text=welcome_text, parse_mode="Markdown"
-                        )
+                        welcome_msg = await safe_send_message(context=context, chat_id=group_id, text=welcome_text, parse_mode="Markdown")
                         try:
-                            await context.bot.pin_chat_message(
-                                group_id, welcome_msg.message_id
-                            )
+                            await context.bot.pin_chat_message(group_id, welcome_msg.message_id)
                         except Exception as pin_error:
                             logger.warning(f"Could not pin message: {pin_error}")
                     except Exception as send_error:
@@ -126,7 +119,7 @@ async def start(update, context):
 
                     await safe_reply_text(update, context, text = "✅ Group auto-configured. Check the pinned welcome message for details.")
                 else:
-                    await safe_reply_text(update, context, text = "❌ Failed to auto-configure the group. Please check bot permissions.")
+                    await safe_reply_text(update, context, text = "❌ Failed to auto-configure the group. Please check bot permissions.", reply_markup=reply_markup)
             else:
                 await safe_reply_text(update, context, text = f"⚠️ Group not configured yet! I can auto-configure if I'm an admin.\n\n"
                                       f"Please make me an admin and run /start again.")
@@ -149,20 +142,12 @@ async def points(update, context):
     member = db.get_member(group_id, user_id)
 
     if member:
-        earned_points = member.get("total_points", 0)  # Points earned
-        knockout = member.get("knockout_points", 0)  # Points lost
-        total_points = earned_points - knockout  # Net points
+        earned_points = member.get("total_points", 0)
         day_num = member.get("user_day_number", 1)
 
         message = f"🎯 {user.first_name}, your stats:\n\n"
         message += f"✅ Earned Points: {earned_points}\n"
-        message += f"❌ Knockout Points: {knockout}\n"
-        message += f"━━━━━━━━━━━━━━━━\n"
-        message += f"💰 **Total Points: {total_points}**\n"
         message += f"📅 Day: {day_num}/7\n"
-
-        if knockout > 0:
-            message += f"\n⚠️ You lost {knockout} points due to violations!"
 
         await safe_reply_text(update, context, text = message, parse_mode="Markdown")
     else:

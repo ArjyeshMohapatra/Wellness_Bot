@@ -17,11 +17,11 @@ async def safe_send_message(context: ContextTypes.DEFAULT_TYPE, chat_id: int, te
             return message
         except RetryAfter as e:
             logger.warning("Rate limit exceeded for chat %s. Waiting for %s seconds. Attempt %s/%s.", chat_id, e.retry_after, attempt + 1, max_retries,exc_info=True)
-            message = await asyncio.sleep(e.retry_after)
+            await asyncio.sleep(e.retry_after)
         except TimedOut:
             wait_time = 5 * (attempt + 1)
             logger.warning("Telegram API timed out for chat %s. Retrying in %s seconds. Attempt %s/%s.", chat_id, wait_time, attempt + 1, max_retries,exc_info=True)
-            message = await asyncio.sleep(wait_time)
+            await asyncio.sleep(wait_time)
         except Exception as e:
             logger.error("An unexpected error occurred while sending message to chat %s: %s", chat_id, e, exc_info=True)
             return None
@@ -37,10 +37,10 @@ async def safe_reply_text(update: Update, context: ContextTypes.DEFAULT_TYPE, te
             return message
         except RetryAfter as e:
             logger.warning("Rate limit on reply. Waiting %s s.", e.retry_after,exc_info=True)
-            message = await asyncio.sleep(e.retry_after)
+            await asyncio.sleep(e.retry_after)
         except TimedOut:
             logger.warning("Timeout on reply. Retrying...",exc_info=True)
-            message = await asyncio.sleep(5 * (attempt + 1))
+            await asyncio.sleep(5 * (attempt + 1))
         except Exception as e:
             logger.error("Failed to send reply: %s", e, exc_info=True)
             return None
@@ -56,10 +56,10 @@ async def safe_edit_message_text(context: ContextTypes.DEFAULT_TYPE, chat_id: in
             return message
         except RetryAfter as e:
             logger.warning("Rate limit on edit. Waiting %s s.", e.retry_after,exc_info=True)
-            message = await asyncio.sleep(e.retry_after)
+            await asyncio.sleep(e.retry_after)
         except TimedOut:
             logger.warning("Timeout on edit. Retrying...",exc_info=True)
-            message = await asyncio.sleep(5 * (attempt + 1))
+            await asyncio.sleep(5 * (attempt + 1))
         except Exception as e:
             logger.error("Failed to edit message: %s", e, exc_info=True)
             return None
@@ -81,10 +81,10 @@ async def safe_callback_reply_text(query: "CallbackQuery", context: ContextTypes
             return message
         except RetryAfter as e:
             logger.warning("Rate limit on callback reply. Waiting %s s.", e.retry_after)
-            message = await asyncio.sleep(e.retry_after)
+            await asyncio.sleep(e.retry_after)
         except TimedOut:
             logger.warning("Timeout on callback reply. Retrying...")
-            message = await asyncio.sleep(5 * (attempt + 1))
+            await asyncio.sleep(5 * (attempt + 1))
         except Exception as e:
             logger.error("Failed to send callback reply: %s", e, exc_info=True)
             return None

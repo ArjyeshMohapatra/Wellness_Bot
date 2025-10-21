@@ -215,16 +215,7 @@ def create_default_event_and_slots(group_id):
             "Dinner": ["dinner", "night meal"],
         }
 
-        for (
-            slot_name,
-            start_time,
-            end_time,
-            slot_type,
-            slot_points,
-            initial_msg,
-            response_pos,
-            response_clar,
-        ) in slots:
+        for (slot_name, start_time, end_time, slot_type, slot_points, initial_msg, response_pos, response_clar) in slots:
             is_mandatory = 0 if slot_name == "Evening Snacks" else 1
 
             query = """
@@ -234,22 +225,8 @@ def create_default_event_and_slots(group_id):
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
             slot_id = execute_query(
-                query,
-                (
-                    group_id,
-                    event_id,
-                    slot_name,
-                    start_time,
-                    end_time,
-                    initial_msg,
-                    response_pos,
-                    response_clar,
-                    None,
-                    slot_type,
-                    slot_points,
-                    is_mandatory,
-                ),
-            )
+                query, (group_id, event_id, slot_name, start_time, end_time, initial_msg, response_pos, response_clar, None, slot_type, slot_points, is_mandatory)
+                )
 
             # Add keywords for this slot
             if slot_name in slot_keywords:
