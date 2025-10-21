@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS member_history (
     user_day_number INT,
     cycle_start_date DATE,
     cycle_end_date DATE,
+    is_restricted TINYINT(1) DEFAULT 0,
     joined_at TIMESTAMP NULL,
     last_active_timestamp TIMESTAMP NULL,
     action ENUM('joined', 'left', 'kicked', 'banned') NOT NULL,

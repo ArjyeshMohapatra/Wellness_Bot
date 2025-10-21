@@ -489,7 +489,7 @@ def setup_jobs(application):
     scheduler.add_job(check_low_points, trigger='cron', hour=23, minute=0, timezone=ist, args=[application])
 
     # Post daily leaderboard at 22:00 (10:00 PM)
-    scheduler.add_job(post_daily_leaderboard, trigger='cron', hour=18, minute=40, timezone=ist, args=[application])
+    scheduler.add_job(post_daily_leaderboard, trigger='cron', hour=14, minute=15, timezone=ist, args=[application])
 
     # Checks daily for zero activity users after leaderboard gets posted
     scheduler.add_job(check_daily_participation, trigger='cron', hour=23, minute=30, timezone=ist, args=[application])

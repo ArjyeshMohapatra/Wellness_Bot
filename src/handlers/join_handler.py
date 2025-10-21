@@ -119,20 +119,33 @@ async def track_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.chat_member.new_chat_member.user
     if user.is_bot:
         return
-
-    if not (not was_member and is_member):
-        return
-
+    
     chat = update.effective_chat
     group_id = chat.id
     user_id = user.id
     first_name = user.first_name or ""
     username = user.username or ""
     last_name= user.last_name or ""
+    
+    # if an existing member leaves or gets kicked
+    if was_member and not is_member:
+        action = update.chat_member.new_chat_member.status
+        if action not in ['left', 'kicked', 'banned']:
+            action = 'left' 
 
-    logger.info(
-        f"👤 New member joining: {user_id} ({first_name} @{username}) in group {group_id}"
-    )
+        logger.info(f"👤 Member {action}: {user_id} ({first_name} @{username}) from group {group_id}")
+
+        db.remove_member(group_id, user_id, action)
+        logger.info(f"Archived '{action}' member {user_id} in member_history.")
+        return
+
+    # if a new member joins so lets continue with rest of the function
+    elif not was_member and is_member:
+        pass
+
+    # if any other case rather than if and elif
+    else:
+        return
 
     group_config = db.get_group_config(group_id)
     if not group_config:

@@ -113,8 +113,8 @@ def create_default_event_and_slots(group_id):
         slots = [
             (
                 "Good Morning",
-                "17:10:00",
-                "17:15:00",
+                "12:45:00",
+                "12:50:00",
                 "media",
                 10,
                 "Its Good morning everyone! Share your morning photo 🌅",
@@ -123,8 +123,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Workout",
-                "17:20:00",
-                "17:25:00",
+                "12:55:00",
+                "13:00:00",
                 "media",
                 10,
                 "Its Workout time everyone! Post your exercise photo 💪",
@@ -133,8 +133,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Breakfast",
-                "17:30:00",
-                "17:35:00",
+                "13:05:00",
+                "13:10:00",
                 "media",
                 10,
                 "Its Breakfast time everyone! Share your delicious & healthy meal 🍳",
@@ -143,8 +143,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Morning Water Intake",
-                "17:40:00",
-                "17:45:00",
+                "13:15:00",
+                "13:20:00",
                 "button",
                 10,
                 "Lets checkout your morning hydration everyone! How much water did everyone drink ? 💧",
@@ -153,8 +153,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Lunch",
-                "17:50:00",
-                "17:55:00",
+                "13:25:00",
+                "13:30:00",
                 "media",
                 10,
                 "Its Lunch time everyone! Post your delicious meal 🍱",
@@ -163,8 +163,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Afternoon Water Intake",
-                "18:00:00",
-                "18:05:00",
+                "13:35:00",
+                "13:40:00",
                 "button",
                 10,
                 "Lets checkout your afternoon hydration everyone! How much water did everyone drink ? 💧",
@@ -173,8 +173,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Evening Snacks",
-                "18:10:00",
-                "18:15:00",
+                "13:45:00",
+                "13:50:00",
                 "media",
                 10,
                 "Evening snack time! Share your healthy snack 🍎",
@@ -183,8 +183,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Evening Water intake",
-                "18:20:00",
-                "18:25:00",
+                "13:55:00",
+                "14:00:00",
                 "button",
                 10,
                 "Lets checkout how hydrated are you in evening! Track your water 💧",
@@ -193,8 +193,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Dinner",
-                "18:30:00",
-                "18:35:00",
+                "14:05:00",
+                "14:10:00",
                 "media",
                 10,
                 "Its Dinner time everyone! Share your healthy meal 🍽️",
@@ -267,6 +267,18 @@ def create_default_event_and_slots(group_id):
         logger.error(f"Error creating default slots: {e}",exc_info=True)
         return False
 
+# gets info regarding members who joins back group
+def get_returning_member_info(group_id, user_id):
+    """
+    Checks if a user is in the history.
+    Returns their most recent record (as a dict) if found, otherwise None.
+    """
+    # gets most recent history about an user
+    query="""
+    SELECT is_restricted, action FROM member_history WHERE group_id = %s AND user_id = %s ORDER BY action_at DESC LIMIT 1
+    """
+    result = execute_query(query, (group_id, user_id), fetch=True)
+    return result[0] if result else None # Returns {'is_restricted': 0, 'action': 'kicked'} or None
 
 def add_member(group_id, user_id, username=None, first_name=None, last_name=None, is_admin=False):
     """
@@ -284,17 +296,46 @@ def add_member(group_id, user_id, username=None, first_name=None, last_name=None
         cycle_end_date = None
 
         if is_new:
+            # Check if this "new" member is actually a returning member
+            last_record = get_returning_member_info(group_id, user_id)
+
+            apply_restriction = False
+
             if is_admin:
-                # Admins are not restricted, so their cycle starts immediately.
-                cycle_start_date = datetime.now().date()
-                cycle_end_date = cycle_start_date + timedelta(days=7)
+                # Admins are never restricted
+                apply_restriction = False
+                logger.info(f"💼 DB: New admin {user_id} joined. No restriction.")
+
+            elif last_record is None:
+                # Truly new member
+                apply_restriction = True
+                logger.info(f"🔒 DB: New member {user_id}. Applying restriction.")
+
+            elif last_record['action'] in ['kicked', 'banned']:
+                # Kicked or banned members are ALWAYS re-restricted
+                apply_restriction = True
+                logger.info(f"🔒 DB: Returning member {user_id} (was {last_record['action']}). Applying restriction.")
+
+            elif last_record['action'] == 'left' and last_record['is_restricted'] == 1:
+                # Member left while they were restricted
+                apply_restriction = True
+                logger.info(f"🔒 DB: Returning member {user_id} (left while restricted). Applying restriction.")
+
             else:
-                # Regular new members are restricted, so their cycle dates are left NULL for now.
+                # All other cases e.g., active member left and rejoined
+                apply_restriction = False
+                logger.info(f"👋 DB: Returning member {user_id} (left while active). No restriction.")
+
+            if apply_restriction:
                 is_restricted = 1
                 restriction_until = get_restriction_until_time(group_id)
                 if restriction_until is not None:
                     restriction_until = restriction_until.strftime("%Y-%m-%d %H:%M:%S")
-                logger.info(f"🔒 DB: New member {user_id} will be restricted until {restriction_until} (IST). Cycle will start after restriction lifts.")
+                logger.info(f"Restriction for {user_id} will be until {restriction_until} (IST).")
+            else:
+                # Not restricted, set cycle dates
+                cycle_start_date = datetime.now().date()
+                cycle_end_date = cycle_start_date + timedelta(days=7)
 
         # handles both INSERT for new members and UPDATE for existing ones
         query_1 = """
@@ -413,18 +454,18 @@ def remove_member(group_id, user_id, action="kicked"):
 
         # Archive all relevant data to the history table
         archive_query = """
-            INSERT INTO member_history (
-                group_id, user_id, username, first_name, last_name,
-                total_points, knockout_points, general_warnings, banned_word_count,
-                user_day_number, cycle_start_date, cycle_end_date, joined_at, 
-                last_active_timestamp, action
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO member_history (
+            group_id, user_id, username, first_name, last_name,
+            total_points, knockout_points, general_warnings, banned_word_count,
+            user_day_number, cycle_start_date, cycle_end_date, is_restricted, joined_at, 
+            last_active_timestamp, action
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         execute_query(archive_query, (
-            member['group_id'], member['user_id'], member.get('username'), member.get('first_name'), member.get('last_name'),
-            member.get('total_points'), member.get('knockout_points'), member.get('general_warnings'), member.get('banned_word_count'),
-            member.get('user_day_number'), member.get('cycle_start_date'), member.get('cycle_end_date'), member.get('joined_at'),
-            member.get('last_active_timestamp'), action
+        member['group_id'], member['user_id'], member.get('username'), member.get('first_name'), member.get('last_name'),
+        member.get('total_points'), member.get('knockout_points'), member.get('general_warnings'), member.get('banned_word_count'),
+        member.get('user_day_number'), member.get('cycle_start_date'), member.get('cycle_end_date'), member.get('is_restricted', 0), 
+        member.get('joined_at'), member.get('last_active_timestamp'), action
         ))
 
         # Finally, delete the member from the main table
