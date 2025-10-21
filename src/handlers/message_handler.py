@@ -9,7 +9,6 @@ from services.file_storage import FileStorage
 import config
 from handlers.start_handler import points, schedule
 from db import execute_query
-import asyncio
 from bot_utils import safe_send_message
 
 logger = logging.getLogger(__name__)
@@ -170,7 +169,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     f"Warning {warnings}/2. Using banned word: '{matched_word}'\n",
                 )
 
-                context.job_queue.run_once(lambda ctx: warning_msg.delete(), when=5)
+                context.job_queue.run_once(warning_msg.delete(), when=5)
 
                 if warnings >= 2:
                     try:
@@ -231,7 +230,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
 
             # Delete warning after 10 seconds
-            context.job_queue.run_once(lambda ctx: warning_msg.delete(), when=10)
+            context.job_queue.run_once(warning_msg.delete(), when=10)
 
             logger.info(f"Message outside slot from user {user_id} - knockout points deducted")
             return
@@ -259,8 +258,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 chat_id=group_id,
                 text=f"✅ {first_name}, you've already completed this slot today!",
             )
-            # This check is now self-contained and only handles duplicates.
-            context.job_queue.run_once(lambda ctx: info_msg.delete() if info_msg else None, when=5)
+            
+            async def delete_info_msg(context):
+                if info_msg:
+                    await info_msg.delete()
+            context.job_queue.run_once(delete_info_msg,when=5)
             return
         except Exception as e:
             logger.error(f"Error handling duplicate submission: {e}", exc_info=True)

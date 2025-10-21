@@ -12,7 +12,7 @@ def setup_handlers(application):
     # Command handlers
     application.add_handler(start_handler)
     application.add_handler(points_handler)
-    # leaderboard_handler removed - now posts automatically at 10 PM daily
+    # leaderboard_handler removed - now posts automatically at 10 PM dailyz
     application.add_handler(schedule_handler)
     application.add_handler(help_handler)
     application.add_handler(test_leaderboard_handler)  # Admin-only test command

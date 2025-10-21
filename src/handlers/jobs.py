@@ -264,7 +264,7 @@ async def check_mid_slot_warnings(context: ContextTypes.DEFAULT_TYPE):
                 if hasattr(end_time, "total_seconds"):
                     end_time = (datetime.min + end_time).time()
 
-                now = datetime.now().time()
+                now = datetime.now(ist).time()
                 end_datetime = datetime.combine(datetime.today(), end_time)
                 reminder_datetime = end_datetime - timedelta(minutes=10)
                 reminder_time = reminder_datetime.time()
@@ -457,29 +457,30 @@ async def sync_admin_status(context: ContextTypes.DEFAULT_TYPE):
 def setup_jobs(application):
     """Setup periodic jobs."""
     job_queue = application.job_queue
+    scheduler = application.job_queue.scheduler
 
     # Check and announce slots every minute
     job_queue.run_repeating(check_and_announce_slots, interval=60, first=0)
 
     # Check mid-slot warnings every minute
     job_queue.run_repeating(check_mid_slot_warnings, interval=60, first=30)
-
-    # Check inactive users once daily at 22:00 (10 PM)
-    job_queue.run_daily(check_inactive_users, time=time(hour=22, minute=0))
-
-    # Check user day cycles daily at 23:15 (just before first slot)
-    job_queue.run_daily(check_user_day_cycles, time=time(hour=9, minute=30))
-
-    # Check low-point users daily at END OF DAY (23:00 - 11 PM)
-    job_queue.run_daily(check_low_points, time=time(hour=23, minute=0))
-
-    # Post daily leaderboard at 22:00 (10:00 PM)
-    job_queue.run_daily(post_daily_leaderboard, time=time(hour=18, minute=40))
-    
-    # Checks daily for zero activity users after leaderboard gets posted
-    job_queue.run_daily(check_daily_participation, time=time(hour=23,minute=30))
     
     # Runs 10s after startup, then hourly
     job_queue.run_repeating(sync_admin_status, interval=3600, first=10)
 
+    # Check inactive users once daily at 22:00 (10 PM)
+    scheduler.add_job(check_inactive_users, trigger='cron', hour=22, minute=0, timezone=ist, args=[application])
+
+    # Check user day cycles daily at 23:15 (just before first slot)
+    scheduler.add_job(check_user_day_cycles, trigger='cron', hour=9, minute=30, timezone=ist, args=[application])
+
+    # Check low-point users daily at END OF DAY (23:00 - 11 PM)
+    scheduler.add_job(check_low_points, trigger='cron', hour=23, minute=0, timezone=ist, args=[application])
+
+    # Post daily leaderboard at 22:00 (10:00 PM)
+    scheduler.add_job(post_daily_leaderboard, trigger='cron', hour=18, minute=40, timezone=ist, args=[application])
+
+    # Checks daily for zero activity users after leaderboard gets posted
+    scheduler.add_job(check_daily_participation, trigger='cron', hour=23, minute=30, timezone=ist, args=[application])
+    
     logger.info("Scheduled jobs setup completed")
