@@ -340,8 +340,7 @@ def add_member(group_id, user_id, username=None, first_name=None, last_name=None
                if not cycle_start_date:
                     cycle_start_date = datetime.now().date()
                     cycle_end_date = cycle_start_date + timedelta(days=7)
-
-        # handles both INSERT for new members and UPDATE for existing ones
+                    
         query_1 = """
             INSERT INTO group_members (
                 user_id, group_id, username, first_name, last_name, is_admin, 
@@ -357,15 +356,8 @@ def add_member(group_id, user_id, username=None, first_name=None, last_name=None
                 is_admin = VALUES(is_admin),
                 last_active_timestamp = NOW()
         """
-        execute_query(query_1, (
-            user_id, group_id, username, first_name, last_name, 1 if is_admin else 0, 
-            is_restricted, restriction_until, cycle_start_date, cycle_end_date,
-            total_points, knockout_points, general_warnings, banned_word_count, user_day_number
-        ))
         
-        # If member is new, also log to member_history table
-        if is_new:
-            query_2 = """
+        query_2 = """
                 INSERT INTO member_history (
                     group_id, user_id, username, first_name, last_name, 
                     total_points, knockout_points, general_warnings, banned_word_count,
@@ -373,12 +365,24 @@ def add_member(group_id, user_id, username=None, first_name=None, last_name=None
                     last_active_timestamp, action
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW(), 'joined')
             """
-            execute_query(query_2, (
-                group_id, user_id, username, first_name, last_name, 
-                total_points, knockout_points, general_warnings, banned_word_count,
-                user_day_number, cycle_start_date, cycle_end_date
-            ))
-            logger.debug(f"[DEBUG] Complete 'joined' record created for new user {user_id}")
+                   
+        with get_db_connection() as conn:
+            with conn.cursor(dictionary=True) as cursor:
+                # handles both INSERT for new members and UPDATE for existing ones
+                cursor.execute(query_1, (
+                    user_id, group_id, username, first_name, last_name, 1 if is_admin else 0, 
+                    is_restricted, restriction_until, cycle_start_date, cycle_end_date,
+                    total_points, knockout_points, general_warnings, banned_word_count, user_day_number
+                ))
+                
+                # If member is new, also log to member_history table
+                if is_new:
+                    cursor.execute(query_2, (
+                        group_id, user_id, username, first_name, last_name, 
+                        total_points, knockout_points, general_warnings, banned_word_count,
+                        user_day_number, cycle_start_date, cycle_end_date
+                    ))
+                    logger.debug(f"[DEBUG] Complete 'joined' record created for new user {user_id}")
         member_data = get_member(group_id, user_id)
         return member_data, is_new
 
