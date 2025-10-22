@@ -64,14 +64,14 @@ async def check_and_announce_slots(context: ContextTypes.DEFAULT_TYPE):
                                 slot_msg = await context.bot.send_photo(chat_id=group_id, photo=photo, caption=message)
                         else:
                             slot_msg = await safe_send_message(context=context, chat_id=group_id, text=message)
-
-                    # Unpin previous messages
+                    
+                    # Unpin all pinned messages        
                     try:
                         await context.bot.unpin_all_chat_messages(group_id)
                         logger.info(f"Unpinned previous messages in group {group_id}")
                     except Exception as unpin_error:
                         logger.warning(f"Could not unpin previous messages: {unpin_error}")
-
+                    
                     # Pin the new slot announcement
                     try:
                         await context.bot.pin_chat_message(group_id, slot_msg.message_id)
@@ -100,10 +100,15 @@ async def check_and_announce_slots(context: ContextTypes.DEFAULT_TYPE):
                             logger.error(f"Failed to log missed slots: {e}", exc_info=True)
                             
                     try:
+                        # Unpin all messages first
+                        await context.bot.unpin_all_chat_messages(group_id)
+                        logger.info(f"Unpinned all messages in group {group_id} after slot end")
+                        
+                        # Then delete the specific slot message
                         await context.bot.delete_message(chat_id=group_id, message_id=int(pinned_message_id_str))
-                        logger.info(f"Deleted slot announcement message in group {group_id}")
+                        logger.info(f"Deleted slot announcement message {pinned_message_id_str} in group {group_id}")
                     except Exception as e:
-                        logger.warning(f"Could not delete slot message: {e}",exc_info=True)
+                        logger.warning(f"Could not unpin/delete slot message: {e}",exc_info=True)
                     
                     # Clear the state from the database since there's no active slot
                     db.set_runtime_state(group_id, "pinned_slot_id", None)
@@ -399,7 +404,7 @@ async def post_daily_leaderboard(context: ContextTypes.DEFAULT_TYPE):
             top_members = db.get_leaderboard(group_id, 10)
 
             if top_members:
-                message = "🏆 **Leaderboard - Top 10**\n\n"
+                message = "🏆 Leaderboard - Top 10\n\n"
 
                 for i, member in enumerate(top_members, 1):
                     name = member.get("first_name", member.get("username", "Unknown"))
@@ -412,14 +417,20 @@ async def post_daily_leaderboard(context: ContextTypes.DEFAULT_TYPE):
                     elif i == 2: medal = "🥈"
                     elif i == 3: medal = "🥉"
 
-                    message += f"{medal} {i}. {name} :\n{total} points"
-                    if knockout > 0: message += f" ({earned} earned - {knockout} lost)"
+                    message += f"{medal} {i}. {name} : {total} pts\n"
+                    if knockout > 0: message += f" ({earned} earned - {knockout} lost)\n"
                     message += "\n"
 
                 message += "\n📅 Great job everyone! See you tomorrow! 🌟"
 
                 await safe_send_message(context=context, chat_id=group_id, text=message)
                 logger.info(f"Posted daily leaderboard for group {group_id}")
+                
+                try:
+                    await context.bot.pin_chat_message(group_id, message.message_id)
+                    logger.info(f"Pinned Leaderboard announcement in group {group_id}")
+                except Exception as pin_error:
+                    logger.warning(f"Could not pin Leaderboard announcement: {pin_error}", exc_info=True)
 
     except Exception as e:
         logger.error(f"Error in post_daily_leaderboard: {e}",exc_info=True)
@@ -480,18 +491,18 @@ def setup_jobs(application):
     job_queue.run_repeating(sync_admin_status, interval=3600, first=10)
 
     # Check inactive users once daily at 22:00 (10 PM)
-    scheduler.add_job(check_inactive_users, trigger='cron', hour=22, minute=0, timezone=ist, args=[application])
+    scheduler.add_job(check_inactive_users, trigger='cron', hour=12, minute=20, timezone=ist, args=[application])
 
     # Check user day cycles daily at 23:15 (just before first slot)
-    scheduler.add_job(check_user_day_cycles, trigger='cron', hour=6, minute=30, timezone=ist, args=[application])
+    scheduler.add_job(check_user_day_cycles, trigger='cron', hour=7, minute=30, timezone=ist, args=[application])
 
     # Check low-point users daily at END OF DAY (23:00 - 11 PM)
-    scheduler.add_job(check_low_points, trigger='cron', hour=11, minute=0, timezone=ist, args=[application])
+    scheduler.add_job(check_low_points, trigger='cron', hour=12, minute=15, timezone=ist, args=[application])
 
     # Post daily leaderboard at 22:00 (10:00 PM)
-    scheduler.add_job(post_daily_leaderboard, trigger='cron', hour=9, minute=15, timezone=ist, args=[application])
+    scheduler.add_job(post_daily_leaderboard, trigger='cron', hour=12, minute=10, timezone=ist, args=[application])
 
     # Checks daily for zero activity users after leaderboard gets posted
-    scheduler.add_job(check_daily_participation, trigger='cron', hour=10, minute=30, timezone=ist, args=[application])
+    scheduler.add_job(check_daily_participation, trigger='cron', hour=12, minute=25, timezone=ist, args=[application])
     
     logger.info("Scheduled jobs setup completed")

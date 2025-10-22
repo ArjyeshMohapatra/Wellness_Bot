@@ -113,8 +113,8 @@ def create_default_event_and_slots(group_id):
         slots = [
             (
                 "Good Morning",
-                "07:45:00",
-                "07:50:00",
+                "10:40:00",
+                "10:45:00",
                 "media",
                 10,
                 "Its Good morning everyone! Share your morning photo 🌅",
@@ -123,8 +123,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Workout",
-                "07:55:00",
-                "08:00:00",
+                "10:50:00",
+                "10:55:00",
                 "media",
                 10,
                 "Its Workout time everyone! Post your exercise photo 💪",
@@ -133,8 +133,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Breakfast",
-                "08:05:00",
-                "08:10:00",
+                "11:00:00",
+                "11:05:00",
                 "media",
                 10,
                 "Its Breakfast time everyone! Share your delicious & healthy meal 🍳",
@@ -143,8 +143,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Water Intake",
-                "08:15:00",
-                "08:20:00",
+                "11:10:00",
+                "11:15:00",
                 "button",
                 10,
                 "Lets checkout your morning hydration everyone! How much water did everyone drink ? 💧",
@@ -153,8 +153,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Lunch",
-                "08:25:00",
-                "08:30:00",
+                "11:20:00",
+                "11:25:00",
                 "media",
                 10,
                 "Its Lunch time everyone! Post your delicious meal 🍱",
@@ -163,8 +163,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Water Intake",
-                "08:35:00",
-                "08:40:00",
+                "11:30:00",
+                "11:35:00",
                 "button",
                 10,
                 "Lets checkout your afternoon hydration everyone! How much water did everyone drink ? 💧",
@@ -173,8 +173,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Evening Snacks",
-                "08:45:00",
-                "08:50:00",
+                "11:40:00",
+                "11:45:00",
                 "media",
                 10,
                 "Evening snack time! Share your healthy snack 🍎",
@@ -183,8 +183,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Water intake",
-                "08:55:00",
-                "09:00:00",
+                "11:50:00",
+                "11:55:00",
                 "button",
                 10,
                 "Lets checkout how hydrated are you in evening! Track your water 💧",
@@ -193,8 +193,8 @@ def create_default_event_and_slots(group_id):
             ),
             (
                 "Dinner",
-                "09:05:00",
-                "09:10:00",
+                "12:00:00",
+                "12:05:00",
                 "media",
                 10,
                 "Its Dinner time everyone! Share your healthy meal 🍽️",
@@ -207,11 +207,11 @@ def create_default_event_and_slots(group_id):
             "Good Morning": ["good morning", "morning"],
             "Workout": ["workout", "running"],
             "Breakfast": ["breakfast", "morning meal"],
-            "Morning Water Intake": ["100ml", "200ml", "300ml", "400ml", "500ml", "600ml", "700ml", "800ml", "900ml", "1l", "2l", "3l", "4l", "5l"],
+            "Water Intake": ["100ml", "200ml", "300ml", "400ml", "500ml", "600ml", "700ml", "800ml", "900ml", "1l", "2l", "3l", "4l", "5l"],
             "Lunch": ["lunch", "afternoon meal"],
-            "Afternoon Water Intake": ["100ml", "200ml", "300ml", "400ml", "500ml", "600ml", "700ml", "800ml", "900ml", "1l", "2l", "3l", "4l", "5l"],
+            "Water Intake": ["100ml", "200ml", "300ml", "400ml", "500ml", "600ml", "700ml", "800ml", "900ml", "1l", "2l", "3l", "4l", "5l"],
             "Evening Snacks": ["snacks", "evening snack"],
-            "Evening Water Intake": ["100ml", "200ml", "300ml", "400ml", "500ml", "600ml", "700ml", "800ml", "900ml", "1l", "2l", "3l", "4l", "5l"],
+            "Water Intake": ["100ml", "200ml", "300ml", "400ml", "500ml", "600ml", "700ml", "800ml", "900ml", "1l", "2l", "3l", "4l", "5l"],
             "Dinner": ["dinner", "night meal"],
         }
 

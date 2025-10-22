@@ -87,6 +87,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
     caption = confirmation_data.get("caption", "")
 
     if response == "yes":
+        display_name= username or first_name or "You"
         # Handle based on content type
         if content_type == "photo":
             photo_file_id = confirmation_data["photo_file_id"]
@@ -125,7 +126,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                     context, 
                     chat_id=query.message.chat_id, 
                     message_id=query.message.message_id, 
-                    text=f"✅ You scored {points} points!")
+                    text=f"✅ {display_name} scored {points} points!")
                 logger.info(f"User {expected_user_id} confirmed photo for slot {slot_name}, awarded {points} points")
 
             except Exception as e:
@@ -167,18 +168,20 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                 local_path = await storage.save_media(group_id, expected_user_id, username, slot_name, file, filename, media_type)
 
                 # Award points
+                
+                db.add_points(group_id, expected_user_id, points, event_id)
                 if event_id and points > 0: db.mark_slot_completed(group_id, event_id, slot_id, expected_user_id, "completed", points)
                 
                 db.log_activity(group_id, expected_user_id, media_type, slot_name, message_content=caption, username=username, first_name=first_name,
                                 last_name=last_name, telegram_file_id=file_id, local_file_path=local_path, points_earned=points, is_valid=True)
 
 
-                points_msg = (f"{points} points!" if points > 0 else " no points awarded)")
+                points_msg = (f"scored {points} points!" if points > 0 else " no points.)")
                 await safe_edit_message_text(
                     context, 
                     chat_id=query.message.chat_id, 
                     message_id=query.message.message_id, 
-                    text=f"✅ {media_type.capitalize()} confirmed!{points_msg}")
+                    text=f"✅ {display_name} {points_msg}")
                 logger.info(f"User {expected_user_id} confirmed {media_type} for slot {slot_name}, awarded {points} points")
 
             except Exception as e:
@@ -206,7 +209,6 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
             points = slot["slot_points"]
 
             db.add_points(group_id, expected_user_id, points, event_id)
-            # THE FIX:
             db.log_activity(group_id, expected_user_id, "text", slot_name, message_content=text, username=username, first_name=first_name,
                             last_name=last_name, points_earned=points, is_valid=True)
 
@@ -216,7 +218,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                 context, 
                 chat_id=query.message.chat_id, 
                 message_id=query.message.message_id, 
-                text=f"✅ You scored {points} points!")
+                text=f"✅ {display_name} scored {points} points!")
             logger.info(f"User {expected_user_id} confirmed text for slot {slot_name}, awarded {points} points")
 
     else:

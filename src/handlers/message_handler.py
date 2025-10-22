@@ -295,6 +295,7 @@ async def handle_text_response(update: Update, context: ContextTypes.DEFAULT_TYP
     username = message.from_user.username or ""
     last_name = message.from_user.last_name or ""
     text = sanitize_text(message.text)
+    display_name=username or first_name or "You"
 
     slot_id = slot["slot_id"]
     slot_name = slot["slot_name"]
@@ -311,7 +312,7 @@ async def handle_text_response(update: Update, context: ContextTypes.DEFAULT_TYP
                         username=username, first_name=first_name, last_name=last_name, message_content=text,
                         points_earned=points)
 
-        await message.reply_text(slot["response_positive"] + f"\n{points} points!")
+        await message.reply_text(f'✅ {display_name} scored {points} points!')
         logger.info(f"User {user_id} completed slot {slot_name} with text")
 
     else:
@@ -346,6 +347,7 @@ async def handle_photo_response(update: Update, context: ContextTypes.DEFAULT_TY
     first_name = message.from_user.first_name or ""
     username = message.from_user.username or ""
     last_name=message.from_user.last_name or ""
+    display_name= username or first_name or "You"
 
     slot_id = slot["slot_id"]
     slot_name = slot["slot_name"]
@@ -389,7 +391,7 @@ async def handle_photo_response(update: Update, context: ContextTypes.DEFAULT_TY
             if event_id:
                 db.mark_slot_completed(group_id=group_id, event_id=event_id, slot_id=slot_id, user_id=user_id, status="completed", points=points)
 
-            await message.reply_text(slot["response_positive"] + f"\n{points} points!")
+            await message.reply_text(f'✅ {display_name} scored {points} points!')
             logger.info(f"User {user_id} completed slot {slot_name} with photo")
 
         except Exception as e:
