@@ -3,7 +3,7 @@ from telegram.ext import MessageHandler, filters, ContextTypes
 import logging
 from datetime import datetime, timedelta
 import re
-from pytz import timezone
+from pytz import timezone, utc
 from services import database_service as db
 from services.file_storage import FileStorage
 import config
@@ -60,26 +60,41 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     member = db.get_member(group_id, user_id)
     
     if member and member.get("is_restricted") and member.get("restriction_until"):
-        restriction_until_dt = member.get("restriction_until")
-        if isinstance(restriction_until_dt, str):
-            restriction_until_dt = datetime.strptime(restriction_until_dt, "%Y-%m-%d %H:%M:%S")
+        restriction_until_utc = member.get("restriction_until")  # Fetch raw datetime from DB (likely naive UTC)
 
-    
-        if restriction_until_dt.tzinfo is None or restriction_until_dt.tzinfo.utcoffset(restriction_until_dt) is None:
-            restriction_until_dt = ist.localize(restriction_until_dt)
+        # Ensure it's a datetime object (if stored as string somehow, convert)
+        if isinstance(restriction_until_utc, str):
+            try:
+                # Assuming the string format from DB is standard UTC
+                restriction_until_utc = datetime.strptime(restriction_until_utc, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                logger.error(f"Could not parse restriction_until string: {restriction_until_utc}")
+                # Handle error appropriately, maybe skip restriction check
+                restriction_until_utc = None
 
-        if datetime.now(ist) > restriction_until_dt:
-            start_date = datetime.now(ist).date()
-            end_date = start_date + timedelta(days=7)
-            # Restriction has expired, update the database
-            query = "UPDATE group_members SET is_restricted = 0, restriction_until = NULL, cycle_start_date = %s, cycle_end_date = %s WHERE group_id = %s AND user_id = %s"
-            execute_query(query, (start_date, end_date, group_id, user_id))
-            # Refresh member data to reflect the change
-            member = db.get_member(group_id, user_id)
-            logger.info(f"Lifted expired restriction for user {user_id} in group {group_id}.")
-        else:
-            logger.info(f"Ignoring message from still-restricted user {user_id}.")
-            return
+        if restriction_until_utc:
+            # 1. Make the naive UTC datetime timezone-aware
+            restriction_until_utc_aware = utc.localize(restriction_until_utc)
+
+            # 2. Convert aware UTC time to aware IST time
+            restriction_until_ist_aware = restriction_until_utc_aware.astimezone(ist)
+
+            # 3. Get current time in IST (already aware)
+            now_ist_aware = datetime.now(ist)
+
+            # 4. Compare aware datetimes
+            if now_ist_aware > restriction_until_ist_aware:
+                start_date = now_ist_aware.date()  # Use the current IST date
+                end_date = start_date + timedelta(days=7)
+                # Restriction has expired, update the database
+                query = "UPDATE group_members SET is_restricted = 0, restriction_until = NULL, cycle_start_date = %s, cycle_end_date = %s WHERE group_id = %s AND user_id = %s"
+                execute_query(query, (start_date, end_date, group_id, user_id))
+                # Refresh member data
+                member = db.get_member(group_id, user_id)
+                logger.info(f"Lifted expired restriction for user {user_id} in group {group_id}.")
+            else:
+                logger.info(f"Ignoring message from still-restricted user {user_id}.")
+                return
 
     # Also check if user is currently a Telegram admin/creator
     is_telegram_admin = member and member.get("is_admin", 0) == 1

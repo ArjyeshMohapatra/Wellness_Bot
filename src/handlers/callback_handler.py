@@ -6,7 +6,7 @@ from services import database_service as db
 from db import execute_query
 from services.file_storage import FileStorage
 import config
-from pytz import timezone
+from pytz import timezone, utc
 from bot_utils import safe_send_message, safe_edit_message_text, safe_callback_reply_text
 
 logger = logging.getLogger(__name__)
@@ -269,15 +269,40 @@ async def handle_water_button(update: Update, context: ContextTypes.DEFAULT_TYPE
     member = db.get_member(group_id, user_id)
 
     if member and member.get("is_restricted", 0) == 1:
-        restriction_until = member.get("restriction_until")
-        if restriction_until and datetime.now(ist) > restriction_until:
-            query_text = "UPDATE group_members SET is_restricted = 0, restriction_until = NULL WHERE group_id = %s AND user_id = %s"
-            execute_query(query_text, (group_id, user_id))
-            logger.info(f"User {user_id}'s restriction has expired. Unrestricted in DB.")
+        restriction_until_utc = member.get("restriction_until")  # Fetch raw datetime from DB (likely naive UTC)
+
+        # Ensure it's a datetime object (if stored as string somehow, convert)
+        if isinstance(restriction_until_utc, str):
+            try:
+                # Assuming the string format from DB is standard UTC
+                restriction_until_utc = datetime.strptime(restriction_until_utc, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                logger.error(f"Could not parse restriction_until string: {restriction_until_utc}")
+                # Handle error appropriately
+                restriction_until_utc = None
+
+        if restriction_until_utc:
+            # 1. Make the naive UTC datetime timezone-aware
+            restriction_until_utc_aware = utc.localize(restriction_until_utc)
+
+            # 2. Convert aware UTC time to aware IST time
+            restriction_until_ist_aware = restriction_until_utc_aware.astimezone(ist)
+
+            # 3. Get current time in IST (already aware)
+            now_ist_aware = datetime.now(ist)
+
+            # 4. Compare aware datetimes
+            if now_ist_aware > restriction_until_ist_aware:
+                query_text = "UPDATE group_members SET is_restricted = 0, restriction_until = NULL WHERE group_id = %s AND user_id = %s"
+                execute_query(query_text, (group_id, user_id))
+                logger.info(f"User {user_id}'s restriction has expired. Unrestricted in DB.")
+            else:
+                await query.answer("You are currently restricted and cannot perform this action.", show_alert=True)
+                return
         else:
-            await query.answer("You are currently restricted and cannot perform this action.",show_alert=True)
+            # If restriction_until is None or invalid, still restrict
+            await query.answer("You are currently restricted and cannot perform this action.", show_alert=True)
             return
-        await query.answer("You are currently restricted and cannot perform this action.",show_alert=True)
 
     # Parse: water_<liters>_<slot_id>
     parts = data.split("_")
