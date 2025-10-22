@@ -5,6 +5,7 @@ from config import NEW_MEMBER_RESTRICTION_MINUTES
 from db import execute_query, get_db_connection
 import mysql.connector
 
+ist=timezone("Asia/Kolkata")
 logger = logging.getLogger(__name__)
 
 
@@ -27,7 +28,6 @@ def get_restriction_until_time(group_id):
     """
     Calculates the restriction time for a new member using NAIVE datetime objects in IST.
     """
-    ist = timezone("Asia/Kolkata")
     now_ist = datetime.now(ist)
     first_slot_timedelta = get_first_slot_time(group_id)
 
@@ -252,10 +252,10 @@ def get_returning_member_info(group_id, user_id):
     """
     # gets most recent history about an user
     query="""
-    SELECT is_restricted, action FROM member_history WHERE group_id = %s AND user_id = %s ORDER BY action_at DESC LIMIT 1
+    SELECT * FROM member_history WHERE group_id = %s AND user_id = %s ORDER BY action_at DESC LIMIT 1
     """
     result = execute_query(query, (group_id, user_id), fetch=True)
-    return result[0] if result else None # Returns {'is_restricted': 0, 'action': 'kicked'} or None
+    return result[0] if result else None # Returns all columns or None
 
 def add_member(group_id, user_id, username=None, first_name=None, last_name=None, is_admin=False, restrict_new=True):
     """
@@ -269,8 +269,15 @@ def add_member(group_id, user_id, username=None, first_name=None, last_name=None
 
         is_restricted = 0
         restriction_until = None
+        
+        # Default values for a truly new member
         cycle_start_date = None
         cycle_end_date = None
+        total_points = 0
+        knockout_points = 0
+        general_warnings = 0
+        banned_word_count = 0
+        user_day_number = 1
 
         if is_new:
             # Check if this "new" member is actually a returning member
@@ -293,13 +300,32 @@ def add_member(group_id, user_id, username=None, first_name=None, last_name=None
                 apply_restriction = True
                 logger.info(f"🔒 DB: Returning member {user_id} (was {last_record['action']}). Applying restriction.")
 
-            elif last_record['action'] == 'left' and last_record['is_restricted'] == 1:
-                # Member left while they were restricted
-                apply_restriction = True
-                logger.info(f"🔒 DB: Returning member {user_id} (left while restricted). Applying restriction.")
-
+            elif last_record['action'] == 'left':
+                # User left voluntarily. Restore their stats
+                # Checks if user was restricted before leaving or not
+                if last_record['is_restricted'] == 1:
+                    apply_restriction = True
+                    logger.info(f"🔒 DB: Returning member {user_id} (left while restricted). Applying restriction.")
+                else:
+                    apply_restriction = False
+                    logger.info(f"👋 DB: Returning member {user_id} (left while active). Restoring stats. No restriction.")
+                
+                # Restore their old stats regardless of their restriction
+                total_points = last_record.get('total_points', 0)
+                knockout_points = last_record.get('knockout_points', 0)
+                general_warnings = last_record.get('general_warnings', 0)
+                banned_word_count = last_record.get('banned_word_count', 0)
+                user_day_number = last_record.get('user_day_number', 1)
+                cycle_start_date = last_record.get('cycle_start_date')
+                cycle_end_date = last_record.get('cycle_end_date')
+                
+                # if cycle dates are missing or are expired then reset them
+                if not cycle_start_date or (cycle_end_date and datetime.now(ist).date() > cycle_end_date):
+                    cycle_start_date = datetime.now(ist).date()
+                    cycle_end_date = cycle_start_date = timedelta(days=7)
+                    user_day_number = 1 # resets day number for user to 1 if reset happens
             else:
-                # All other cases e.g., active member left and rejoined
+                # Fallback case
                 apply_restriction = False
                 logger.info(f"👋 DB: Returning member {user_id} (left while active). No restriction.")
 
@@ -311,13 +337,19 @@ def add_member(group_id, user_id, username=None, first_name=None, last_name=None
                 logger.info(f"Restriction for {user_id} will be until {restriction_until} (IST).")
             else:
                 # Not restricted, set cycle dates
-                cycle_start_date = datetime.now().date()
-                cycle_end_date = cycle_start_date + timedelta(days=7)
+               if not cycle_start_date:
+                    cycle_start_date = datetime.now().date()
+                    cycle_end_date = cycle_start_date + timedelta(days=7)
 
         # handles both INSERT for new members and UPDATE for existing ones
         query_1 = """
-            INSERT INTO group_members (user_id, group_id, username, first_name, last_name, is_admin, is_restricted, restriction_until, cycle_start_date, cycle_end_date, joined_at, last_active_timestamp)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+            INSERT INTO group_members (
+                user_id, group_id, username, first_name, last_name, is_admin, 
+                is_restricted, restriction_until, cycle_start_date, cycle_end_date, 
+                total_points, knockout_points, general_warnings, banned_word_count, user_day_number,
+                joined_at, last_active_timestamp
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
             ON DUPLICATE KEY UPDATE
                 username = VALUES(username),
                 first_name = VALUES(first_name),
@@ -325,7 +357,11 @@ def add_member(group_id, user_id, username=None, first_name=None, last_name=None
                 is_admin = VALUES(is_admin),
                 last_active_timestamp = NOW()
         """
-        execute_query(query_1, (user_id, group_id, username, first_name, last_name, 1 if is_admin else 0, is_restricted, restriction_until, cycle_start_date, cycle_end_date))
+        execute_query(query_1, (
+            user_id, group_id, username, first_name, last_name, 1 if is_admin else 0, 
+            is_restricted, restriction_until, cycle_start_date, cycle_end_date,
+            total_points, knockout_points, general_warnings, banned_word_count, user_day_number
+        ))
         
         # If member is new, also log to member_history table
         if is_new:
@@ -335,9 +371,13 @@ def add_member(group_id, user_id, username=None, first_name=None, last_name=None
                     total_points, knockout_points, general_warnings, banned_word_count,
                     user_day_number, cycle_start_date, cycle_end_date, joined_at,
                     last_active_timestamp, action
-                ) VALUES (%s, %s, %s, %s, %s, 0, 0, 0, 0, 1, %s, %s, NOW(), NOW(), 'joined')
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW(), 'joined')
             """
-            execute_query(query_2, (group_id, user_id, username, first_name, last_name, cycle_start_date, cycle_end_date))
+            execute_query(query_2, (
+                group_id, user_id, username, first_name, last_name, 
+                total_points, knockout_points, general_warnings, banned_word_count,
+                user_day_number, cycle_start_date, cycle_end_date
+            ))
             logger.debug(f"[DEBUG] Complete 'joined' record created for new user {user_id}")
         member_data = get_member(group_id, user_id)
         return member_data, is_new
