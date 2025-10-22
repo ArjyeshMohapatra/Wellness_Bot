@@ -483,15 +483,15 @@ def setup_jobs(application):
     scheduler.add_job(check_inactive_users, trigger='cron', hour=22, minute=0, timezone=ist, args=[application])
 
     # Check user day cycles daily at 23:15 (just before first slot)
-    scheduler.add_job(check_user_day_cycles, trigger='cron', hour=9, minute=30, timezone=ist, args=[application])
+    scheduler.add_job(check_user_day_cycles, trigger='cron', hour=6, minute=30, timezone=ist, args=[application])
 
     # Check low-point users daily at END OF DAY (23:00 - 11 PM)
-    scheduler.add_job(check_low_points, trigger='cron', hour=23, minute=0, timezone=ist, args=[application])
+    scheduler.add_job(check_low_points, trigger='cron', hour=11, minute=0, timezone=ist, args=[application])
 
     # Post daily leaderboard at 22:00 (10:00 PM)
-    scheduler.add_job(post_daily_leaderboard, trigger='cron', hour=14, minute=15, timezone=ist, args=[application])
+    scheduler.add_job(post_daily_leaderboard, trigger='cron', hour=9, minute=15, timezone=ist, args=[application])
 
     # Checks daily for zero activity users after leaderboard gets posted
-    scheduler.add_job(check_daily_participation, trigger='cron', hour=23, minute=30, timezone=ist, args=[application])
+    scheduler.add_job(check_daily_participation, trigger='cron', hour=10, minute=30, timezone=ist, args=[application])
     
     logger.info("Scheduled jobs setup completed")

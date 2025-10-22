@@ -178,9 +178,7 @@ async def schedule(update, context):
             if hasattr(end, "total_seconds"):
                 end = (datetime.min + end).time()
 
-            message += f"{name}\n"
-            message += f"⏰ {start.strftime('%H:%M')} - {end.strftime('%H:%M')}\n"
-            message += f"🔖 Points : {points}\n\n"
+            message += f"{name} : {start.strftime('%H:%M')} to {end.strftime('%H:%M')} - {points} pts\n\n"
 
         await safe_reply_text(update, context, text = message)
     else:
