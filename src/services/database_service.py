@@ -473,24 +473,27 @@ def remove_member(group_id, user_id, action="kicked"):
             execute_query("INSERT INTO member_history (group_id, user_id, action) VALUES (%s, %s, %s)", (group_id, user_id, action))
             return True
 
-        # Archive all relevant data to the history table
-        archive_query = """
-        INSERT INTO member_history (
-            group_id, user_id, username, first_name, last_name,
-            total_points, knockout_points, general_warnings, banned_word_count,
-            user_day_number, cycle_start_date, cycle_end_date, is_restricted, joined_at, 
-            last_active_timestamp, action
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """
-        execute_query(archive_query, (
-        member['group_id'], member['user_id'], member.get('username'), member.get('first_name'), member.get('last_name'),
-        member.get('total_points'), member.get('knockout_points'), member.get('general_warnings'), member.get('banned_word_count'),
-        member.get('user_day_number'), member.get('cycle_start_date'), member.get('cycle_end_date'), member.get('is_restricted', 0), 
-        member.get('joined_at'), member.get('last_active_timestamp'), action
-        ))
+        # Archive all relevant data to the history table AND delete in a single transaction
+        with get_db_connection() as conn:
+            with conn.cursor() as cursor:
+                archive_query = """
+                INSERT INTO member_history (
+                    group_id, user_id, username, first_name, last_name,
+                    total_points, knockout_points, general_warnings, banned_word_count,
+                    user_day_number, cycle_start_date, cycle_end_date, is_restricted, joined_at, 
+                    last_active_timestamp, action
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """
+                cursor.execute(archive_query, (
+                member['group_id'], member['user_id'], member.get('username'), member.get('first_name'), member.get('last_name'),
+                member.get('total_points'), member.get('knockout_points'), member.get('general_warnings'), member.get('banned_word_count'),
+                member.get('user_day_number'), member.get('cycle_start_date'), member.get('cycle_end_date'), member.get('is_restricted', 0), 
+                member.get('joined_at'), member.get('last_active_timestamp'), action
+                ))
 
-        # Finally, delete the member from the main table
-        execute_query("DELETE FROM group_members WHERE group_id = %s AND user_id = %s", (group_id, user_id))
+                # Finally, delete the member from the main table
+                cursor.execute("DELETE FROM group_members WHERE group_id = %s AND user_id = %s", (group_id, user_id))
+                conn.commit()  # Ensure both operations are committed together
         logger.info(f"Archived and removed member {user_id} from group {group_id}.")
         return True
     except Exception as e:
@@ -687,18 +690,21 @@ def update_admin_status(group_id, admin_user_ids):
     Sets is_admin = 1 for users in the admin_user_ids list and 0 for all others.
     """
     try:
-        query_1="""
-        UPDATE group_members SET is_admin = 0 WHERE group_id = %s
-        """
-        execute_query(query_1,(group_id,))
-        
-        if admin_user_ids:
-            placeholders = ', '.join(['%s'] * len(admin_user_ids))
-            query_2=f"UPDATE group_members SET is_admin = 1 WHERE group_id = %s AND user_id IN ({placeholders})"
-            params=(group_id,)+tuple(admin_user_ids)
-            execute_query(query_2,params)
-            logger.info(f"Successfully synchronized admin status for group {group_id}.")
-            return True
+        with get_db_connection() as conn:
+            with conn.cursor() as cursor:
+                query_1="""
+                UPDATE group_members SET is_admin = 0 WHERE group_id = %s
+                """
+                cursor.execute(query_1,(group_id,))
+                
+                if admin_user_ids:
+                    placeholders = ', '.join(['%s'] * len(admin_user_ids))
+                    query_2=f"UPDATE group_members SET is_admin = 1 WHERE group_id = %s AND user_id IN ({placeholders})"
+                    params=(group_id,)+tuple(admin_user_ids)
+                    cursor.execute(query_2,params)
+                conn.commit()
+        logger.info(f"Successfully synchronized admin status for group {group_id}.")
+        return True
     except Exception as e:
         logger.error(f"Failed to synchronize admin status for group {group_id}: {e}", exc_info=True)
         return False
