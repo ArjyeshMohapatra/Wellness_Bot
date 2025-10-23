@@ -142,7 +142,7 @@ def create_default_event_and_slots(group_id):
                 "Is this your Breakfast ?",
             ),
             (
-                "Water Intake",
+                "Water",
                 "11:10:00",
                 "11:15:00",
                 "button",
@@ -162,7 +162,7 @@ def create_default_event_and_slots(group_id):
                 "Is this your lunch ?",
             ),
             (
-                "Water Intake",
+                "Water",
                 "11:30:00",
                 "11:35:00",
                 "button",
@@ -172,7 +172,7 @@ def create_default_event_and_slots(group_id):
                 "Is this the amount of water you drank ?",
             ),
             (
-                "Evening Snacks",
+                "Snacks",
                 "11:40:00",
                 "11:45:00",
                 "media",
@@ -182,7 +182,7 @@ def create_default_event_and_slots(group_id):
                 "Is this your evening snacks ?",
             ),
             (
-                "Water intake",
+                "Water",
                 "11:50:00",
                 "11:55:00",
                 "button",

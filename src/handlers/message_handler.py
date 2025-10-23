@@ -93,8 +93,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 member = db.get_member(group_id, user_id)
                 logger.info(f"Lifted expired restriction for user {user_id} in group {group_id}.")
             else:
-                logger.info(f"Ignoring message from still-restricted user {user_id}.")
-                return
+                logger.info(f"User {user_id} was manually unrestricted by an admin. Syncing database.")
+                start_date = now_ist_aware.date()
+                end_date = start_date + timedelta(days=7)
+                query = "UPDATE group_members SET is_restricted = 0, restriction_until = NULL, cycle_start_date = %s, cycle_end_date = %s WHERE group_id = %s AND user_id = %s"
+                execute_query(query, (start_date, end_date, group_id, user_id))
+                # Refresh member data so the rest of the function works
+                member = db.get_member(group_id, user_id)
 
     # Also check if user is currently a Telegram admin/creator
     is_telegram_admin = member and member.get("is_admin", 0) == 1
@@ -284,8 +289,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         except Exception as e:
             logger.error(f"Error handling duplicate submission: {e}", exc_info=True)
             return
-
-    # Accept ANY media type for regular slots
+        
+    if slot_type == "button":
+        try:
+            await message.delete()
+            warning_msg = await safe_send_message(
+                context=context,
+                chat_id=group_id,
+                text=f"⏰ {first_name}, please use the buttons for the {slot_name} slot!\n"
+                     f"Messages are not accepted right now.",
+            )
+            # Delete warning after 10 seconds
+            context.job_queue.run_once(lambda _: warning_msg.delete(), when=10)
+            logger.info(f"Deleted invalid message from user {user_id} during button slot {slot_name}")
+            return  # Stop all further processing
+        except Exception as e:
+            logger.error(f"Error deleting message during button slot: {e}", exc_info=True)
+            return
+        
+    # Accept ANY media type for regular slots except button typed
     if message.photo:
         await handle_photo_response(update, context, active_slot, event_id)
 

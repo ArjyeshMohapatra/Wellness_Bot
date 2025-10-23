@@ -473,13 +473,13 @@ def setup_jobs(application):
     scheduler = application.job_queue.scheduler
 
     # Check and announce slots every minute
-    job_queue.run_repeating(check_and_announce_slots, interval=60, first=0)
+    job_queue.run_repeating(check_and_announce_slots, interval=10, first=0)
 
     # Check mid-slot warnings every minute
     job_queue.run_repeating(check_mid_slot_warnings, interval=60, first=30)
     
     # Runs 10s after startup, then hourly
-    job_queue.run_repeating(sync_admin_status, interval=3600, first=10)
+    job_queue.run_repeating(sync_admin_status, interval=10, first=10)
 
     # Check inactive users once daily at 22:00 (10 PM)
     scheduler.add_job(check_inactive_users, trigger='cron', hour=12, minute=20, timezone=ist, args=[application])
