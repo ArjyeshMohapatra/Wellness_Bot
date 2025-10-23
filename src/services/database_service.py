@@ -62,7 +62,7 @@ def create_group_config(group_id, admin_user_id):
         existing_config = get_group_config(group_id)
 
         if not existing_config:
-            license_key = f"AUTO_{group_id}_{int(datetime.now().timestamp())}"
+            license_key = f"AUTO_{group_id}_{int(datetime.now(ist).timestamp())}"
 
             execute_query(
                 "INSERT INTO licenses (license_key, is_active, assigned_group_id, assigned_admin_id) VALUES (%s, TRUE, %s, %s)",
@@ -98,7 +98,7 @@ def create_default_event_and_slots(group_id):
             return True
 
         # Create a 7-day ongoing wellness event
-        start_date = datetime.now().date()
+        start_date = datetime.now(ist).date()
         end_date = start_date + timedelta(days=7)
 
         query = """
@@ -322,7 +322,7 @@ def add_member(group_id, user_id, username=None, first_name=None, last_name=None
                 # if cycle dates are missing or are expired then reset them
                 if not cycle_start_date or (cycle_end_date and datetime.now(ist).date() > cycle_end_date):
                     cycle_start_date = datetime.now(ist).date()
-                    cycle_end_date = cycle_start_date = timedelta(days=7)
+                    cycle_end_date = cycle_start_date + timedelta(days=7)
                     user_day_number = 1 # resets day number for user to 1 if reset happens
             else:
                 # Fallback case
@@ -338,7 +338,7 @@ def add_member(group_id, user_id, username=None, first_name=None, last_name=None
             else:
                 # Not restricted, set cycle dates
                if not cycle_start_date:
-                    cycle_start_date = datetime.now().date()
+                    cycle_start_date = datetime.now(ist).date()
                     cycle_end_date = cycle_start_date + timedelta(days=7)
                     
         query_1 = """

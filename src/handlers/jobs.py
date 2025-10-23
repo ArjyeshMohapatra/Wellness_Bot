@@ -120,19 +120,20 @@ async def check_and_announce_slots(context: ContextTypes.DEFAULT_TYPE):
 
 async def check_inactive_users(context: ContextTypes.DEFAULT_TYPE):
     """Check for inactive users: warn at 3 days, kick temporarily at 4 days."""
+    logger.info("Checking for inactive users...")
+    groups = []
     try:
-        logger.info("Checking for inactive users...")
-
-        # Gets all groups
         query = "SELECT group_id FROM groups_config"
-        groups=execute_query(query, fetch=True)
+        groups = execute_query(query, fetch=True)
+    except Exception as e:
+        logger.error(f"CRITICAL: Failed to fetch groups for inactivity check: {e}", exc_info=True)
+        return
 
-        for group in groups:
-            group_id = group["group_id"]
-
+    for group in groups:
+        group_id = group["group_id"]
+        try:
             # Check for 3-day inactive (warning)
             inactive_3day = db.get_inactive_members(group_id, 3)
-
             for member in inactive_3day:
                 user_id = member["user_id"]
                 first_name = member.get("first_name", "User")
@@ -147,26 +148,21 @@ async def check_inactive_users(context: ContextTypes.DEFAULT_TYPE):
                 existing= execute_query(query,(group_id,user_id), fetch=True)
 
                 if not existing:
+                    # Send warning
+                    await safe_send_message(
+                        context=context, 
+                        chat_id=group_id,
+                        text=f"⚠️ {first_name}, you've been inactive for 3 days!\nPlease participate in today's activities or you'll be removed tomorrow."
+                        )
                     try:
-                        # Send warning
-                        await safe_send_message(
-                            context=context, 
-                            chat_id=group_id,
-                            text=f"⚠️ {first_name}, you've been inactive for 3 days!\n"
-                            f"Please participate in today's activities or you'll be removed tomorrow."
-                            )
-
                         # Log warning
                         db.log_inactivity_warning(group_id, user_id, '3day', member)
-
                         logger.info(f"Warned 3-day inactive user {user_id} in group {group_id}")
-
                     except Exception as e:
-                        logger.error(f"Error warning user {user_id}: {e}",exc_info=True)
+                        logger.error(f"Error warning user {user_id} in group {group_id}: {e}", exc_info=True)
 
             # Check for 4-day inactive (kick temporarily)
             inactive_4day = db.get_inactive_members(group_id, 4)
-
             for member in inactive_4day:
                 user_id = member["user_id"]
                 first_name = member.get("first_name", "User")
@@ -174,14 +170,10 @@ async def check_inactive_users(context: ContextTypes.DEFAULT_TYPE):
                 try:
                     # Deduct 20 knockout points for 4-day inactivity before kicking
                     db.deduct_knockout_points(group_id, user_id, 20)
-
                     await context.bot.ban_chat_member(group_id, user_id)
-
                     # Remove from database
                     db.remove_member(group_id, user_id, "kicked")
-                    
                     await context.bot.unban_chat_member(group_id, user_id)
-
                     # Send notification
                     await safe_send_message(
                         context=context,
@@ -190,12 +182,11 @@ async def check_inactive_users(context: ContextTypes.DEFAULT_TYPE):
                     )
 
                     logger.info(f"Kicked 4-day inactive user {user_id} from group {group_id}")
-
                 except Exception as e:
-                    logger.error(f"Error kicking user {user_id} from group {group_id}: {e}",exc_info=True)
+                    logger.error(f"Error kicking user {user_id} from group {group_id}: {e}", exc_info=True)
 
-    except Exception as e:
-        logger.error(f"Error in check_inactive_users: {e}",exc_info=True)
+        except Exception as group_e:
+            logger.error(f"Failed to process inactivity check for group {group_id}: {group_e}", exc_info=True)
 
 
 async def check_low_points(context: ContextTypes.DEFAULT_TYPE):
@@ -287,7 +278,7 @@ async def check_mid_slot_warnings(context: ContextTypes.DEFAULT_TYPE):
 
                 if now.hour == reminder_time.hour and now.minute == reminder_time.minute:
                     # Use a unique key for today's warning for this specific slot
-                    warning_key = f"mid_slot_warn_{slot_id}_{datetime.now().date()}"
+                    warning_key = f"mid_slot_warn_{slot_id}_{datetime.now(ist).date()}"
                     
                     # Check if warning has already been sent by checking the database
                     if not db.get_runtime_state(group_id, warning_key):
