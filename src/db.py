@@ -2,7 +2,7 @@ import mysql.connector
 from mysql.connector import pooling
 from contextlib import contextmanager
 import logging
-import config
+from . import config
 import time
 
 logger = logging.getLogger(__name__)

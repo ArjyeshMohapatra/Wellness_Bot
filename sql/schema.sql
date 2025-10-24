@@ -12,6 +12,29 @@ CREATE TABLE IF NOT EXISTS licenses (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE users (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    first_name VARCHAR(100),
+    last_name VARCHAR(100),
+    password_hash VARCHAR(255) NOT NULL,
+    date_of_birth DATE,
+    phone_number VARCHAR(20),
+    role ENUM('admin','developer') DEFAULT 'admin',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_login TIMESTAMP NULL,
+    is_active BOOLEAN DEFAULT TRUE
+);
+
+CREATE TABLE password_resets (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT,
+    reset_token VARCHAR(255) UNIQUE,
+    expires_at TIMESTAMP,
+    used BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
 -- GROUPS CONFIG TABLE
 CREATE TABLE IF NOT EXISTS groups_config (
     config_id INT AUTO_INCREMENT PRIMARY KEY,
