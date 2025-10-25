@@ -7,6 +7,10 @@ interface Slot {
     startTime: string;
     endTime: string;
     points: number;
+    type: 'media' | 'button';
+    buttonCount?: number;
+    buttonNames?: string[];
+    buttonValues?: number[];
 }
 
 const Dashboard: React.FC = () => {
@@ -19,6 +23,8 @@ const Dashboard: React.FC = () => {
     const [slotsPerDay, setSlotsPerDay] = useState('');
     const [slots, setSlots] = useState<Slot[]>([]);
     const [slotErrors, setSlotErrors] = useState<{ totalPoints: boolean; overlaps: boolean }>({ totalPoints: false, overlaps: false });
+    const [currentSlotIndex, setCurrentSlotIndex] = useState<number>(0);
+    const [currentButtonIndex, setCurrentButtonIndex] = useState<number>(0);
 
     // Check authentication on component mount
     useEffect(() => {
@@ -170,10 +176,11 @@ const Dashboard: React.FC = () => {
             startTime: '',
             endTime: '',
             points: 0,
+            type: 'media' as const,
         })));
     }, [slotsPerDay]);
 
-    const handleSlotChange = (index: number, field: keyof Slot, value: string | number | boolean) => {
+    const handleSlotChange = (index: number, field: keyof Slot, value: string | number | boolean | string[] | number[]) => {
         const newSlots = [...slots]; // makes shallow copy of existing slots array so that we dont modify the original state directly
         newSlots[index] = { ...newSlots[index], [field]: value };
         setSlots(newSlots);
@@ -250,6 +257,11 @@ const Dashboard: React.FC = () => {
 
         checkSubscriptionStatus();
     }, []);
+
+    // Reset currentButtonIndex when slot changes or button count changes
+    useEffect(() => {
+        setCurrentButtonIndex(0);
+    }, [currentSlotIndex, slots[currentSlotIndex]?.buttonCount]);
 
     const getValidity = (months: number) => {
         const start = new Date();
@@ -494,7 +506,18 @@ const Dashboard: React.FC = () => {
                 <div className="container mt-4">
                     <h3 className="mb-4">Bot Settings</h3>
                     <div className="row">
-                        <div className="col-md-4 mb-3">
+                        <div className="col-12 col-md-4 mb-3">
+                            <label htmlFor="eventName" className="form-label">Event Name</label>
+                            <input
+                                type="text"
+                                className="form-control"
+                                id="eventName"
+                                value={eventName}
+                                onChange={(e) => setEventName(e.target.value)}
+                                placeholder="Enter event name"
+                            />
+                        </div>
+                        <div className="col-6 col-md-4 mb-3">
                             <label htmlFor="eventType" className="form-label">Event Type</label>
                             <select
                                 className="form-select"
@@ -506,18 +529,7 @@ const Dashboard: React.FC = () => {
                                 <option value="time-limited">Time-Limited</option>
                             </select>
                         </div>
-                        <div className="col-md-4 mb-3">
-                            <label htmlFor="eventName" className="form-label">Event Name</label>
-                            <input
-                                type="text"
-                                className="form-control"
-                                id="eventName"
-                                value={eventName}
-                                onChange={(e) => setEventName(e.target.value)}
-                                placeholder="Enter event name"
-                            />
-                        </div>
-                        <div className="col-md-4 mb-3">
+                        <div className="col-6 col-md-4 mb-3">
                             <label htmlFor="slotsPerDay" className="form-label">Slots Per Day</label>
                             <input
                                 type="number"
@@ -532,7 +544,7 @@ const Dashboard: React.FC = () => {
 
                     {eventType === 'time-limited' && (
                         <div className="row">
-                            <div className="col-md-4 mb-3">
+                            <div className="col-6 col-md-4 mb-3">
                                 <label htmlFor="eventDays" className="form-label">Number of Days</label>
                                 <input
                                     type="number"
@@ -543,7 +555,7 @@ const Dashboard: React.FC = () => {
                                     placeholder="Enter number of days"
                                 />
                             </div>
-                            <div className="col-md-4 mb-3">
+                            <div className="col-6 col-md-4 mb-3">
                                 <label htmlFor="passPoints" className="form-label">Pass Points</label>
                                 <input
                                     type="number"
@@ -562,58 +574,214 @@ const Dashboard: React.FC = () => {
                             <h4 className="mt-4">Configure Slots</h4>
                             {slotErrors.totalPoints && <div className="alert alert-danger mt-3">Total points cannot exceed 100.</div>}
                             {slotErrors.overlaps && <div className="alert alert-danger mt-3">Time slots overlap.</div>}
-                            {slots.map((slot, index) => (
-                                <div key={index} className="border p-3 mb-3">
-                                    <h5>Slot {index + 1}</h5>
-                                    <div className="row">
-                                        <div className="col-md-1 mb-3">
-                                            <label className="form-label">Mandatory</label><br></br>
-                                            <input
-                                                type="checkbox"
-                                                className="form-check-input"
-                                                checked={slot.mandatory}
-                                                onChange={(e) => handleSlotChange(index, 'mandatory', e.target.checked)}
-                                            />
+                            <div className="row justify-content-center mt-3">
+                                <div className="col-12 col-md-8 col-lg-6">
+                                    <div className="card border-0 shadow-sm">
+                                        <div className="card-header bg-light d-flex justify-content-between align-items-center">
+                                            <div className="d-flex align-items-center">
+                                                <h6 className="card-title mb-0 me-2">Slot {currentSlotIndex + 1}</h6>
+                                                <span className={`badge ${slots[currentSlotIndex]?.type === 'media' ? 'bg-info' : 'bg-warning'}`}>
+                                                    {slots[currentSlotIndex]?.type === 'media' ? '📷 Media' : '🔘 Button'}
+                                                </span>
+                                            </div>
+                                            <div className="form-check mb-0">
+                                                <input
+                                                    type="checkbox"
+                                                    className="form-check-input"
+                                                    id={`mandatory-${currentSlotIndex}`}
+                                                    checked={slots[currentSlotIndex]?.mandatory || false}
+                                                    onChange={(e) => handleSlotChange(currentSlotIndex, 'mandatory', e.target.checked)}
+                                                />
+                                                <label className="form-check-label" htmlFor={`mandatory-${currentSlotIndex}`}>
+                                                    Compulsory
+                                                </label>
+                                            </div>
                                         </div>
-                                        <div className="col-md-2 mb-3">
-                                            <label className="form-label">Slot Name</label>
-                                            <input
-                                                type="text"
-                                                className="form-control"
-                                                value={slot.name}
-                                                onChange={(e) => handleSlotChange(index, 'name', e.target.value)}
-                                            />
+                                        <div className="card-body">
+                                            <div className="d-flex gap-3 mb-3">
+                                                <div className="flex-fill">
+                                                    <label htmlFor={`name-${currentSlotIndex}`} className="form-label fw-bold">Slot Name</label>
+                                                    <input
+                                                        type="text"
+                                                        className="form-control"
+                                                        id={`name-${currentSlotIndex}`}
+                                                        value={slots[currentSlotIndex]?.name || ''}
+                                                        onChange={(e) => handleSlotChange(currentSlotIndex, 'name', e.target.value)}
+                                                        placeholder="Enter slot name"
+                                                    />
+                                                </div>
+
+                                                {/* Slot Type Selection */}
+                                                <div className="flex-fill">
+                                                    <label htmlFor={`type-${currentSlotIndex}`} className="form-label fw-bold">Slot Type</label>
+                                                    <select
+                                                        className="form-select"
+                                                        id={`type-${currentSlotIndex}`}
+                                                        value={slots[currentSlotIndex]?.type || 'media'}
+                                                        onChange={(e) => {
+                                                            const newType = e.target.value as 'media' | 'button';
+                                                            const newSlots = [...slots];
+                                                            newSlots[currentSlotIndex] = { ...newSlots[currentSlotIndex], type: newType };
+                                                            if (newType === 'button' && !newSlots[currentSlotIndex].buttonCount) {
+                                                                newSlots[currentSlotIndex].buttonCount = 2;
+                                                                newSlots[currentSlotIndex].buttonNames = ['Button 1', 'Button 2'];
+                                                                newSlots[currentSlotIndex].buttonValues = [0, 0];
+                                                            }
+                                                            setSlots(newSlots);
+                                                        }}
+                                                    >
+                                                        <option value="media">Media</option>
+                                                        <option value="button">Button</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            {/* Button Configuration - Only show when type is 'button' */}
+                                            {slots[currentSlotIndex]?.type === 'button' && (
+                                                <div className="d-flex gap-3 mb-3">
+                                                    <div className="flex-fill">
+                                                        <label htmlFor={`buttonCount-${currentSlotIndex}`} className="form-label fw-bold">Number of Buttons</label>
+                                                        <input
+                                                            type="number"
+                                                            className="form-control"
+                                                            id={`buttonCount-${currentSlotIndex}`}
+                                                            value={slots[currentSlotIndex]?.buttonCount || 2}
+                                                            onChange={(e) => {
+                                                                const count = Math.max(1, Number(e.target.value));
+                                                                const currentNames = slots[currentSlotIndex]?.buttonNames || [];
+                                                                const currentValues = slots[currentSlotIndex]?.buttonValues || [];
+                                                                const newNames = Array.from({ length: count }, (_, i) => currentNames[i] || `Button ${i + 1}`);
+                                                                const newValues = Array.from({ length: count }, (_, i) => currentValues[i] || 0);
+                                                                const newSlots = [...slots];
+                                                                newSlots[currentSlotIndex] = { ...newSlots[currentSlotIndex], buttonCount: count, buttonNames: newNames, buttonValues: newValues };
+                                                                setSlots(newSlots);
+                                                            }}
+                                                            min="1"
+                                                            max="10"
+                                                            placeholder="Enter number of buttons"
+                                                        />
+                                                    </div>
+
+                                                    {/* Button Configuration - Name and Value with navigation */}
+                                                    <div className="flex-fill">
+                                                        <label className="form-label fw-bold">Button Configuration</label>
+                                                        <div className="d-flex align-items-center gap-2 mb-2">
+                                                            <button
+                                                                type="button"
+                                                                className="btn btn-outline-secondary btn-sm"
+                                                                onClick={() => {
+                                                                    const maxIndex = (slots[currentSlotIndex]?.buttonCount || 2) - 1;
+                                                                    setCurrentButtonIndex(prev => prev > 0 ? prev - 1 : maxIndex);
+                                                                }}
+                                                                disabled={(slots[currentSlotIndex]?.buttonCount || 2) <= 1}
+                                                            >
+                                                                ←
+                                                            </button>
+                                                            <div className="flex-grow-1 d-flex gap-2">
+                                                                <input
+                                                                    type="text"
+                                                                    className="form-control"
+                                                                    placeholder={`Button ${currentButtonIndex + 1} name`}
+                                                                    value={slots[currentSlotIndex]?.buttonNames?.[currentButtonIndex] ?? `Button ${currentButtonIndex + 1}`}
+                                                                    onChange={(e) => {
+                                                                        const newNames = [...(slots[currentSlotIndex]?.buttonNames || [])];
+                                                                        newNames[currentButtonIndex] = e.target.value;
+                                                                        handleSlotChange(currentSlotIndex, 'buttonNames', newNames);
+                                                                    }}
+                                                                />
+                                                                <input
+                                                                    type="number"
+                                                                    className="form-control flex-shrink-0"
+                                                                    placeholder="Value"
+                                                                    value={slots[currentSlotIndex]?.buttonValues?.[currentButtonIndex] ?? 0}
+                                                                    onChange={(e) => {
+                                                                        const newValues = [...(slots[currentSlotIndex]?.buttonValues || [])];
+                                                                        newValues[currentButtonIndex] = Number(e.target.value) || 0;
+                                                                        handleSlotChange(currentSlotIndex, 'buttonValues', newValues);
+                                                                    }}
+                                                                    min="0"
+                                                                />
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                className="btn btn-outline-secondary btn-sm"
+                                                                onClick={() => {
+                                                                    const maxIndex = (slots[currentSlotIndex]?.buttonCount || 2) - 1;
+                                                                    setCurrentButtonIndex(prev => prev < maxIndex ? prev + 1 : 0);
+                                                                }}
+                                                                disabled={(slots[currentSlotIndex]?.buttonCount || 2) <= 1}
+                                                            >
+                                                                →
+                                                            </button>
+                                                        </div>
+                                                        <div className="text-center">
+                                                            <small className="text-muted">
+                                                                Button {currentButtonIndex + 1} of {slots[currentSlotIndex]?.buttonCount || 2}
+                                                            </small>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <div className="row g-2">
+                                                <div className="col-6">
+                                                    <label htmlFor={`start-${currentSlotIndex}`} className="form-label fw-bold">Start Time</label>
+                                                    <input
+                                                        type="time"
+                                                        className="form-control"
+                                                        id={`start-${currentSlotIndex}`}
+                                                        value={slots[currentSlotIndex]?.startTime || ''}
+                                                        onChange={(e) => handleSlotChange(currentSlotIndex, 'startTime', e.target.value)}
+                                                    />
+                                                </div>
+                                                <div className="col-6">
+                                                    <label htmlFor={`end-${currentSlotIndex}`} className="form-label fw-bold">End Time</label>
+                                                    <input
+                                                        type="time"
+                                                        className="form-control"
+                                                        id={`end-${currentSlotIndex}`}
+                                                        value={slots[currentSlotIndex]?.endTime || ''}
+                                                        onChange={(e) => handleSlotChange(currentSlotIndex, 'endTime', e.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="mt-3">
+                                                <label htmlFor={`points-${currentSlotIndex}`} className="form-label fw-bold">Points</label>
+                                                <input
+                                                    type="number"
+                                                    className="form-control"
+                                                    id={`points-${currentSlotIndex}`}
+                                                    value={slots[currentSlotIndex]?.points || 0}
+                                                    onChange={(e) => handleSlotChange(currentSlotIndex, 'points', Number(e.target.value))}
+                                                    min="0"
+                                                    max="100"
+                                                />
+                                            </div>
                                         </div>
-                                        <div className="col-md-2 mb-3">
-                                            <label className="form-label">Start Time</label>
-                                            <input
-                                                type="time"
-                                                className="form-control"
-                                                value={slot.startTime}
-                                                onChange={(e) => handleSlotChange(index, 'startTime', e.target.value)}
-                                            />
-                                        </div>
-                                        <div className="col-md-2 mb-3">
-                                            <label className="form-label">End Time</label>
-                                            <input
-                                                type="time"
-                                                className="form-control"
-                                                value={slot.endTime}
-                                                onChange={(e) => handleSlotChange(index, 'endTime', e.target.value)}
-                                            />
-                                        </div>
-                                        <div className="col-md-2 mb-3">
-                                            <label className="form-label">Points</label>
-                                            <input
-                                                type="number"
-                                                className="form-control"
-                                                value={slot.points}
-                                                onChange={(e) => handleSlotChange(index, 'points', Number(e.target.value))}
-                                            />
+                                    </div>
+
+                                    {/* Numbered Navigation Buttons */}
+                                    <div className="mt-4 text-center">
+                                        <div className="d-flex flex-wrap justify-content-center gap-2">
+                                            {Array.from({ length: slots.length }, (_, index) => (
+                                                <div key={index} className="d-inline-block mx-1 mb-2">
+                                                    <button
+                                                        className={`btn ${index === currentSlotIndex ? 'btn-primary' : 'btn-outline-secondary'} d-block`}
+                                                        onClick={() => setCurrentSlotIndex(index)}
+                                                        style={{ width: '60px', height: '60px', fontSize: '16px', fontWeight: 'bold', borderRadius: '8px' }}
+                                                    >
+                                                        <div className="text-center">
+                                                            <div style={{ fontSize: '20px', marginBottom: '2px' }}>
+                                                                {slots[index]?.type === 'media' ? '📷' : '🔘'}
+                                                            </div>
+                                                            <div style={{ fontSize: '12px' }}>{index + 1}</div>
+                                                        </div>
+                                                    </button>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
                                 </div>
-                            ))}
+                            </div>
                         </>
                     )}
                 </div>
