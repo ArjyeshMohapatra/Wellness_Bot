@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 
 interface Slot {
     name: string;
-    mandatory: boolean;
+    compulsory: boolean;
     startTime: string;
     endTime: string;
     points: number;
@@ -11,6 +11,8 @@ interface Slot {
     buttonCount?: number;
     buttonNames?: string[];
     buttonValues?: number[];
+    botResponse?: string;
+    postResponse?: string;
 }
 
 const Dashboard: React.FC = () => {
@@ -48,6 +50,7 @@ const Dashboard: React.FC = () => {
     const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
     const [showSubscriptionPanel, setShowSubscriptionPanel] = useState(false);
     const [subscriptionLoading, setSubscriptionLoading] = useState(true);
+    const [slotButtonIndices, setSlotButtonIndices] = useState<{ [key: number]: number }>({});
 
     const plans = [
         {
@@ -172,7 +175,7 @@ const Dashboard: React.FC = () => {
         const num = parseInt(slotsPerDay) || 0;
         setSlots(Array.from({ length: num }, () => ({
             name: '',
-            mandatory: false,
+            compulsory: false,
             startTime: '',
             endTime: '',
             points: 0,
@@ -271,13 +274,13 @@ const Dashboard: React.FC = () => {
     };
     const selectedPlanDetails = plans.find(plan => plan.name === selectedPlan)
     return (
-        <div>
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
             {/* Header */}
-            <nav className="navbar navbar-expand-lg navbar-light bg-light">
+            <nav className="navbar navbar-expand-lg navbar-light bg-white shadow-sm border-bottom">
                 <div className="container-fluid">
-                    <span className="navbar-brand">Admin Panel</span>
+                    <span className="navbar-brand fw-bold text-primary">🏥 Wellness Bot Admin</span>
                     <div className="d-flex align-items-center">
-                        <span className="navbar-text me-3">Welcome, Admin</span>
+                        <span className="navbar-text me-3 text-muted">Welcome, Admin</span>
                         {hasActiveSubscription && (
                             <button
                                 className="btn btn-outline-primary btn-sm me-2"
@@ -304,26 +307,32 @@ const Dashboard: React.FC = () => {
 
             {/* Selected Plan Display */}
             {paymentCompleted && (
-                <div className="bg-primary text-white py-3">
+                <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 shadow-lg">
                     <div className="container">
                         <div className="row align-items-center">
                             <div className="col-md-8">
-                                <h5 className="mb-1">
-                                    <i className="bi bi-check-circle-fill me-2"></i>
-                                    Active : {subscriptionLoading ? 'Checking...' : (selectedPlan || 'No Plan')}
-                                </h5>
-                                <p className="mb-0 opacity-75">
-                                    {(() => {
-                                        const duration = plans.find(p => p.name === selectedPlan)?.billingOptions.find(opt => opt.type === selectedBilling)?.duration;
-                                        if (duration === 1) return 'Monthly Subscription';
-                                        if (duration === 6) return 'Half yearly Subscriptio';
-                                        if (duration === 12) return 'Annual Subscription';
-                                        return `${duration}`;
-                                    })()}
-                                </p>
+                                <div className="d-flex align-items-center">
+                                    <div className="bg-white bg-opacity-20 rounded-full p-2 me-3">
+                                        <i className="bi bi-check-circle-fill fs-4"></i>
+                                    </div>
+                                    <div>
+                                        <h5 className="mb-1 fw-bold">
+                                            Active Plan: {subscriptionLoading ? 'Checking...' : (selectedPlan || 'No Plan')}
+                                        </h5>
+                                        <p className="mb-0 opacity-90">
+                                            {(() => {
+                                                const duration = plans.find(p => p.name === selectedPlan)?.billingOptions.find(opt => opt.type === selectedBilling)?.duration;
+                                                if (duration === 1) return 'Monthly Subscription';
+                                                if (duration === 6) return 'Half yearly Subscription';
+                                                if (duration === 12) return 'Annual Subscription';
+                                                return `${duration}`;
+                                            })()}
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
                             <div className="col-md-4 text-md-end">
-                                <span className="badge bg-light text-primary fs-6">
+                                <span className="badge bg-white text-success fs-6 px-3 py-2 shadow-sm fw-bold">
                                     {plans.find(p => p.name === selectedPlan)?.billingOptions.find(opt => opt.type === selectedBilling)?.price}
                                 </span>
                             </div>
@@ -334,7 +343,7 @@ const Dashboard: React.FC = () => {
 
             {/* Main Content */}
             {(!hasActiveSubscription || showSubscriptionPanel) && (
-                <div className="container mt-4">
+                <div className="mt-4 px-1">
                     <div className="d-flex justify-content-between align-items-center mb-4">
                         <h3>{hasActiveSubscription ? 'Manage Your Subscription' : 'Select a Plan'}</h3>
                     </div>
@@ -503,7 +512,7 @@ const Dashboard: React.FC = () => {
             )}
 
             {hasActiveSubscription && !showSubscriptionPanel && (
-                <div className="container mt-4">
+                <div className="mt-4 px-3">
                     <h3 className="mb-4">Bot Settings</h3>
                     <div className="row">
                         <div className="col-12 col-md-4 mb-3">
@@ -574,7 +583,198 @@ const Dashboard: React.FC = () => {
                             <h4 className="mt-4">Configure Slots</h4>
                             {slotErrors.totalPoints && <div className="alert alert-danger mt-3">Total points cannot exceed 100.</div>}
                             {slotErrors.overlaps && <div className="alert alert-danger mt-3">Time slots overlap.</div>}
-                            <div className="row justify-content-center mt-3">
+
+                            {/* Table layout for larger devices */}
+                            <div className="d-none d-md-block mt-3">
+                                <div className="table-responsive">
+                                    <table className="table table-striped table-hover shadow-sm" style={{ borderRadius: '12px', overflow: 'hidden', borderCollapse: 'separate', borderSpacing: '0', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)', border: '1px solid #dee2e6' }}>
+                                        <thead style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', borderBottom: '2px solid #dee2e6' }}>
+                                            <tr>
+                                                <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '0.85rem', fontWeight: '600', borderRight: '1px solid rgba(255,255,255,0.2)' }}>Slot<br />Name</th>
+                                                <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '0.85rem', fontWeight: '600', borderRight: '1px solid rgba(255,255,255,0.2)' }}>Type</th>
+                                                <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '0.85rem', fontWeight: '600', borderRight: '1px solid rgba(255,255,255,0.2)' }}>Compulsory</th>
+                                                <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '0.85rem', fontWeight: '600', borderRight: '1px solid rgba(255,255,255,0.2)' }}>Start<br />Time</th>
+                                                <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '0.85rem', fontWeight: '600', borderRight: '1px solid rgba(255,255,255,0.2)' }}>End<br />Time</th>
+                                                <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '0.85rem', fontWeight: '600', borderRight: '1px solid rgba(255,255,255,0.2)' }}>Points</th>
+                                                <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '0.85rem', fontWeight: '600', borderRight: '1px solid rgba(255,255,255,0.2)' }}>Button<br />Count</th>
+                                                <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '0.85rem', fontWeight: '600', borderRight: '1px solid rgba(255,255,255,0.2)' }}>Config<br />Button</th>
+                                                <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '0.85rem', fontWeight: '600', borderRight: '1px solid rgba(255,255,255,0.2)' }}>Bot<br />Response</th>
+                                                <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '0.85rem', fontWeight: '600' }}>Post<br />Response</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody style={{ backgroundColor: '#f8f9fa' }}>
+                                            {slots.map((slot, index) => (
+                                                <tr key={index} style={{ borderBottom: '1px solid #dee2e6', transition: 'background-color 0.2s ease' }}>
+                                                    <td style={{ padding: '8px', verticalAlign: 'middle' }}>
+                                                        <input
+                                                            type="text"
+                                                            className="form-control form-control-sm"
+                                                            style={{ width: '120px' }}
+                                                            value={slot.name}
+                                                            onChange={(e) => handleSlotChange(index, 'name', e.target.value)}
+                                                            placeholder="Enter slot name"
+                                                        />
+                                                    </td>
+                                                    <td style={{ padding: '8px', verticalAlign: 'middle', width: '60px', minWidth: '60px' }}>
+                                                        <select
+                                                            className="form-select form-select-sm"
+                                                            value={slot.type}
+                                                            onChange={(e) => {
+                                                                const newType = e.target.value as 'media' | 'button';
+                                                                const newSlots = [...slots];
+                                                                newSlots[index] = { ...newSlots[index], type: newType };
+                                                                if (newType === 'button' && !newSlots[index].buttonCount) {
+                                                                    newSlots[index].buttonCount = 2;
+                                                                    newSlots[index].buttonNames = ['Button 1', 'Button 2'];
+                                                                    newSlots[index].buttonValues = [0, 0];
+                                                                }
+                                                                setSlots(newSlots);
+                                                            }}
+                                                        >
+                                                            <option value="media">📷 Media</option>
+                                                            <option value="button">🔘 Button</option>
+                                                        </select>
+                                                    </td>
+                                                    <td style={{ padding: '8px', verticalAlign: 'middle', width: '60px', minWidth: '60px' }}>
+                                                        <div className="form-check d-flex justify-content-center">
+                                                            <input
+                                                                type="checkbox"
+                                                                className="form-check-input"
+                                                                checked={slot.compulsory}
+                                                                onChange={(e) => handleSlotChange(index, 'compulsory', e.target.checked)}
+                                                            />
+                                                        </div>
+                                                    </td>
+                                                    <td style={{ padding: '8px', verticalAlign: 'middle' }}>
+                                                        <input
+                                                            type="time"
+                                                            className="form-control form-control-sm"
+                                                            style={{ width: '100px' }}
+                                                            value={slot.startTime}
+                                                            onChange={(e) => handleSlotChange(index, 'startTime', e.target.value)}
+                                                        />
+                                                    </td>
+                                                    <td style={{ padding: '8px', verticalAlign: 'middle' }}>
+                                                        <input
+                                                            type="time"
+                                                            className="form-control form-control-sm"
+                                                            style={{ width: '100px' }}
+                                                            value={slot.endTime}
+                                                            onChange={(e) => handleSlotChange(index, 'endTime', e.target.value)}
+                                                        />
+                                                    </td>
+                                                    <td style={{ padding: '8px', verticalAlign: 'middle' }}>
+                                                        <input
+                                                            type="number"
+                                                            className="form-control form-control-sm"
+                                                            style={{ width: '60px' }}
+                                                            value={slot.points}
+                                                            onChange={(e) => handleSlotChange(index, 'points', Number(e.target.value))}
+                                                            min="0"
+                                                            max="100"
+                                                        />
+                                                    </td>
+                                                    <td style={{ padding: '8px', verticalAlign: 'middle' }}>
+                                                        {slot.type === 'button' ? (
+                                                            <input
+                                                                type="number"
+                                                                className="form-control form-control-sm"
+                                                                style={{ width: '60px' }}
+                                                                value={slot.buttonCount || 2}
+                                                                onChange={(e) => {
+                                                                    const count = Math.max(1, Number(e.target.value));
+                                                                    const currentNames = slot.buttonNames || [];
+                                                                    const currentValues = slot.buttonValues || [];
+                                                                    const newNames = Array.from({ length: count }, (_, i) => currentNames[i] || `Button ${i + 1}`);
+                                                                    const newValues = Array.from({ length: count }, (_, i) => currentValues[i] || 0);
+                                                                    const newSlots = [...slots];
+                                                                    newSlots[index] = { ...newSlots[index], buttonCount: count, buttonNames: newNames, buttonValues: newValues };
+                                                                    setSlots(newSlots);
+                                                                }}
+                                                                min="1"
+                                                                max="10"
+                                                            />
+                                                        ) : (
+                                                            <span className="text-muted">-</span>
+                                                        )}
+                                                    </td>
+                                                    <td style={{ padding: '8px', verticalAlign: 'middle' }}>
+                                                        {slot.type === 'button' ? (
+                                                            <div className="d-flex align-items-center gap-1">
+                                                                <div className="flex-grow-1">
+                                                                    <input
+                                                                        type="text"
+                                                                        className="form-control form-control-sm mb-0"
+                                                                        style={{ width: '100px' }}
+                                                                        value={slot.buttonNames?.[slotButtonIndices[index] || 0] ?? `Button ${(slotButtonIndices[index] || 0) + 1}`}
+                                                                        onChange={(e) => {
+                                                                            const newNames = [...(slot.buttonNames || [])];
+                                                                            newNames[slotButtonIndices[index] || 0] = e.target.value;
+                                                                            handleSlotChange(index, 'buttonNames', newNames);
+                                                                        }}
+                                                                        placeholder={`Button ${(slotButtonIndices[index] || 0) + 1} name`}
+                                                                    />
+                                                                    <input
+                                                                        type="number"
+                                                                        className="form-control form-control-sm"
+                                                                        style={{ width: '60px' }}
+                                                                        value={slot.buttonValues?.[slotButtonIndices[index] || 0] ?? 0}
+                                                                        onChange={(e) => {
+                                                                            const newValues = [...(slot.buttonValues || [])];
+                                                                            newValues[slotButtonIndices[index] || 0] = Number(e.target.value) || 0;
+                                                                            handleSlotChange(index, 'buttonValues', newValues);
+                                                                        }}
+                                                                        placeholder="Value"
+                                                                        min="0"
+                                                                    />
+                                                                </div>
+                                                                <button
+                                                                    type="button"
+                                                                    className="btn btn-outline-secondary btn-sm align-self-start"
+                                                                    onClick={() => {
+                                                                        const currentIndex = slotButtonIndices[index] || 0;
+                                                                        const maxIndex = (slot.buttonCount || 2) - 1;
+                                                                        const nextIndex = currentIndex < maxIndex ? currentIndex + 1 : 0;
+                                                                        setSlotButtonIndices(prev => ({ ...prev, [index]: nextIndex }));
+                                                                    }}
+                                                                    title={`Button ${(slotButtonIndices[index] || 0) + 1} of ${slot.buttonCount || 2}`}
+                                                                >
+                                                                    →
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-muted">-</span>
+                                                        )}
+                                                    </td>
+                                                    <td style={{ padding: '8px', verticalAlign: 'middle' }}>
+                                                        <input
+                                                            type="text"
+                                                            className="form-control form-control-sm"
+                                                            style={{ width: '200px' }}
+                                                            value={slot.botResponse || ''}
+                                                            onChange={(e) => handleSlotChange(index, 'botResponse', e.target.value)}
+                                                            placeholder="Bot response"
+                                                        />
+                                                    </td>
+                                                    <td style={{ padding: '8px', verticalAlign: 'middle' }}>
+                                                        <input
+                                                            type="text"
+                                                            className="form-control form-control-sm"
+                                                            style={{ width: '200px' }}
+                                                            value={slot.postResponse || ''}
+                                                            onChange={(e) => handleSlotChange(index, 'postResponse', e.target.value)}
+                                                            placeholder="Post response"
+                                                        />
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            {/* Card layout for smaller devices */}
+                            <div className="d-md-none mt-3">
                                 <div className="col-12 col-md-8 col-lg-6">
                                     <div className="card border-0 shadow-sm">
                                         <div className="card-header bg-light d-flex justify-content-between align-items-center">
@@ -588,17 +788,17 @@ const Dashboard: React.FC = () => {
                                                 <input
                                                     type="checkbox"
                                                     className="form-check-input"
-                                                    id={`mandatory-${currentSlotIndex}`}
-                                                    checked={slots[currentSlotIndex]?.mandatory || false}
-                                                    onChange={(e) => handleSlotChange(currentSlotIndex, 'mandatory', e.target.checked)}
+                                                    id={`compulsory-${currentSlotIndex}`}
+                                                    checked={slots[currentSlotIndex]?.compulsory || false}
+                                                    onChange={(e) => handleSlotChange(currentSlotIndex, 'compulsory', e.target.checked)}
                                                 />
-                                                <label className="form-check-label" htmlFor={`mandatory-${currentSlotIndex}`}>
+                                                <label className="form-check-label" htmlFor={`compulsory-${currentSlotIndex}`}>
                                                     Compulsory
                                                 </label>
                                             </div>
                                         </div>
                                         <div className="card-body">
-                                            <div className="d-flex gap-3 mb-3">
+                                            <div className="d-flex gap-2 mb-2">
                                                 <div className="flex-fill">
                                                     <label htmlFor={`name-${currentSlotIndex}`} className="form-label fw-bold">Slot Name</label>
                                                     <input
@@ -638,7 +838,7 @@ const Dashboard: React.FC = () => {
 
                                             {/* Button Configuration - Only show when type is 'button' */}
                                             {slots[currentSlotIndex]?.type === 'button' && (
-                                                <div className="d-flex gap-3 mb-3">
+                                                <div className="d-flex gap-2 mb-2">
                                                     <div className="flex-fill">
                                                         <label htmlFor={`buttonCount-${currentSlotIndex}`} className="form-label fw-bold">Number of Buttons</label>
                                                         <input
@@ -677,7 +877,7 @@ const Dashboard: React.FC = () => {
                                                             >
                                                                 ←
                                                             </button>
-                                                            <div className="flex-grow-1 d-flex gap-2">
+                                                            <div className="flex-grow-1 d-flex gap-1">
                                                                 <input
                                                                     type="text"
                                                                     className="form-control"
@@ -744,7 +944,7 @@ const Dashboard: React.FC = () => {
                                                     />
                                                 </div>
                                             </div>
-                                            <div className="mt-3">
+                                            <div className="mt-2">
                                                 <label htmlFor={`points-${currentSlotIndex}`} className="form-label fw-bold">Points</label>
                                                 <input
                                                     type="number"
@@ -754,6 +954,28 @@ const Dashboard: React.FC = () => {
                                                     onChange={(e) => handleSlotChange(currentSlotIndex, 'points', Number(e.target.value))}
                                                     min="0"
                                                     max="100"
+                                                />
+                                            </div>
+                                            <div className="mt-2">
+                                                <label htmlFor={`botResponse-${currentSlotIndex}`} className="form-label fw-bold">Bot Response</label>
+                                                <input
+                                                    type="text"
+                                                    className="form-control"
+                                                    id={`botResponse-${currentSlotIndex}`}
+                                                    value={slots[currentSlotIndex]?.botResponse || ''}
+                                                    onChange={(e) => handleSlotChange(currentSlotIndex, 'botResponse', e.target.value)}
+                                                    placeholder="Enter bot response message"
+                                                />
+                                            </div>
+                                            <div className="mt-2">
+                                                <label htmlFor={`postResponse-${currentSlotIndex}`} className="form-label fw-bold">Post Response</label>
+                                                <input
+                                                    type="text"
+                                                    className="form-control"
+                                                    id={`postResponse-${currentSlotIndex}`}
+                                                    value={slots[currentSlotIndex]?.postResponse || ''}
+                                                    onChange={(e) => handleSlotChange(currentSlotIndex, 'postResponse', e.target.value)}
+                                                    placeholder="Enter post response action"
                                                 />
                                             </div>
                                         </div>
