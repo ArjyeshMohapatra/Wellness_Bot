@@ -35,6 +35,20 @@ CREATE TABLE password_resets (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+-- PAYMENT TRANSACTIONS TABLE
+CREATE TABLE IF NOT EXISTS payment_transactions (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    transaction_id VARCHAR(255) UNIQUE NOT NULL,
+    user_id INT NOT NULL,
+    plan_name VARCHAR(255) NOT NULL,
+    billing_type VARCHAR(100) NOT NULL,
+    duration_months INT NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    status ENUM('pending', 'completed', 'failed', 'refunded') DEFAULT 'completed',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
 -- GROUPS CONFIG TABLE
 CREATE TABLE IF NOT EXISTS groups_config (
     config_id INT AUTO_INCREMENT PRIMARY KEY,

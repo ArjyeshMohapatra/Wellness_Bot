@@ -17,6 +17,7 @@
     --danger-color: #dc3545;
     --warning-color: #ffc107;
     --info-color: #17a2b8;
+    --light-primary: #007bff3f;
 
     /* Background colors */
     --bg-primary: #ffffff;
@@ -46,4 +47,122 @@
     --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
     --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+/* Modern Plan Cards */
+.hover-lift {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hover-lift:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1) !important;
+}
+
+.billing-option-modern {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 2px solid var(--bg-secondary) !important;
+}
+
+.billing-option-modern:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.hover-bg-light:hover {
+    background-color: var(--bg-secondary) !important;
+}
+
+.radio-custom {
+    position: relative;
+    width: 20px;
+    height: 20px;
+}
+
+.radio-indicator {
+    width: 100%;
+    height: 100%;
+    border: 2px solid #dee2e6;
+    border-radius: 50%;
+    background: white;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.radio-indicator::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    background: var(--primary-color);
+    border-radius: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    transition: all 0.2s ease;
+}
+
+.radio-custom.active .radio-indicator {
+    border-color: var(--primary-color);
+    background: rgba(0, 123, 255, 0.1);
+}
+
+.radio-custom.active .radio-indicator::after {
+    transform: translate(-50%, -50%) scale(1);
+}
+
+/* Card title styling */
+.plan-card-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--primary-color);
+}
+
+/* Feature list styling */
+.feature-item {
+    font-size: 0.9rem;
+    line-height: 1.4;
+    color: var(--text-secondary);
+}
+
+/* Billing option styling */
+.billing-label {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.billing-price {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--primary-color);
+}
+
+.savings-badge {
+    font-size: 0.75rem;
+}
+
+/* Current Plan Highlight */
+.current-plan-card {
+    border: 2px solid #28a745 !important;
+    box-shadow: 0 0 15px rgba(40, 167, 69, 0.2) !important;
+}
+
+.current-plan-badge {
+    background: linear-gradient(45deg, #28a745, #20c997);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.05);
+    }
+
+    100% {
+        transform: scale(1);
+    }
 }

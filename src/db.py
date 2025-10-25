@@ -1,8 +1,7 @@
 import mysql.connector
 from mysql.connector import pooling
-from contextlib import contextmanager
 import logging
-from . import config
+import config
 import time
 
 logger = logging.getLogger(__name__)
@@ -38,48 +37,80 @@ def init_db_pool():
         raise
 
 
-@contextmanager
-def get_db_connection(retries=3,delay=1):
-    """Get database connection from pool."""
+def get_db_connection(retries=3, delay=1):
+    """Get database connection from pool (simple version)."""
     global connection_pool
 
     if connection_pool is None:
         init_db_pool()
 
-    connection = None
     last_exception = None
     for attempt in range(retries):
         try:
             connection = connection_pool.get_connection()
+            
+            # Handle any unread results that might be left from previous uses
+            try:
+                cursor = connection.cursor()
+                while cursor.nextset():
+                    pass
+                cursor.close()
+            except:
+                pass
+            
             connection.set_charset_collation("utf8mb4", "utf8mb4_unicode_520_ci")
             cursor = connection.cursor()
             cursor.execute("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_520_ci;")
             cursor.close()
-            yield connection
-            connection.commit()  # commits only if everything succeeds
-            return
+            return connection
         except mysql.connector.Error as e:
-            if connection:
-                connection.rollback()
             last_exception = e
             logger.warning("Database connection failed (attempt %s/%s). Retrying in %s s...", attempt + 1, retries, delay)
             time.sleep(delay)
-        finally:
-            if connection and connection.is_connected():
-                connection.close()  # returns connection back to the pool
+
     if last_exception:
         raise last_exception
 
 
 def execute_query(query, params=None, fetch=False):
     """Execute a query and optionally fetch results."""
-    with get_db_connection() as conn:
-        with conn.cursor(dictionary=True) as cursor:  # cursor auto-closed
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(query, params or ())
+
+        if fetch:
+            result = cursor.fetchall()
+            # Consume any remaining result sets
+            while cursor.nextset():
+                pass
+            # Don't commit for read operations
+            return result
+        else:
+            result = cursor.lastrowid or None
+            # Consume any remaining result sets
+            while cursor.nextset():
+                pass
+            # Only commit for write operations (INSERT, UPDATE, DELETE)
+            if query.strip().upper().startswith(('INSERT', 'UPDATE', 'DELETE')):
+                conn.commit()
+            return result
+
+    except mysql.connector.Error as e:
+        if conn:
+            conn.rollback()
+        logger.error(f"Error executing query: {query} | Params: {params} | Error: {e}", exc_info=True)
+        raise
+    finally:
+        if cursor:
             try:
-                cursor.execute(query, params or ())
-                if fetch:
-                    return cursor.fetchall()  # return rows for SELECT
-                return cursor.lastrowid or None
-            except mysql.connector.Error as e:
-                logger.error(f"Error executing query: {query} | Params: {params} | Error: {e}",exc_info=True)
-                raise
+                cursor.close()
+            except:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass
