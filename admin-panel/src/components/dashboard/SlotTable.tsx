@@ -1,4 +1,30 @@
-import React from 'react';
+import React, { useState } from 'react';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableContainer,
+    TableHead,
+    TableRow,
+    Paper,
+    TextField,
+    Select,
+    MenuItem,
+    FormControl,
+    Checkbox,
+    IconButton,
+    Collapse,
+    Box,
+    Typography,
+    Card,
+    CardContent,
+    useMediaQuery,
+    useTheme,
+} from '@mui/material';
+import {
+    KeyboardArrowDown as ExpandMoreIcon,
+    KeyboardArrowUp as ExpandLessIcon,
+} from '@mui/icons-material';
 
 interface Slot {
     name: string;
@@ -31,181 +57,342 @@ const SlotTable: React.FC<SlotTableProps> = ({
     onSlotButtonCountChange,
     onSlotButtonIndexChange
 }) => {
-    return (
-        <div className="d-none d-md-block mt-3">
-            <div className="table-responsive">
-                <table className="table table-striped table-hover shadow-sm" style={{ borderRadius: '12px', overflow: 'hidden', borderCollapse: 'separate', borderSpacing: '0', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)', border: '1px solid #dee2e6' }}>
-                    <thead style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', borderBottom: '2px solid #dee2e6' }}>
-                        <tr>
-                            <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '0.85rem', fontWeight: '600', borderRight: '1px solid rgba(255,255,255,0.2)' }}>Slot<br />Name</th>
-                            <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '0.85rem', fontWeight: '600', borderRight: '1px solid rgba(255,255,255,0.2)' }}>Type</th>
-                            <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '0.85rem', fontWeight: '600', borderRight: '1px solid rgba(255,255,255,0.2)' }}>Compulsory</th>
-                            <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '0.85rem', fontWeight: '600', borderRight: '1px solid rgba(255,255,255,0.2)' }}>Start<br />Time</th>
-                            <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '0.85rem', fontWeight: '600', borderRight: '1px solid rgba(255,255,255,0.2)' }}>End<br />Time</th>
-                            <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '0.85rem', fontWeight: '600', borderRight: '1px solid rgba(255,255,255,0.2)' }}>Points</th>
-                            <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '0.85rem', fontWeight: '600', borderRight: '1px solid rgba(255,255,255,0.2)' }}>Button<br />Count</th>
-                            <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '0.85rem', fontWeight: '600', borderRight: '1px solid rgba(255,255,255,0.2)' }}>Config<br />Button</th>
-                            <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '0.85rem', fontWeight: '600', borderRight: '1px solid rgba(255,255,255,0.2)' }}>Bot<br />Response</th>
-                            <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '0.85rem', fontWeight: '600' }}>Post<br />Response</th>
-                        </tr>
-                    </thead>
-                    <tbody style={{ backgroundColor: '#f8f9fa' }}>
-                        {slots.map((slot, index) => (
-                            <tr key={index} style={{ borderBottom: '1px solid #dee2e6', transition: 'background-color 0.2s ease' }}>
-                                <td style={{ padding: '8px', verticalAlign: 'middle' }}>
-                                    <input
-                                        type="text"
-                                        className="form-control form-control-sm"
-                                        style={{ width: '120px' }}
-                                        value={slot.name}
-                                        onChange={(e) => onSlotChange(index, 'name', e.target.value)}
-                                        placeholder="Enter slot name"
-                                    />
-                                </td>
-                                <td style={{ padding: '8px', verticalAlign: 'middle', width: '60px', minWidth: '60px' }}>
-                                    <select
-                                        className="form-select form-select-sm"
+    const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
+    const toggleRowExpansion = (index: number) => {
+        const newExpanded = new Set(expandedRows);
+        if (newExpanded.has(index)) {
+            newExpanded.delete(index);
+        } else {
+            newExpanded.add(index);
+        }
+        setExpandedRows(newExpanded);
+    };
+
+    if (isMobile) {
+        // Mobile card layout
+        return (
+            <Box sx={{ mt: 3 }}>
+                {slots.map((slot, index) => (
+                    <Card key={index} sx={{ mb: 2, boxShadow: 2 }}>
+                        <CardContent sx={{ p: 2 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                                <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                                    {slot.name || `Slot ${index + 1}`}
+                                </Typography>
+                                <IconButton
+                                    size="small"
+                                    onClick={() => toggleRowExpansion(index)}
+                                >
+                                    {expandedRows.has(index) ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                                </IconButton>
+                            </Box>
+
+                            <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                                <FormControl size="small" sx={{ minWidth: 80 }}>
+                                    <Select
                                         value={slot.type}
-                                        onChange={(e) => {
-                                            const newType = e.target.value as 'media' | 'button';
-                                            onSlotTypeChange(index, newType);
-                                        }}
+                                        onChange={(e) => onSlotTypeChange(index, e.target.value as 'media' | 'button')}
                                     >
-                                        <option value="media">📷 Media</option>
-                                        <option value="button">🔘 Button</option>
-                                    </select>
-                                </td>
-                                <td style={{ padding: '8px', verticalAlign: 'middle', width: '60px', minWidth: '60px' }}>
-                                    <div className="form-check d-flex justify-content-center">
-                                        <input
-                                            type="checkbox"
-                                            className="form-check-input"
-                                            checked={slot.compulsory}
-                                            onChange={(e) => onSlotChange(index, 'compulsory', e.target.checked)}
+                                        <MenuItem value="media">📷 Media</MenuItem>
+                                        <MenuItem value="button">🔘 Button</MenuItem>
+                                    </Select>
+                                </FormControl>
+                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                    <Checkbox
+                                        checked={slot.compulsory}
+                                        onChange={() => onSlotChange(index, 'compulsory', !slot.compulsory)}
+                                        size="small"
+                                    />
+                                    <Typography variant="caption">Required</Typography>
+                                </Box>
+                            </Box>
+
+                            <Collapse in={expandedRows.has(index)}>
+                                <Box sx={{ mt: 2, pt: 2, borderTop: 1, borderColor: 'divider' }}>
+                                    <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                                        <TextField
+                                            label="Start Time"
+                                            type="time"
+                                            value={slot.startTime}
+                                            onChange={(e) => onSlotChange(index, 'startTime', e.target.value)}
+                                            size="small"
+                                            sx={{ flex: 1 }}
                                         />
-                                    </div>
-                                </td>
-                                <td style={{ padding: '8px', verticalAlign: 'middle' }}>
-                                    <input
-                                        type="time"
-                                        className="form-control form-control-sm"
-                                        style={{ width: '100px' }}
-                                        value={slot.startTime}
-                                        onChange={(e) => onSlotChange(index, 'startTime', e.target.value)}
-                                    />
-                                </td>
-                                <td style={{ padding: '8px', verticalAlign: 'middle' }}>
-                                    <input
-                                        type="time"
-                                        className="form-control form-control-sm"
-                                        style={{ width: '100px' }}
-                                        value={slot.endTime}
-                                        onChange={(e) => onSlotChange(index, 'endTime', e.target.value)}
-                                    />
-                                </td>
-                                <td style={{ padding: '8px', verticalAlign: 'middle' }}>
-                                    <input
-                                        type="number"
-                                        className="form-control form-control-sm"
-                                        style={{ width: '60px' }}
-                                        value={slot.points}
-                                        onChange={(e) => onSlotChange(index, 'points', Number(e.target.value))}
-                                        min="0"
-                                        max="100"
-                                    />
-                                </td>
-                                <td style={{ padding: '8px', verticalAlign: 'middle' }}>
-                                    {slot.type === 'button' ? (
-                                        <input
+                                        <TextField
+                                            label="End Time"
+                                            type="time"
+                                            value={slot.endTime}
+                                            onChange={(e) => onSlotChange(index, 'endTime', e.target.value)}
+                                            size="small"
+                                            sx={{ flex: 1 }}
+                                        />
+                                        <TextField
+                                            label="Points"
                                             type="number"
-                                            className="form-control form-control-sm"
-                                            style={{ width: '60px' }}
-                                            value={slot.buttonCount || 2}
-                                            onChange={(e) => {
-                                                const count = Math.max(1, Number(e.target.value));
-                                                onSlotButtonCountChange(index, count);
-                                            }}
-                                            min="1"
-                                            max="10"
+                                            value={slot.points}
+                                            onChange={(e) => onSlotChange(index, 'points', Number(e.target.value))}
+                                            size="small"
+                                            sx={{ width: 80 }}
+                                            inputProps={{ min: 0, max: 100 }}
                                         />
-                                    ) : (
-                                        <span className="text-muted">-</span>
-                                    )}
-                                </td>
-                                <td style={{ padding: '8px', verticalAlign: 'middle' }}>
-                                    {slot.type === 'button' ? (
-                                        <div className="d-flex align-items-center gap-1">
-                                            <div className="flex-grow-1">
-                                                <input
-                                                    type="text"
-                                                    className="form-control form-control-sm mb-0"
-                                                    style={{ width: '100px' }}
+                                    </Box>
+
+                                    {slot.type === 'button' && (
+                                        <Box sx={{ mb: 2 }}>
+                                            <TextField
+                                                label="Button Count"
+                                                type="number"
+                                                value={slot.buttonCount || 2}
+                                                onChange={(e) => onSlotButtonCountChange(index, Math.max(1, Number(e.target.value)))}
+                                                size="small"
+                                                sx={{ width: 120, mb: 1 }}
+                                                inputProps={{ min: 1, max: 10 }}
+                                            />
+                                            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                                                <TextField
+                                                    label={`Button ${(slotButtonIndices[index] || 0) + 1} Name`}
                                                     value={slot.buttonNames?.[slotButtonIndices[index] || 0] ?? `Button ${(slotButtonIndices[index] || 0) + 1}`}
                                                     onChange={(e) => {
                                                         const newNames = [...(slot.buttonNames || [])];
                                                         newNames[slotButtonIndices[index] || 0] = e.target.value;
                                                         onSlotChange(index, 'buttonNames', newNames);
                                                     }}
-                                                    placeholder={`Button ${(slotButtonIndices[index] || 0) + 1} name`}
+                                                    size="small"
+                                                    sx={{ flex: 1 }}
                                                 />
-                                                <input
+                                                <TextField
+                                                    label="Value"
                                                     type="number"
-                                                    className="form-control form-control-sm"
-                                                    style={{ width: '60px' }}
                                                     value={slot.buttonValues?.[slotButtonIndices[index] || 0] ?? 0}
                                                     onChange={(e) => {
                                                         const newValues = [...(slot.buttonValues || [])];
                                                         newValues[slotButtonIndices[index] || 0] = Number(e.target.value) || 0;
                                                         onSlotChange(index, 'buttonValues', newValues);
                                                     }}
-                                                    placeholder="Value"
-                                                    min="0"
+                                                    size="small"
+                                                    sx={{ width: 80 }}
                                                 />
-                                            </div>
-                                            <button
-                                                type="button"
-                                                className="btn btn-outline-secondary btn-sm align-self-start"
-                                                onClick={() => {
-                                                    const currentIndex = slotButtonIndices[index] || 0;
-                                                    const maxIndex = (slot.buttonCount || 2) - 1;
-                                                    const nextIndex = currentIndex < maxIndex ? currentIndex + 1 : 0;
-                                                    onSlotButtonIndexChange(index, nextIndex);
-                                                }}
-                                                title={`Button ${(slotButtonIndices[index] || 0) + 1} of ${slot.buttonCount || 2}`}
-                                            >
-                                                →
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <span className="text-muted">-</span>
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={() => {
+                                                        const currentIndex = slotButtonIndices[index] || 0;
+                                                        const maxIndex = (slot.buttonCount || 2) - 1;
+                                                        const nextIndex = currentIndex < maxIndex ? currentIndex + 1 : 0;
+                                                        onSlotButtonIndexChange(index, nextIndex);
+                                                    }}
+                                                >
+                                                    →
+                                                </IconButton>
+                                            </Box>
+                                        </Box>
                                     )}
-                                </td>
-                                <td style={{ padding: '8px', verticalAlign: 'middle' }}>
-                                    <input
-                                        type="text"
-                                        className="form-control form-control-sm"
-                                        style={{ width: '200px' }}
+
+                                    <TextField
+                                        label="Bot Response"
                                         value={slot.botResponse || ''}
                                         onChange={(e) => onSlotChange(index, 'botResponse', e.target.value)}
-                                        placeholder="Bot response"
+                                        size="small"
+                                        fullWidth
+                                        sx={{ mb: 1 }}
+                                        placeholder="Bot response message"
                                     />
-                                </td>
-                                <td style={{ padding: '8px', verticalAlign: 'middle' }}>
-                                    <input
-                                        type="text"
-                                        className="form-control form-control-sm"
-                                        style={{ width: '200px' }}
+                                    <TextField
+                                        label="Post Response"
                                         value={slot.postResponse || ''}
                                         onChange={(e) => onSlotChange(index, 'postResponse', e.target.value)}
-                                        placeholder="Post response"
+                                        size="small"
+                                        fullWidth
+                                        placeholder="Post-response message"
                                     />
-                                </td>
-                            </tr>
+                                </Box>
+                            </Collapse>
+                        </CardContent>
+                    </Card>
+                ))}
+            </Box>
+        );
+    }
+
+    // Desktop table layout - compact version
+    return (
+        <Box sx={{ mt: 3 }}>
+            <TableContainer component={Paper} sx={{ boxShadow: 2 }}>
+                <Table size="small">
+                    <TableHead>
+                        <TableRow sx={{ backgroundColor: 'primary.main' }}>
+                            <TableCell sx={{ color: 'white', fontWeight: 'bold', width: '25%' }}>Slot Name</TableCell>
+                            <TableCell sx={{ color: 'white', fontWeight: 'bold', width: '10%' }}>Type</TableCell>
+                            <TableCell sx={{ color: 'white', fontWeight: 'bold', width: '10%' }}>Required</TableCell>
+                            <TableCell sx={{ color: 'white', fontWeight: 'bold', width: '15%' }}>Time Range</TableCell>
+                            <TableCell sx={{ color: 'white', fontWeight: 'bold', width: '10%' }}>Points</TableCell>
+                            <TableCell sx={{ color: 'white', fontWeight: 'bold', width: '15%' }}>Button Config</TableCell>
+                            <TableCell sx={{ color: 'white', fontWeight: 'bold', width: '15%' }}>Actions</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {slots.map((slot, index) => (
+                            <React.Fragment key={index}>
+                                <TableRow hover>
+                                    <TableCell>
+                                        <TextField
+                                            value={slot.name}
+                                            onChange={(e) => onSlotChange(index, 'name', e.target.value)}
+                                            size="small"
+                                            placeholder="Enter slot name"
+                                            fullWidth
+                                        />
+                                    </TableCell>
+                                    <TableCell>
+                                        <FormControl size="small" fullWidth>
+                                            <Select
+                                                value={slot.type}
+                                                onChange={(e) => onSlotTypeChange(index, e.target.value as 'media' | 'button')}
+                                            >
+                                                <MenuItem value="media">📷 Media</MenuItem>
+                                                <MenuItem value="button">🔘 Button</MenuItem>
+                                            </Select>
+                                        </FormControl>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Checkbox
+                                            checked={slot.compulsory}
+                                            onChange={() => onSlotChange(index, 'compulsory', !slot.compulsory)}
+                                            size="small"
+                                        />
+                                    </TableCell>
+                                    <TableCell>
+                                        <Box sx={{ display: 'flex', gap: 1 }}>
+                                            <TextField
+                                                type="time"
+                                                value={slot.startTime}
+                                                onChange={(e) => onSlotChange(index, 'startTime', e.target.value)}
+                                                size="small"
+                                                sx={{ width: 100 }}
+                                            />
+                                            <TextField
+                                                type="time"
+                                                value={slot.endTime}
+                                                onChange={(e) => onSlotChange(index, 'endTime', e.target.value)}
+                                                size="small"
+                                                sx={{ width: 100 }}
+                                            />
+                                        </Box>
+                                    </TableCell>
+                                    <TableCell>
+                                        <TextField
+                                            type="number"
+                                            value={slot.points}
+                                            onChange={(e) => onSlotChange(index, 'points', Number(e.target.value))}
+                                            size="small"
+                                            sx={{ width: 70 }}
+                                            inputProps={{ min: 0, max: 100 }}
+                                        />
+                                    </TableCell>
+                                    <TableCell>
+                                        {slot.type === 'button' ? (
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <TextField
+                                                    type="number"
+                                                    value={slot.buttonCount || 2}
+                                                    onChange={(e) => onSlotButtonCountChange(index, Math.max(1, Number(e.target.value)))}
+                                                    size="small"
+                                                    sx={{ width: 60 }}
+                                                    inputProps={{ min: 1, max: 10 }}
+                                                />
+                                                <Typography variant="caption">
+                                                    {slotButtonIndices[index] !== undefined ? `Btn ${(slotButtonIndices[index] || 0) + 1}` : 'Btn 1'}
+                                                </Typography>
+                                            </Box>
+                                        ) : (
+                                            <Typography variant="caption" color="text.secondary">-</Typography>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>
+                                        <IconButton
+                                            size="small"
+                                            onClick={() => toggleRowExpansion(index)}
+                                            color="primary"
+                                        >
+                                            {expandedRows.has(index) ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                                        </IconButton>
+                                    </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                    <TableCell colSpan={7} sx={{ py: 0 }}>
+                                        <Collapse in={expandedRows.has(index)}>
+                                            <Box sx={{ p: 2, backgroundColor: 'grey.50' }}>
+                                                {slot.type === 'button' && (
+                                                    <Box sx={{ mb: 2 }}>
+                                                        <Typography variant="subtitle2" sx={{ mb: 1 }}>Button Configuration</Typography>
+                                                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                                                            <TextField
+                                                                label={`Button ${(slotButtonIndices[index] || 0) + 1} Name`}
+                                                                value={slot.buttonNames?.[slotButtonIndices[index] || 0] ?? `Button ${(slotButtonIndices[index] || 0) + 1}`}
+                                                                onChange={(e) => {
+                                                                    const newNames = [...(slot.buttonNames || [])];
+                                                                    newNames[slotButtonIndices[index] || 0] = e.target.value;
+                                                                    onSlotChange(index, 'buttonNames', newNames);
+                                                                }}
+                                                                size="small"
+                                                                sx={{ flex: 1 }}
+                                                            />
+                                                            <TextField
+                                                                label="Value"
+                                                                type="number"
+                                                                value={slot.buttonValues?.[slotButtonIndices[index] || 0] ?? 0}
+                                                                onChange={(e) => {
+                                                                    const newValues = [...(slot.buttonValues || [])];
+                                                                    newValues[slotButtonIndices[index] || 0] = Number(e.target.value) || 0;
+                                                                    onSlotChange(index, 'buttonValues', newValues);
+                                                                }}
+                                                                size="small"
+                                                                sx={{ width: 80 }}
+                                                            />
+                                                            <IconButton
+                                                                size="small"
+                                                                onClick={() => {
+                                                                    const currentIndex = slotButtonIndices[index] || 0;
+                                                                    const maxIndex = (slot.buttonCount || 2) - 1;
+                                                                    const nextIndex = currentIndex < maxIndex ? currentIndex + 1 : 0;
+                                                                    onSlotButtonIndexChange(index, nextIndex);
+                                                                }}
+                                                            >
+                                                                →
+                                                            </IconButton>
+                                                        </Box>
+                                                    </Box>
+                                                )}
+                                                <Box sx={{ display: 'flex', gap: 2 }}>
+                                                    <TextField
+                                                        label="Bot Response"
+                                                        value={slot.botResponse || ''}
+                                                        onChange={(e) => onSlotChange(index, 'botResponse', e.target.value)}
+                                                        size="small"
+                                                        sx={{ flex: 1 }}
+                                                        placeholder="Bot response message"
+                                                    />
+                                                    <TextField
+                                                        label="Post Response"
+                                                        value={slot.postResponse || ''}
+                                                        onChange={(e) => onSlotChange(index, 'postResponse', e.target.value)}
+                                                        size="small"
+                                                        sx={{ flex: 1 }}
+                                                        placeholder="Post-response message"
+                                                    />
+                                                </Box>
+                                            </Box>
+                                        </Collapse>
+                                    </TableCell>
+                                </TableRow>
+                            </React.Fragment>
                         ))}
-                    </tbody>
-                </table>
-            </div>
-        </div>
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        </Box>
     );
 };
 

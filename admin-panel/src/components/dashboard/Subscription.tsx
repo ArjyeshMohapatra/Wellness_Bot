@@ -1,4 +1,23 @@
 import React from 'react';
+import {
+    Card,
+    CardContent,
+    Typography,
+    Box,
+    Chip,
+    List,
+    ListItem,
+    ListItemIcon,
+    ListItemText,
+    RadioGroup,
+    FormControlLabel,
+    Radio,
+    Button
+} from '@mui/material';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import StarIcon from '@mui/icons-material/Star';
+import CreditCardIcon from '@mui/icons-material/CreditCard';
+import PeopleIcon from '@mui/icons-material/People';
 
 interface BillingOption {
     type: string;
@@ -39,33 +58,41 @@ const Subscription: React.FC<SubscriptionProps> = ({
     onProceedToPayment
 }) => {
     return (
-        <div className="mt-4 px-1">
-            <div className="d-flex justify-content-between align-items-center mb-4">
-                <h3>{hasActiveSubscription ? 'Manage Your Subscription' : 'Select a Plan'}</h3>
-            </div>
+        <Box sx={{ mt: 4, px: 1 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+                <Typography variant="h4">
+                    {hasActiveSubscription ? 'Manage Your Subscription' : 'Select a Plan'}
+                </Typography>
+            </Box>
 
             {/* Plan Selection */}
-            <div className="mb-4">
-                <h5 className="text-muted mb-3">
+            <Box sx={{ mb: 4 }}>
+                <Typography variant="h6" color="text.secondary" gutterBottom>
                     {hasActiveSubscription ? 'Choose a Different Plan:' : 'Available Plans:'}
-                </h5>
-            </div>
+                </Typography>
+            </Box>
 
-            <div className="row g-3">
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
                 {plans.map(plan => (
-                    <div key={plan.name} className="col-12 col-md-4 mb-4">
-                        <div
-                            className={`card h-100 border-0 shadow-sm position-relative overflow-hidden ${selectedPlan === plan.name
-                                ? 'shadow-lg border-primary'
-                                : 'hover-lift'
-                                }`}
-                            style={{
-                                minHeight: '380px',
+                    <Box key={plan.name} sx={{ flex: '1 1 300px', maxWidth: '400px' }}>
+                        <Card
+                            sx={{
+                                height: '100%',
+                                minHeight: 380,
+                                cursor: 'pointer',
+                                position: 'relative',
+                                overflow: 'visible',
+                                border: selectedPlan === plan.name ? 2 : 1,
+                                borderColor: selectedPlan === plan.name ? 'primary.main' : 'divider',
+                                boxShadow: selectedPlan === plan.name ? 4 : 1,
                                 background: selectedPlan === plan.name
                                     ? 'linear-gradient(135deg, #ffffff 0%, #f8f9ff 100%)'
                                     : 'linear-gradient(135deg, #ffffff 0%, #fafbfc 100%)',
                                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                cursor: 'pointer'
+                                '&:hover': {
+                                    boxShadow: 3,
+                                    transform: 'translateY(-2px)'
+                                }
                             }}
                             onClick={() => {
                                 if (!selectedPlan || selectedPlan !== plan.name) {
@@ -76,135 +103,156 @@ const Subscription: React.FC<SubscriptionProps> = ({
                             }}
                         >
                             {selectedPlan === plan.name && (
-                                <div className={`position-absolute top-0 end-0 text-white px-3 py-1 rounded-bottom-start fw-semibold ${hasActiveSubscription && showSubscriptionPanel && selectedPlan === plan.name
-                                    ? 'bg-success'
-                                    : 'bg-primary'
-                                    }`} style={{ fontSize: '0.75rem' }}>
+                                <Box
+                                    sx={{
+                                        position: 'absolute',
+                                        top: 0,
+                                        right: 0,
+                                        bgcolor: hasActiveSubscription && showSubscriptionPanel && selectedPlan === plan.name
+                                            ? 'success.main'
+                                            : 'primary.main',
+                                        color: 'white',
+                                        px: 2,
+                                        py: 0.5,
+                                        borderBottomLeftRadius: 8,
+                                        fontSize: '0.75rem',
+                                        fontWeight: 'bold',
+                                        zIndex: 1
+                                    }}
+                                >
                                     {hasActiveSubscription && showSubscriptionPanel && selectedPlan === plan.name
                                         ? 'CURRENT PLAN'
                                         : 'SELECTED'
                                     }
-                                </div>
+                                </Box>
                             )}
 
-                            <div className="card-body d-flex flex-column p-4">
-                                <div className="text-center mb-4">
-                                    <h4 className="plan-card-title mb-2">
+                            <CardContent sx={{ p: 3, display: 'flex', flexDirection: 'column', height: '100%' }}>
+                                <Box sx={{ textAlign: 'center', mb: 3 }}>
+                                    <Typography variant="h5" gutterBottom>
                                         {plan.name}
-                                    </h4>
-                                    <div className="d-flex align-items-center justify-content-center mb-3">
-                                        <span className="badge bg-primary-subtle text-primary px-3 py-2 rounded-pill fw-semibold">
-                                            <i className="fas fa-users me-1"></i>
-                                            Up to {plan.maxMembers} Members
-                                        </span>
-                                    </div>
-                                </div>
+                                    </Typography>
+                                    <Chip
+                                        icon={<PeopleIcon />}
+                                        label={`Up to ${plan.maxMembers} Members`}
+                                        color="primary"
+                                        variant="outlined"
+                                        sx={{ mb: 2 }}
+                                    />
+                                </Box>
 
-                                <div className="mb-4 flex-grow-1">
-                                    <h6 className="section-header mb-3">
-                                        <i className="fas fa-star text-warning me-2"></i>
+                                <Box sx={{ mb: 3, flexGrow: 1 }}>
+                                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+                                        <StarIcon color="warning" sx={{ mr: 1 }} />
                                         Features Included:
-                                    </h6>
-                                    <ul className="list-unstyled mb-0">
+                                    </Typography>
+                                    <List dense>
                                         {plan.features.map((feature, index) => (
-                                            <li key={index} className="mb-2 d-flex align-items-start">
-                                                <i className="fas fa-check-circle text-success me-2 mt-1" style={{ fontSize: '0.9rem' }}></i>
-                                                <span className="feature-item">
-                                                    {feature}
-                                                </span>
-                                            </li>
+                                            <ListItem key={index} sx={{ px: 0 }}>
+                                                <ListItemIcon sx={{ minWidth: 32 }}>
+                                                    <CheckCircleIcon color="success" fontSize="small" />
+                                                </ListItemIcon>
+                                                <ListItemText primary={feature} />
+                                            </ListItem>
                                         ))}
-                                    </ul>
-                                </div>
+                                    </List>
+                                </Box>
 
-                                <div className="mt-auto">
-                                    <h6 className="section-header mb-3">
-                                        <i className="fas fa-credit-card text-primary me-2"></i>
+                                <Box sx={{ mt: 'auto' }}>
+                                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+                                        <CreditCardIcon color="primary" sx={{ mr: 1 }} />
                                         Choose Billing:
-                                    </h6>
-                                    <div className="d-flex flex-column gap-2">
+                                    </Typography>
+                                    <RadioGroup
+                                        value={selectedPlan === plan.name ? selectedBilling : ''}
+                                        onChange={(e) => {
+                                            onPlanSelect(plan.name);
+                                            onBillingSelect(e.target.value);
+                                        }}
+                                    >
                                         {plan.billingOptions.map((option, index) => (
-                                            <label
+                                            <Box
                                                 key={index}
-                                                className={`billing-option-modern p-3 rounded-3 border-2 cursor-pointer transition-all ${selectedPlan === plan.name && selectedBilling === option.type
-                                                    ? 'border-primary bg-primary-subtle shadow-sm'
-                                                    : 'border-light-subtle bg-white hover-bg-light'
-                                                    }`}
-                                                htmlFor={`${plan.name}-${option.type}`}
-                                                style={{
+                                                sx={{
+                                                    p: 2,
+                                                    border: 2,
+                                                    borderColor: selectedPlan === plan.name && selectedBilling === option.type
+                                                        ? 'primary.main'
+                                                        : 'grey.300',
+                                                    borderRadius: 2,
+                                                    bgcolor: selectedPlan === plan.name && selectedBilling === option.type
+                                                        ? 'primary.light'
+                                                        : 'background.paper',
                                                     cursor: 'pointer',
-                                                    transition: 'all 0.2s ease'
+                                                    transition: 'all 0.2s ease',
+                                                    mb: 1,
+                                                    '&:hover': {
+                                                        borderColor: 'primary.main',
+                                                        bgcolor: 'primary.light'
+                                                    }
                                                 }}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
+                                                onClick={() => {
                                                     onPlanSelect(plan.name);
                                                     onBillingSelect(option.type);
                                                 }}
                                             >
-                                                <div className="d-flex align-items-center justify-content-between">
-                                                    <div className="d-flex align-items-center">
-                                                        <div className={`radio-custom me-3 ${selectedPlan === plan.name && selectedBilling === option.type
-                                                            ? 'active'
-                                                            : ''
-                                                            }`}>
-                                                            <input
-                                                                type="radio"
-                                                                name={`billing-${plan.name}`}
-                                                                id={`${plan.name}-${option.type}`}
-                                                                checked={selectedPlan === plan.name && selectedBilling === option.type}
-                                                                onChange={() => {
-                                                                    onPlanSelect(plan.name);
-                                                                    onBillingSelect(option.type);
-                                                                }}
-                                                                className="d-none"
-                                                            />
-                                                            <div className="radio-indicator"></div>
-                                                        </div>
-                                                        <div>
-                                                            <div className="billing-label mb-1">
-                                                                {option.label}
-                                                            </div>
-                                                            {option.savings && (
-                                                                <div className="badge bg-success-subtle text-success px-2 py-1 rounded-pill savings-badge">
-                                                                    {option.savings}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                    <div className="text-end">
-                                                        <div className="billing-price">
-                                                            {option.price}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </label>
+                                                <FormControlLabel
+                                                    value={option.type}
+                                                    control={<Radio />}
+                                                    label={
+                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                                                            <Box>
+                                                                <Typography variant="body1" fontWeight="medium">
+                                                                    {option.label}
+                                                                </Typography>
+                                                                {option.savings && (
+                                                                    <Chip
+                                                                        label={option.savings}
+                                                                        color="success"
+                                                                        size="small"
+                                                                        variant="outlined"
+                                                                        sx={{ mt: 0.5 }}
+                                                                    />
+                                                                )}
+                                                            </Box>
+                                                            <Typography variant="h6" color="primary" sx={{ ml: 2 }}>
+                                                                {option.price}
+                                                            </Typography>
+                                                        </Box>
+                                                    }
+                                                    sx={{ width: '100%', m: 0 }}
+                                                />
+                                            </Box>
                                         ))}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                                    </RadioGroup>
+                                </Box>
+                            </CardContent>
+                        </Card>
+                    </Box>
                 ))}
-            </div>
+            </Box>
 
             {selectedPlan && selectedBilling && (
-                <>
-                    <div className="text-center mt-4">
-                        <button className="btn btn-success btn-lg" onClick={onProceedToPayment}>
-                            {hasActiveSubscription && showSubscriptionPanel
-                                ? 'Change Plan & Proceed to Payment'
-                                : 'Proceed to Payment'
-                            }
-                        </button>
-                        {hasActiveSubscription && showSubscriptionPanel && (
-                            <p className="text-muted mt-2">
-                                <small>Your current plan will be changed after payment confirmation.</small>
-                            </p>
-                        )}
-                    </div>
-                </>
+                <Box sx={{ textAlign: 'center', mt: 4 }}>
+                    <Button
+                        variant="contained"
+                        color="success"
+                        size="large"
+                        onClick={onProceedToPayment}
+                    >
+                        {hasActiveSubscription && showSubscriptionPanel
+                            ? 'Change Plan & Proceed to Payment'
+                            : 'Proceed to Payment'
+                        }
+                    </Button>
+                    {hasActiveSubscription && showSubscriptionPanel && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                            Your current plan will be changed after payment confirmation.
+                        </Typography>
+                    )}
+                </Box>
             )}
-        </div>
+        </Box>
     );
 };
 

@@ -6,6 +6,20 @@ import { useAuth } from '../hooks/useAuth';
 import { useSubscription } from '../hooks/useSubscription';
 import { usePayment } from '../hooks/usePayment';
 import { useSlotConfiguration } from '../hooks/useSlotConfiguration';
+import {
+    AppBar,
+    Toolbar,
+    Typography,
+    Button,
+    Box,
+    IconButton,
+    CircularProgress,
+} from '@mui/material';
+import {
+    Logout as LogoutIcon,
+    CreditCard as CreditCardIcon,
+    LocalHospital as HospitalIcon,
+} from '@mui/icons-material';
 
 const Dashboard: React.FC = () => {
     const { logout } = useAuth();
@@ -62,33 +76,82 @@ const Dashboard: React.FC = () => {
     } = useSlotConfiguration();
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+        <Box sx={{ minHeight: '100vh', background: 'linear-gradient(135deg, #f8fafc 0%, #e0f2fe 25%, #e8eaf6 100%)' }}>
             {/* Header */}
-            <nav className="navbar navbar-expand-lg navbar-light bg-white shadow-sm border-bottom">
-                <div className="container-fluid">
-                    <span className="navbar-brand fw-bold text-primary">🏥 Wellness Bot Admin</span>
-                    <div className="d-flex align-items-center">
-                        <span className="navbar-text me-3 text-muted">Welcome, Admin</span>
+            <AppBar position="static" sx={{ backgroundColor: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                <Toolbar>
+                    <HospitalIcon sx={{ mr: { xs: 1, sm: 2 }, color: 'primary.main' }} />
+                    <Typography
+                        variant="h6"
+                        component="div"
+                        sx={{
+                            flexGrow: 1,
+                            color: 'primary.main',
+                            fontWeight: 'bold',
+                            fontSize: { xs: '1rem', sm: '1.25rem' }
+                        }}
+                    >
+                        <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+                            Wellness Bot Admin
+                        </Box>
+                        <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
+                            Wellness Admin
+                        </Box>
+                    </Typography>
+
+                    {/* Desktop Layout */}
+                    <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center' }}>
+                        <Typography variant="body1" sx={{ mr: 2, color: 'text.secondary' }}>
+                            Welcome, Admin
+                        </Typography>
                         {hasActiveSubscription && (
-                            <button
-                                className="btn btn-outline-primary btn-sm me-2"
+                            <Button
+                                variant="outlined"
+                                color="primary"
+                                size="small"
                                 onClick={() => setShowSubscriptionPanel(!showSubscriptionPanel)}
                                 disabled={subscriptionLoading}
+                                startIcon={subscriptionLoading ? <CircularProgress size={16} /> : <CreditCardIcon />}
+                                sx={{ mr: 1, whiteSpace: 'nowrap' }}
                             >
-                                <i className="fas fa-credit-card me-1"></i>
                                 {subscriptionLoading ? 'Loading...' : (showSubscriptionPanel ? 'Hide' : 'Manage')} Subscription
-                            </button>
+                            </Button>
                         )}
-                        <button
-                            className="btn btn-outline-danger btn-sm"
+                        <Button
+                            variant="outlined"
+                            color="error"
+                            size="small"
                             onClick={logout}
+                            startIcon={<LogoutIcon />}
                         >
-                            <i className="fas fa-sign-out-alt me-1"></i>
                             Logout
-                        </button>
-                    </div>
-                </div>
-            </nav>
+                        </Button>
+                    </Box>
+
+                    {/* Mobile Layout */}
+                    <Box sx={{ display: { xs: 'flex', md: 'none' }, alignItems: 'center', gap: 1 }}>
+                        {hasActiveSubscription && (
+                            <IconButton
+                                color="primary"
+                                size="small"
+                                onClick={() => setShowSubscriptionPanel(!showSubscriptionPanel)}
+                                disabled={subscriptionLoading}
+                                sx={{ p: 1 }}
+                            >
+                                {subscriptionLoading ? <CircularProgress size={20} /> : <CreditCardIcon />}
+                            </IconButton>
+                        )}
+                        <IconButton
+                            color="error"
+                            size="small"
+                            onClick={logout}
+                            sx={{ p: 1 }}
+                        >
+                            <LogoutIcon />
+                        </IconButton>
+                    </Box>
+                </Toolbar>
+            </AppBar>
 
             {/* Selected Plan Display */}
             {paymentCompleted && (
@@ -178,7 +241,7 @@ const Dashboard: React.FC = () => {
                 onPayment={handlePayment}
                 onPaymentClose={handlePaymentClose}
             />
-        </div>
+        </Box>
     );
 };
 
