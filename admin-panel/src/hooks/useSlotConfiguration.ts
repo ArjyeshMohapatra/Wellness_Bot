@@ -5,11 +5,11 @@ export interface Slot {
     compulsory: boolean;
     startTime: string;
     endTime: string;
-    points: number | string;
+    points: number;
     type: 'media' | 'button';
     buttonCount?: number;
     buttonNames?: string[];
-    buttonValues?: (number | string)[];
+    buttonValues?: number[];
     botResponse?: string;
     postResponse?: string;
     image?: string; // Base64 encoded image or image URL
@@ -25,7 +25,7 @@ export const useSlotConfiguration = (initialSlots?: Slot[]) => {
     const [kickResponse, setKickResponse] = useState('');
     const [undesignatedSlotResponse, setUndesignatedSlotResponse] = useState('');
     const [leaderboardTime, setLeaderboardTime] = useState('');
-    const [bannedWords, setBannedWords] = useState('');
+    const [bannedWords, setBannedWords] = useState<string[]>([]);
     const [slots, setSlots] = useState<Slot[]>([]);
     const [slotErrors, setSlotErrors] = useState<{ totalPoints: boolean; overlaps: boolean }>({ totalPoints: false, overlaps: false });
     const [currentSlotIndex, setCurrentSlotIndex] = useState<number>(0);

@@ -1279,15 +1279,15 @@ def get_admin_panel_config(group_id):
         return None
 
 
-def save_banned_words(cursor, group_id, banned_words_string):
+def save_banned_words(cursor, group_id, banned_words):
     """Save banned words to the banned_words table"""
     try:
         # For now, banned words are global (group_id = NULL)
 
-        # Process the banned words string
-        if banned_words_string and banned_words_string.strip():
-            # Split by comma, strip whitespace, and filter out empty strings
-            words = [word.strip() for word in banned_words_string.split(',') if word.strip()]
+        # Process the banned words array
+        if banned_words and isinstance(banned_words, list) and len(banned_words) > 0:
+            # Filter out empty strings and strip whitespace
+            words = [word.strip() for word in banned_words if word.strip()]
 
             # Remove duplicates
             words = list(set(words))
@@ -1304,3 +1304,40 @@ def save_banned_words(cursor, group_id, banned_words_string):
     except Exception as e:
         logger.error(f"Error saving banned words: {e}")
         raise
+
+
+def save_admin_panel_config(admin_user_id, group_id, config_data):
+    """Save admin panel configuration"""
+    try:
+        connection = get_db_connection()
+        with connection.cursor() as cursor:
+            # Start transaction
+            connection.start_transaction()
+
+            try:
+                # Save group configuration
+                update_group_config(cursor, group_id, admin_user_id, config_data)
+
+                # Save event and slots
+                event_id = save_or_update_event(cursor, group_id, config_data)
+                save_or_update_slots(cursor, group_id, admin_user_id, event_id, config_data.get('slots', []))
+
+                # Save banned words
+                banned_words = config_data.get('banned_words', [])
+                if banned_words:
+                    save_banned_words(cursor, group_id, banned_words)
+
+                # Commit transaction
+                connection.commit()
+                logger.info(f"Saved admin panel config for admin {admin_user_id}, group {group_id}")
+
+                return True
+
+            except Exception as e:
+                connection.rollback()
+                logger.error(f"Error saving admin panel config: {e}")
+                raise
+
+    except Exception as e:
+        logger.error(f"Error in save_admin_panel_config: {e}")
+        return False

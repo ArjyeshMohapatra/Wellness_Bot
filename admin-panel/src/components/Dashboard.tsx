@@ -114,7 +114,7 @@ const Dashboard: React.FC = () => {
                     setKickResponse(config.kick_response || '');
                     setUndesignatedSlotResponse(config.undesignated_slot_response || '');
                     setLeaderboardTime(config.leaderboard_time || '');
-                    setBannedWords(config.banned_words || '');
+                    setBannedWords(config.banned_words ? config.banned_words.split(', ').filter((w: string) => w.trim()) : []);
 
                     // Load slots if they exist
                     if (config.slots && config.slots.length > 0) {
@@ -201,21 +201,21 @@ const Dashboard: React.FC = () => {
                 kick_response: kickResponse,
                 undesignated_slot_response: undesignatedSlotResponse,
                 leaderboard_time: leaderboardTime,
-                banned_words: bannedWords,
+                banned_words: bannedWords.filter(w => w.trim()).join(', '),
                 max_members: getCurrentMaxMembers(),
                 slots: slots.filter(slot => slot.name.trim() !== '').map(slot => ({
                     name: slot.name,
                     compulsory: slot.compulsory,
                     startTime: slot.startTime,
                     endTime: slot.endTime,
-                    points: slot.points === '' ? 0 : Number(slot.points),
+                    points: slot.points,
                     type: slot.type,
                     botResponse: slot.botResponse || '',
                     postResponse: slot.postResponse || '',
                     image: slot.image || '',
                     buttonCount: slot.buttonCount || 0,
                     buttonNames: slot.buttonNames || [],
-                    buttonValues: (slot.buttonValues || []).map(v => v === '' ? 0 : Number(v))
+                    buttonValues: slot.buttonValues || [],
                 }))
             };
 

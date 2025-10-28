@@ -140,7 +140,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                             label="Points"
                                             type="number"
                                             value={slot.points ?? ''}
-                                            onChange={(e) => onSlotChange(index, 'points', e.target.value === '' ? '' : Number(e.target.value))}
+                                            onChange={(e) => onSlotChange(index, 'points', e.target.value === '' ? 0 : Number(e.target.value))}
                                             size="small"
                                             sx={{ width: 80 }}
                                             inputProps={{ min: 0, max: 100 }}

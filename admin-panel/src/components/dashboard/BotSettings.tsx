@@ -9,7 +9,12 @@ import {
     Box,
     Alert,
     Button,
+    IconButton,
 } from '@mui/material';
+import {
+    Add as AddIcon,
+    Delete as DeleteIcon,
+} from '@mui/icons-material';
 
 // Lazy load the heavy SlotConfiguration component
 const SlotConfiguration = lazy(() => import('./SlotConfiguration'));
@@ -39,7 +44,7 @@ interface BotSettingsProps {
     kickResponse: string;
     undesignatedSlotResponse: string;
     leaderboardTime: string;
-    bannedWords: string;
+    bannedWords: string[];
     slots: Slot[];
     slotErrors: { totalPoints: boolean; overlaps: boolean };
     currentSlotIndex: number;
@@ -54,7 +59,7 @@ interface BotSettingsProps {
     onKickResponseChange: (response: string) => void;
     onUndesignatedSlotResponseChange: (response: string) => void;
     onLeaderboardTimeChange: (time: string) => void;
-    onBannedWordsChange: (words: string) => void;
+    onBannedWordsChange: (words: string[]) => void;
     onSlotChange: (index: number, field: keyof Slot, value: string | number | boolean | string[] | number[]) => void;
     onCurrentSlotIndexChange: (index: number) => void;
     onCurrentButtonIndexChange: (index: number) => void;
@@ -213,18 +218,6 @@ const BotSettings: React.FC<BotSettingsProps> = ({
                         sx={{ '& .MuiInputBase-root': { fontSize: '0.875rem' } }}
                     />
                 </Box>
-                <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 calc(75% - 12px)' } }}> {/* Adjusted flex basis for words */}
-                    <TextField
-                        fullWidth
-                        size="small"
-                        label="Banned Words"
-                        value={bannedWords}
-                        onChange={(e) => onBannedWordsChange(e.target.value)}
-                        placeholder="Enter banned words separated by commas (e.g., xyz, abc, cvb)"
-                        variant="outlined"
-                        sx={{ '& .MuiInputBase-root': { fontSize: '0.875rem' } }}
-                    />
-                </Box>
             </Box>
 
             {eventType === 'time-limited' && (
@@ -290,6 +283,61 @@ const BotSettings: React.FC<BotSettingsProps> = ({
                             onCurrentButtonIndexChange={onCurrentButtonIndexChange}
                         />
                     </Suspense>
+
+                    {/* Banned Words Section */}
+                    <Typography variant="h6" sx={{ mt: 4, mb: 2, color: 'text.secondary', fontSize: '1rem' }}>
+                        Add Banned Words
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 3 }}>
+                        {bannedWords.map((word, index) => (
+                            <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 200 }}>
+                                <TextField
+                                    label={`Banned Word ${index + 1}`}
+                                    value={word}
+                                    onChange={(e) => {
+                                        const newWords = [...bannedWords];
+                                        newWords[index] = e.target.value;
+                                        onBannedWordsChange(newWords);
+                                    }}
+                                    size="small"
+                                    sx={{ width: 145 }}
+                                    placeholder="Enter banned word"
+                                />
+                                <IconButton
+                                    size="small"
+                                    onClick={() => {
+                                        const newWords = [...bannedWords];
+                                        newWords.splice(index, 1);
+                                        onBannedWordsChange(newWords);
+                                    }}
+                                    color="error"
+                                >
+                                    <DeleteIcon />
+                                </IconButton>
+                                <IconButton
+                                    size="small"
+                                    onClick={() => {
+                                        const newWords = [...bannedWords];
+                                        newWords.splice(index + 1, 0, '');
+                                        onBannedWordsChange(newWords);
+                                    }}
+                                    color="primary"
+                                >
+                                    <AddIcon />
+                                </IconButton>
+                            </Box>
+                        ))}
+                        {bannedWords.length === 0 && (
+                            <Button
+                                variant="outlined"
+                                startIcon={<AddIcon />}
+                                onClick={() => onBannedWordsChange([''])}
+                                sx={{ minWidth: 200 }}
+                            >
+                                Add First Banned Word
+                            </Button>
+                        )}
+                    </Box>
 
                     {/* Save Button */}
                     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mt: 4, mb: 2 }}>
