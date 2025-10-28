@@ -136,6 +136,32 @@ def create_group_config(group_id, admin_user_id):
         return False
 
 
+def create_pending_group_config(group_id, admin_user_id):
+    try:
+        # Check if group config already exists
+        existing_config = get_group_config(group_id)
+
+        if not existing_config:
+            execute_query(
+                """
+                    INSERT INTO groups_config 
+                    (group_id, license_key, admin_user_id, max_members, welcome_message, kick_message)
+                    VALUES (%s, NULL, %s, 100, 'Welcome! Hoping that you will enjoy your time in here. 🌟', 'Goodbye, hope you enjoyed your time while being with us!')
+                """,
+                (group_id, admin_user_id),
+            )
+
+            logger.info(f"Created pending group config for {group_id} (waiting for license)")
+
+        # Always try to create event and slots (will check if they exist)
+        create_default_event_and_slots(group_id)
+
+        return True
+    except Exception as e:
+        logger.error(f"Error creating pending group config: {e}",exc_info=True)
+        return False
+
+
 def create_default_event_and_slots(group_id):
     try:
         # Check if slots already exist for this group
@@ -186,7 +212,7 @@ def create_default_event_and_slots(group_id):
                 10,
                 "Its Breakfast time everyone! Share your delicious & healthy meal 🍳",
                 "Healthy breakfast! 🍳",
-                "Is this your Breakfast ?",
+                "Is this your breakfast ?",
             ),
             (
                 "Water",

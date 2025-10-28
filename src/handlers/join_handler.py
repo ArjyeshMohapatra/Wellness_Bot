@@ -60,59 +60,60 @@ async def handle_bot_added_to_group(update, context):
         if admin_user_id:
             bot_member = await context.bot.get_chat_member(group_id, context.bot.id)
 
-            if bot_member.status in ["administrator", "creator"]:
-                # Check if group already has config
-                group_config = db.get_group_config(group_id)
-                
-                if group_config:
-                    # Group already has config, check if it has license
-                    if not group_config.get('license_key'):
-                        # Ask for license key
-                        logger.info(f"Group {group_id} has config but no license - requesting license key")
-                        await safe_send_message(
-                            context=context,
-                            chat_id=group_id,
-                            text="🎉 **Admin Rights Granted!**\n\n"
-                            "I'm now an administrator in this group!\n\n"
-                            "🔑 **License Key Required**\n\n"
-                            "To activate the full wellness tracking features, please provide a license key.\n\n"
-                            "📋 **Please provide the license key:**\n"
-                            "Send me the license key that you received from the admin panel.\n\n"
-                            "💡 **Format:** WLB-xxxx-xxxx-xxxx-xxxx\n\n"
-                            "Once you send the license key, I'll be fully activated!",
-                            parse_mode="Markdown"
-                        )
-                    else:
-                        # Group already has license
-                        await safe_send_message(
-                            context=context,
-                            chat_id=group_id,
-                            text="🎉 **Welcome back!**\n\n"
-                            "I'm now active in this group again!\n"
-                            "All wellness tracking features are available.",
-                            parse_mode="Markdown"
-                        )
+            # Always create a pending config when bot is added, regardless of admin status
+            group_config = db.get_group_config(group_id)
+            
+            if not group_config:
+                # Create pending config (no license yet)
+                success = db.create_pending_group_config(group_id, admin_user_id)
+                if success:
+                    logger.info(f"Created pending config for group {group_id}")
                 else:
-                    # No config exists, create it and ask for license
-                    success = db.create_group_config(group_id, admin_user_id)
-                    
-                    if success:
-                        logger.info(f"Created config for group {group_id}, now requesting license key")
-                        await safe_send_message(
-                            context=context,
-                            chat_id=group_id,
-                            text="🎉 **Welcome! I'm now managing this group!**\n\n"
-                            "🔑 **License Key Required**\n\n"
-                            "To activate the full wellness tracking features, please provide a license key.\n\n"
-                            "📋 **Please provide the license key:**\n"
-                            "Send me the license key that you received from the admin panel.\n\n"
-                            "💡 **Format:** WLB-xxxx-xxxx-xxxx-xxxx\n\n"
-                            "Once you send the license key, I'll be fully activated!",
-                            parse_mode="Markdown"
-                        )
-                    else:
-                        logger.error(f"Failed to create config for group {group_id}")
+                    logger.error(f"Failed to create pending config for group {group_id}")
 
+            if bot_member.status in ["administrator", "creator"]:
+                # Bot is already admin, check if we need to request license
+                if group_config and not group_config.get('license_key'):
+                    # Ask for license key
+                    logger.info(f"Group {group_id} has config but no license - requesting license key")
+                    await safe_send_message(
+                        context=context,
+                        chat_id=group_id,
+                        text="🎉 **Admin Rights Granted!**\n\n"
+                        "I'm now an administrator in this group!\n\n"
+                        "🔑 **License Key Required**\n\n"
+                        "To activate the full wellness tracking features, please provide a license key.\n\n"
+                        "📋 **Please provide the license key:**\n"
+                        "Send me the license key that you received from the admin panel.\n\n"
+                        "💡 **Format:** WLB-xxxx-xxxx-xxxx-xxxx\n\n"
+                        "Once you send the license key, I'll be fully activated!",
+                        parse_mode="Markdown"
+                    )
+                elif not group_config:
+                    # Config was just created, ask for license
+                    logger.info(f"Created config for group {group_id}, now requesting license key")
+                    await safe_send_message(
+                        context=context,
+                        chat_id=group_id,
+                        text="🎉 **Welcome! I'm now managing this group!**\n\n"
+                        "🔑 **License Key Required**\n\n"
+                        "To activate the full wellness tracking features, please provide a license key.\n\n"
+                        "📋 **Please provide the license key:**\n"
+                        "Send me the license key that you received from the admin panel.\n\n"
+                        "💡 **Format:** WLB-xxxx-xxxx-xxxx-xxxx\n\n"
+                        "Once you send the license key, I'll be fully activated!",
+                        parse_mode="Markdown"
+                    )
+                else:
+                    # Group already has license
+                    await safe_send_message(
+                        context=context,
+                        chat_id=group_id,
+                        text="🎉 **Welcome back!**\n\n"
+                        "I'm now active in this group again!\n"
+                        "All wellness tracking features are available.",
+                        parse_mode="Markdown"
+                    )
             else:
                 await safe_send_message(
                     context=context, 
