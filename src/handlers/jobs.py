@@ -468,6 +468,18 @@ async def sync_admin_status(context: ContextTypes.DEFAULT_TYPE):
                 if bot_is_admin:
                     group_config = db.get_group_config(group_id)
                     logger.info(f"Group {group_id}: group_config exists={group_config is not None}")
+                    
+                    if not group_config:
+                        # No config exists, create it
+                        owner = next((admin for admin in administrators if admin.status == "creator"), None)
+                        admin_user_id = owner.user.id if owner else administrators[0].user.id if administrators else None
+                        if admin_user_id:
+                            success = db.create_group_config(group_id, admin_user_id)
+                            logger.info(f"Group {group_id}: created config={success}")
+                            if success:
+                                group_config = db.get_group_config(group_id)
+                                logger.info(f"Group {group_id}: new config created")
+                    
                     if group_config:
                         license_key = group_config.get('license_key')
                         logger.info(f"Group {group_id}: license_key='{license_key}'")
