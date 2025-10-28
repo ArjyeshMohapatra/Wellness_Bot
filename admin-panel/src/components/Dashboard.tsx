@@ -95,8 +95,7 @@ const Dashboard: React.FC = () => {
                 if (!adminUserId) return;
 
                 // TODO: Make group ID dynamic
-                const groupId = -1002848263384;
-
+                const groupId = "";
                 const response = await fetch(`http://localhost:8001/api/admin/panel/config?group_id=${groupId}&admin_user_id=${adminUserId}`);
                 const result = await response.json();
 

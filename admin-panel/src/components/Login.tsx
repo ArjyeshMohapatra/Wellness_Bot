@@ -27,7 +27,7 @@ const Login: React.FC = () => {
             return;
         }
 
-        // Password confirmation validation
+        // Password confirmation validation 
         if (isSignUp && password !== confirmPassword) {
             setError('Passwords do not match');
             setLoading(false);

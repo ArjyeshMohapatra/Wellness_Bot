@@ -168,7 +168,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                                         onSlotChange(index, 'buttonNames', newNames);
                                                     }}
                                                     size="small"
-                                                    sx={{ flex: 1 }}
+                                                    sx={{ width: 80 }}
                                                 />
                                                 <TextField
                                                     label="Value"
@@ -393,43 +393,36 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                         <Collapse in={expandedRows.has(index)}>
                                             <Box sx={{ p: 2, backgroundColor: 'grey.50' }}>
                                                 {slot.type === 'button' && (
-                                                    <Box sx={{ mb: 2 }}>
+                                                    <Box sx={{ mb: 2, border: '1px solid green', borderRadius: 1, p: 2 }}>
                                                         <Typography variant="subtitle2" sx={{ mb: 1 }}>Button Configuration</Typography>
-                                                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                                                            <TextField
-                                                                label={`Button ${(slotButtonIndices[index] || 0) + 1} Name`}
-                                                                value={slot.buttonNames?.[slotButtonIndices[index] || 0] ?? `Button ${(slotButtonIndices[index] || 0) + 1}`}
-                                                                onChange={(e) => {
-                                                                    const newNames = [...(slot.buttonNames || [])];
-                                                                    newNames[slotButtonIndices[index] || 0] = e.target.value;
-                                                                    onSlotChange(index, 'buttonNames', newNames);
-                                                                }}
-                                                                size="small"
-                                                                sx={{ flex: 1 }}
-                                                            />
-                                                            <TextField
-                                                                label="Value"
-                                                                type="number"
-                                                                value={slot.buttonValues?.[slotButtonIndices[index] || 0] ?? 0}
-                                                                onChange={(e) => {
-                                                                    const newValues = [...(slot.buttonValues || [])];
-                                                                    newValues[slotButtonIndices[index] || 0] = Number(e.target.value) || 0;
-                                                                    onSlotChange(index, 'buttonValues', newValues);
-                                                                }}
-                                                                size="small"
-                                                                sx={{ width: 80 }}
-                                                            />
-                                                            <IconButton
-                                                                size="small"
-                                                                onClick={() => {
-                                                                    const currentIndex = slotButtonIndices[index] || 0;
-                                                                    const maxIndex = (slot.buttonCount || 2) - 1;
-                                                                    const nextIndex = currentIndex < maxIndex ? currentIndex + 1 : 0;
-                                                                    onSlotButtonIndexChange(index, nextIndex);
-                                                                }}
-                                                            >
-                                                                →
-                                                            </IconButton>
+                                                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                                            {Array.from({ length: slot.buttonCount || 2 }, (_, i) => (
+                                                                <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 200, border: '1px solid green', borderRadius: 1, p: 1 }}>
+                                                                    <TextField
+                                                                        label={`Button ${i + 1} Name`}
+                                                                        value={slot.buttonNames?.[i] ?? `Button ${i + 1}`}
+                                                                        onChange={(e) => {
+                                                                            const newNames = [...(slot.buttonNames || new Array(slot.buttonCount || 2).fill(''))];
+                                                                            newNames[i] = e.target.value;
+                                                                            onSlotChange(index, 'buttonNames', newNames);
+                                                                        }}
+                                                                        size="small"
+                                                                        sx={{ width: 120 }}
+                                                                    />
+                                                                    <TextField
+                                                                        label="Value"
+                                                                        type="number"
+                                                                        value={slot.buttonValues?.[i] ?? 0}
+                                                                        onChange={(e) => {
+                                                                            const newValues = [...(slot.buttonValues || new Array(slot.buttonCount || 2).fill(0))];
+                                                                            newValues[i] = Number(e.target.value) || 0;
+                                                                            onSlotChange(index, 'buttonValues', newValues);
+                                                                        }}
+                                                                        size="small"
+                                                                        sx={{ width: 60 }}
+                                                                    />
+                                                                </Box>
+                                                            ))}
                                                         </Box>
                                                     </Box>
                                                 )}
