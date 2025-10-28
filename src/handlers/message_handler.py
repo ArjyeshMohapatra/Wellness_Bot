@@ -25,11 +25,120 @@ def sanitize_text(text):
     return text.strip()
 
 
+def extract_license_key(text):
+    """Extract license key from message text. Format: WLB-xxxx-xxxx-xxxx-xxxx"""
+    if not text:
+        return None
+    
+    # Look for WLB-xxxx-xxxx-xxxx-xxxx pattern
+    pattern = r'WLB-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}'
+    match = re.search(pattern, text.upper())
+    return match.group(0) if match else None
+
+
+async def handle_license_key(message, context, license_key):
+    """Handle license key activation"""
+    try:
+        # Check if license key exists and is available
+        license_query = "SELECT license_id, assigned_group_id, is_active FROM licenses WHERE license_key = %s"
+        license_result = execute_query(license_query, (license_key,), fetch=True)
+        
+        if not license_result:
+            await safe_send_message(
+                context=context,
+                chat_id=message.chat.id,
+                text=f"❌ **Invalid License Key**\n\nThe license key `{license_key}` is not valid.\n\nPlease check the key from your admin panel and try again.",
+                parse_mode="Markdown"
+            )
+            return
+        
+        license_data = license_result[0]
+        
+        if license_data['assigned_group_id'] is not None:
+            await safe_send_message(
+                context=context,
+                chat_id=message.chat.id,
+                text=f"❌ **License Key Already Used**\n\nThe license key `{license_key}` has already been assigned to another group.\n\nPlease get a new license key from your admin panel.",
+                parse_mode="Markdown"
+            )
+            return
+        
+        if not license_data['is_active']:
+            await safe_send_message(
+                context=context,
+                chat_id=message.chat.id,
+                text=f"❌ **License Key Inactive**\n\nThe license key `{license_key}` is inactive.\n\nPlease contact support or get a new license key.",
+                parse_mode="Markdown"
+            )
+            return
+        
+        # License is valid, assign it to the current group
+        group_id = message.chat.id
+        
+        # Update the license with group assignment
+        update_query = "UPDATE licenses SET assigned_group_id = %s WHERE license_key = %s"
+        execute_query(update_query, (group_id, license_key))
+        
+        # Update group config with license key
+        config_query = "UPDATE groups_config SET license_key = %s WHERE group_id = %s"
+        execute_query(config_query, (license_key, group_id))
+        
+        logger.info(f"License key {license_key} assigned to group {group_id}")
+        
+        # Send success message
+        await safe_send_message(
+            context=context,
+            chat_id=message.chat.id,
+            text=f"🎉 **License Activated Successfully!**\n\n"
+            f"✅ License Key: `{license_key}`\n\n"
+            f"Your wellness bot is now fully activated!\n\n"
+            f"🚀 **Features Now Available:**\n"
+            f"• Automatic point tracking\n"
+            f"• Time slot management\n"
+            f"• Leaderboard system\n"
+            f"• Content moderation\n"
+            f"• Member management\n\n"
+            f"📋 **Commands:**\n"
+            f"/start - Bot status\n"
+            f"/schedule - View time slots\n"
+            f"/points - Check your points\n"
+            f"/leaderboard - Group rankings\n\n"
+            f"🎯 **Ready to start your wellness journey!**",
+            parse_mode="Markdown"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error handling license key {license_key}: {e}", exc_info=True)
+        await safe_send_message(
+            context=context,
+            chat_id=message.chat.id,
+            text="❌ **Error Activating License**\n\nThere was an error activating your license key. Please try again or contact support.",
+            parse_mode="Markdown"
+        )
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle incoming messages in groups."""
     message = update.message
 
-    # Only handle group messages
+    # Check if bot was added to a group
+    if message.new_chat_members:
+        for member in message.new_chat_members:
+            if member.id == context.bot.id:
+                # Bot was added to this group
+                logger.info(f"Bot added to group {message.chat.id} via message handler")
+                from handlers.join_handler import handle_bot_added_to_group
+                await handle_bot_added_to_group(update, context)
+                return
+
+    # Check for license key in any chat (private or group)
+    if message.text:
+        license_key = extract_license_key(message.text)
+        if license_key:
+            await handle_license_key(message, context, license_key)
+            return
+
+    # Only handle group messages for the rest
     if message.chat.type not in ["group", "supergroup"]:
         return
 
@@ -582,7 +691,7 @@ async def auto_reject_confirmation(context: ContextTypes.DEFAULT_TYPE):
 
 
 # Create message handlers
-text_message_handler = MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
+text_message_handler = MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_message)
 photo_message_handler = MessageHandler(filters.PHOTO, handle_message)
 video_message_handler = MessageHandler(filters.VIDEO, handle_message)
 document_message_handler = MessageHandler(filters.Document.ALL, handle_message)

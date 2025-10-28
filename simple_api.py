@@ -296,5 +296,40 @@ def api_get_admin_panel_config():
         traceback.print_exc()
         return jsonify({'success': False, 'message': f'Server error: {str(e)}'}), 500
 
+@app.route('/api/admin/generate-license', methods=['POST'])
+def api_generate_license():
+    """Generate and save a new license key for admin"""
+    try:
+        data = request.get_json()
+        admin_user_id = data.get('admin_user_id')
+        group_id = data.get('group_id')
+
+        if not admin_user_id:
+            return jsonify({'success': False, 'message': 'Admin user ID required'}), 400
+
+        # Import the license generator
+        from generate_license import generate_license_key
+
+        # Generate new license key
+        license_key = generate_license_key()
+
+        # Save to database
+        execute_query(
+            "INSERT INTO licenses (license_key, is_active, assigned_group_id, assigned_admin_id, created_at) VALUES (%s, TRUE, %s, %s, NOW())",
+            (license_key, group_id, admin_user_id)
+        )
+
+        return jsonify({
+            'success': True,
+            'license_key': license_key,
+            'message': 'License key generated and saved successfully'
+        }), 200
+
+    except Exception as e:
+        print(f"API Error in generate license: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Server error: {str(e)}'}), 500
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8001, debug=False)

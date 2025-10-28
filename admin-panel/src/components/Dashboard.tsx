@@ -26,6 +26,9 @@ const Dashboard: React.FC = () => {
     const [loadedSlots, setLoadedSlots] = useState<Slot[]>([]);
     const [configurationSaved, setConfigurationSaved] = useState(false);
     const [botUsername, setBotUsername] = useState('WellnessBot');
+    const [hasAdminPermissions, setHasAdminPermissions] = useState(false);
+    const [licenseKey, setLicenseKey] = useState<string | null>(null);
+    const [generatingLicense, setGeneratingLicense] = useState(false);
     const {
         selectedPlan,
         selectedBilling,
@@ -254,6 +257,48 @@ const Dashboard: React.FC = () => {
         }
     };
 
+    // Publish configuration handler
+    const handlePublishConfiguration = async () => {
+        try {
+            setGeneratingLicense(true);
+
+            // Get current user info
+            const adminUserId = localStorage.getItem('userId');
+
+            if (!adminUserId) {
+                alert('User not logged in. Please login again.');
+                setGeneratingLicense(false);
+                return;
+            }
+
+            // Call API to generate license key
+            const response = await fetch('http://localhost:8001/api/admin/generate-license', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    admin_user_id: parseInt(adminUserId),
+                    group_id: null  // Will be assigned when bot joins group
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                setLicenseKey(result.license_key);
+                alert(`License key generated successfully: ${result.license_key}`);
+            } else {
+                alert(`Failed to generate license key: ${result.message}`);
+            }
+        } catch (error) {
+            console.error('Error generating license key:', error);
+            alert('Error generating license key. Please check your connection and try again.');
+        } finally {
+            setGeneratingLicense(false);
+        }
+    };
+
     return (
         <Box sx={{ minHeight: '100vh', background: 'linear-gradient(135deg, #f8fafc 0%, #e0f2fe 25%, #e8eaf6 100%)' }}>
             {/* Header */}
@@ -478,11 +523,11 @@ const Dashboard: React.FC = () => {
                                 variant="contained"
                                 color="primary"
                                 size="large"
-                                href={`https://t.me/${botUsername}`}
+                                href={`https://t.me/BeHumanAgainBot`}
                                 target="_blank"
                                 sx={{ fontSize: '1.1rem', py: 1.5, px: 3 }}
                             >
-                                Open Bot: @{botUsername}
+                                Open Bot: @{"BeHumanAgainBot"}
                             </Button>
                         </Box>
 
@@ -540,6 +585,98 @@ const Dashboard: React.FC = () => {
                                 💡 Important: Complete all steps above before proceeding. The bot needs admin permissions to function properly in your group.
                             </Typography>
                         </Box>
+
+                        {/* Admin Permission Status */}
+                        <Box sx={{
+                            bgcolor: hasAdminPermissions ? 'success.light' : 'warning.light',
+                            p: 3,
+                            borderRadius: 2,
+                            mt: 3,
+                            border: '2px solid',
+                            borderColor: hasAdminPermissions ? 'success.main' : 'warning.main'
+                        }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                                {hasAdminPermissions ? (
+                                    <Typography variant="h6" sx={{ color: 'success.main', fontWeight: 'bold' }}>
+                                        ✅ Admin Permissions Confirmed
+                                    </Typography>
+                                ) : (
+                                    <Typography variant="h6" sx={{ color: 'warning.main', fontWeight: 'bold' }}>
+                                        ⏳ Waiting for Admin Setup
+                                    </Typography>
+                                )}
+                            </Box>
+
+                            {!hasAdminPermissions && (
+                                <Typography variant="body1" sx={{ mb: 2 }}>
+                                    After completing the setup steps above, click the button below to confirm that the bot has been added to your group and granted admin permissions.
+                                </Typography>
+                            )}
+
+                            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                                {!hasAdminPermissions && (
+                                    <Button
+                                        variant="contained"
+                                        color="primary"
+                                        onClick={() => setHasAdminPermissions(true)}
+                                        sx={{ minWidth: 200 }}
+                                    >
+                                        Confirm Admin Setup Complete
+                                    </Button>
+                                )}
+
+                                {hasAdminPermissions && !licenseKey && (
+                                    <Button
+                                        variant="contained"
+                                        color="success"
+                                        size="large"
+                                        onClick={handlePublishConfiguration}
+                                        disabled={generatingLicense}
+                                        sx={{ minWidth: 200, py: 1.5 }}
+                                    >
+                                        {generatingLicense ? 'Generating...' : '🚀 Publish Configuration'}
+                                    </Button>
+                                )}
+                            </Box>
+                        </Box>
+
+                        {/* License Key Display */}
+                        {licenseKey && (
+                            <Box sx={{
+                                bgcolor: 'success.light',
+                                p: 3,
+                                borderRadius: 2,
+                                mt: 3,
+                                border: '2px solid',
+                                borderColor: 'success.main'
+                            }}>
+                                <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: 'success.main' }}>
+                                    🎉 License Key Generated!
+                                </Typography>
+                                <Typography variant="body1" sx={{ mb: 2 }}>
+                                    Your license key has been generated and saved. Copy this key and send it to your bot in the group:
+                                </Typography>
+
+                                <Box sx={{
+                                    bgcolor: 'grey.100',
+                                    p: 2,
+                                    borderRadius: 1,
+                                    border: '1px solid',
+                                    borderColor: 'grey.300',
+                                    fontFamily: 'monospace',
+                                    fontSize: '1.2rem',
+                                    fontWeight: 'bold',
+                                    textAlign: 'center',
+                                    mb: 2
+                                }}>
+                                    {licenseKey}
+                                </Box>
+
+                                <Typography variant="body2" sx={{ color: 'success.contrastText' }}>
+                                    <strong>Next step:</strong> Copy this license key and paste it in your Telegram group. The bot will automatically detect it and activate your configuration for that group.
+                                </Typography>
+                            </Box>
+                        )}
                     </Box>
                 </Box>
             )}

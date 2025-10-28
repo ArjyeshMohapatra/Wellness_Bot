@@ -447,7 +447,8 @@ async def sync_admin_status(context: ContextTypes.DEFAULT_TYPE):
     """Periodically fetches the list of admins for each group and updates the database."""
     logger.info("Running hourly job to synchronize admin statuses...")
     try:
-        query = "SELECT group_id FROM groups_config"
+        # Only sync groups that have a valid group_id (not NULL)
+        query = "SELECT group_id FROM groups_config WHERE group_id IS NOT NULL"
         groups = execute_query(query, fetch=True)
 
         for group in groups:
@@ -460,6 +461,31 @@ async def sync_admin_status(context: ContextTypes.DEFAULT_TYPE):
 
                 # Update the database in a single, efficient transaction
                 db.update_admin_status(group_id, admin_user_ids)
+
+                # Check if bot is admin and needs license setup
+                bot_is_admin = context.bot.id in admin_user_ids
+                logger.info(f"Group {group_id}: bot_is_admin={bot_is_admin}")
+                if bot_is_admin:
+                    group_config = db.get_group_config(group_id)
+                    logger.info(f"Group {group_id}: group_config exists={group_config is not None}")
+                    if group_config:
+                        license_key = group_config.get('license_key')
+                        logger.info(f"Group {group_id}: license_key='{license_key}'")
+                        starts_with_auto = license_key.startswith('AUTO_') if license_key else False
+                        logger.info(f"Group {group_id}: starts_with_auto={starts_with_auto}")
+                    
+                    if group_config and (not group_config.get('license_key') or group_config.get('license_key', '').startswith('AUTO_')):
+                        # Bot is admin but no license or has auto-generated license - trigger license request
+                        logger.info(f"Bot is admin in group {group_id} but no valid license found - requesting license")
+                        from handlers.join_handler import handle_bot_promoted_to_admin
+                        
+                        # Create a mock update object for the handler
+                        class MockUpdate:
+                            def __init__(self, chat_id):
+                                self.effective_chat = type('Chat', (), {'id': chat_id})()
+                        
+                        mock_update = MockUpdate(group_id)
+                        await handle_bot_promoted_to_admin(mock_update, context)
 
             except Exception as e:
                 logger.error(f"Could not sync admins for group {group_id}: {e}", exc_info=True)

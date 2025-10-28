@@ -1318,11 +1318,14 @@ def save_admin_panel_config(admin_user_id, group_id, config_data):
                 # Save group configuration
                 update_group_config(cursor, group_id, admin_user_id, config_data)
 
-                # Save event and slots
-                event_id = save_or_update_event(cursor, group_id, config_data)
-                save_or_update_slots(cursor, group_id, admin_user_id, event_id, config_data.get('slots', []))
+                # Only save events and slots if we have a specific group_id
+                # (not for admin templates where group_id is None)
+                if group_id is not None:
+                    # Save event and slots
+                    event_id = save_or_update_event(cursor, group_id, config_data)
+                    save_or_update_slots(cursor, group_id, admin_user_id, event_id, config_data.get('slots', []))
 
-                # Save banned words
+                # Save banned words (always global for now)
                 banned_words = config_data.get('banned_words', [])
                 if banned_words:
                     save_banned_words(cursor, group_id, banned_words)
@@ -1340,4 +1343,64 @@ def save_admin_panel_config(admin_user_id, group_id, config_data):
 
     except Exception as e:
         logger.error(f"Error in save_admin_panel_config: {e}")
+        return False
+
+
+def create_group_config(group_id, admin_user_id):
+    """Create initial group configuration when bot joins a group"""
+    try:
+        connection = get_db_connection()
+        with connection.cursor() as cursor:
+            # Start transaction
+            connection.start_transaction()
+
+            try:
+                # Insert group config
+                query = """
+                    INSERT INTO groups_config (group_id, admin_user_id, max_members, welcome_message, kick_message, undesignated_slot_response, leaderboard_time)
+                    VALUES (%s, %s, 100, 'Welcome to our wellness group! 🎉', 'Please follow the group rules.', 'This is not a designated time slot. Please post during your assigned time slots.', '22:00:00')
+                """
+                cursor.execute(query, (group_id, admin_user_id))
+
+                # Create default event
+                event_query = """
+                    INSERT INTO events (group_id, event_name, event_type, event_days, slots_per_day, start_date, end_date, min_pass_points, is_active)
+                    VALUES (%s, 'Wellness Challenge', 'normal', 0, 9, CURDATE(), DATE_ADD(CURDATE(), INTERVAL 365 DAY), 250, TRUE)
+                """
+                cursor.execute(event_query, (group_id,))
+
+                event_id = cursor.lastrowid
+
+                # Create default time slots
+                default_slots = [
+                    ('Breakfast', '06:00:00', '08:00:00', 'Good morning! 🌅 Time for breakfast. What healthy meal are you having?', 'Great breakfast choice! Keep up the healthy eating! 🥑'),
+                    ('Morning Workout', '08:00:00', '10:00:00', 'Morning workout time! 💪 What exercise are you doing today?', 'Excellent workout! Your dedication is inspiring! 💪'),
+                    ('Mid-Morning Snack', '10:00:00', '12:00:00', 'Healthy snack time! 🥕 What nutritious snack are you enjoying?', 'Perfect snack choice! Keep fueling your body! 🥦'),
+                    ('Lunch', '12:00:00', '14:00:00', 'Lunchtime! 🥗 What balanced meal are you having?', 'Wonderful lunch choice! Nutrition is key! 🥙'),
+                    ('Afternoon Workout', '14:00:00', '16:00:00', 'Afternoon exercise time! 🏃‍♀️ What activity are you doing?', 'Fantastic workout! You\'re doing amazing! 🏃‍♂️'),
+                    ('Evening Snack', '16:00:00', '18:00:00', 'Evening snack time! 🍎 What healthy option are you choosing?', 'Great snack choice! Keep those healthy habits! 🍇'),
+                    ('Dinner', '18:00:00', '20:00:00', 'Dinnertime! 🥘 What nutritious meal are you preparing?', 'Excellent dinner choice! You\'re crushing your goals! 🥘'),
+                    ('Evening Walk', '20:00:00', '22:00:00', 'Evening walk time! 🚶‍♀️ How far are you walking today?', 'Wonderful walk! Movement is medicine! 🚶‍♂️'),
+                    ('Good Night', '22:00:00', '23:59:00', 'Wind down time! 😴 What wellness activity are you doing before bed?', 'Perfect way to end the day! Sweet dreams! 😴')
+                ]
+
+                for slot_name, start_time, end_time, initial_msg, positive_msg in default_slots:
+                    slot_query = """
+                        INSERT INTO group_slots (group_id, admin_user_id, event_id, slot_name, start_time, end_time, initial_message, response_positive, response_clarify, slot_points, is_mandatory, slot_type)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, '', 10, FALSE, 'default')
+                    """
+                    cursor.execute(slot_query, (group_id, admin_user_id, event_id, slot_name, start_time, end_time, initial_msg, positive_msg))
+
+                # Commit transaction
+                connection.commit()
+                logger.info(f"Created default configuration for group {group_id}")
+                return True
+
+            except Exception as e:
+                connection.rollback()
+                logger.error(f"Error creating group config: {e}")
+                raise
+
+    except Exception as e:
+        logger.error(f"Error in create_group_config: {e}")
         return False

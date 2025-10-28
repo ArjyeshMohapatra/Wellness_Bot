@@ -19,63 +19,167 @@ async def track_chats(update, context):
     chat = update.effective_chat
     group_id = chat.id
 
+    # Get old and new status
+    old_status = update.chat_member.old_chat_member.status
+    new_status = update.chat_member.new_chat_member.status
+
+    logger.info(f"Bot status change in group {group_id}: {old_status} -> {new_status}")
+    logger.info(f"Chat member update received: was_member={was_member}, is_member={is_member}")
+
     if not was_member and is_member:
+        # Bot was added to group
         logger.info(f"Bot added to group {group_id} ({chat.title})")
+        await handle_bot_added_to_group(update, context)
 
-        try:
-            admins = await context.bot.get_chat_administrators(group_id)
-            owner = next((admin for admin in admins if admin.status == "creator"), None)
-            admin_user_id = (owner.user.id if owner else admins[0].user.id if admins else None)
-
-            if admin_user_id:
-                bot_member = await context.bot.get_chat_member(group_id, context.bot.id)
-
-                if bot_member.status in ["administrator", "creator"]:
-                    success = db.create_group_config(group_id, admin_user_id)
-
-                    if success:
-                        welcome_msg = await safe_send_message(
-                            context=context, 
-                            chat_id=group_id,
-                            text=f"👋 Hello! I'm now managing this group!\n\n"
-                            f"✅ **Auto-Setup Complete!**\n\n"
-                            f"I've automatically configured:\n"
-                            f"• 9 daily time slots\n"
-                            f"• Points tracking system\n"
-                            f"• Content moderation\n"
-                            f"• Auto member management\n\n"
-                            f"📋 **Commands:**\n"
-                            f"/start - Bot status\n"
-                            f"/schedule - View all time slots\n"
-                            f"/points - Check your points\n"
-                            f"/leaderboard - Top members\n\n"
-                            f"🎯 **Ready to use!** Post messages during time slots to earn points!",
-                            parse_mode="Markdown",
-                        )
-
-                        try:
-                            await context.bot.pin_chat_message(group_id, welcome_msg.message_id)
-                        except Exception as pin_error:
-                            logger.warning(f"Could not pin message: {pin_error}", exc_info=True)
-
-                        logger.info(f"Group {group_id} fully auto-configured")
-                    else:
-                        logger.error(f"Failed to create config for group {group_id}", exc_info=True)
-
-                else:
-                    await safe_send_message(
-                        context=context, 
-                        chat_id=group_id,
-                        text="⚠️ I need admin rights to function properly!\n"
-                        "Please make me an admin first.",
-                    )
-                    logger.warning(f"Bot is not admin in group {group_id}", exc_info=True)
-
-        except Exception as e:
-            logger.error(f"Error setting up group {group_id}: {e}",exc_info=True)
+    elif was_member and is_member:
+        # Bot was already in group, but status changed (e.g., promoted to admin)
+        logger.info(f"Bot status changed in group {group_id}: checking for promotion")
+        if (old_status not in ["administrator", "creator"] and 
+            new_status in ["administrator", "creator"]):
+            # Bot was promoted to admin
+            logger.info(f"Bot promoted to admin in group {group_id} - calling handler")
+            await handle_bot_promoted_to_admin(update, context)
+        else:
+            logger.info(f"Bot status changed but not a promotion: {old_status} -> {new_status}")
 
     elif was_member and not is_member:
-        logger.info(f"Bot removed from group {group_id}",exc_info=True)
+        # Bot was removed from group
+        logger.info(f"Bot removed from group {group_id}")
+
+
+async def handle_bot_added_to_group(update, context):
+    """Handle when bot is added to a group"""
+    chat = update.effective_chat
+    group_id = chat.id
+
+    try:
+        admins = await context.bot.get_chat_administrators(group_id)
+        owner = next((admin for admin in admins if admin.status == "creator"), None)
+        admin_user_id = (owner.user.id if owner else admins[0].user.id if admins else None)
+
+        if admin_user_id:
+            bot_member = await context.bot.get_chat_member(group_id, context.bot.id)
+
+            if bot_member.status in ["administrator", "creator"]:
+                # Check if group already has config
+                group_config = db.get_group_config(group_id)
+                
+                if group_config:
+                    # Group already has config, check if it has license
+                    if not group_config.get('license_key'):
+                        # Ask for license key
+                        logger.info(f"Group {group_id} has config but no license - requesting license key")
+                        await safe_send_message(
+                            context=context,
+                            chat_id=group_id,
+                            text="🎉 **Admin Rights Granted!**\n\n"
+                            "I'm now an administrator in this group!\n\n"
+                            "🔑 **License Key Required**\n\n"
+                            "To activate the full wellness tracking features, please provide a license key.\n\n"
+                            "📋 **Please provide the license key:**\n"
+                            "Send me the license key that you received from the admin panel.\n\n"
+                            "💡 **Format:** WLB-xxxx-xxxx-xxxx-xxxx\n\n"
+                            "Once you send the license key, I'll be fully activated!",
+                            parse_mode="Markdown"
+                        )
+                    else:
+                        # Group already has license
+                        await safe_send_message(
+                            context=context,
+                            chat_id=group_id,
+                            text="🎉 **Welcome back!**\n\n"
+                            "I'm now active in this group again!\n"
+                            "All wellness tracking features are available.",
+                            parse_mode="Markdown"
+                        )
+                else:
+                    # No config exists, create it and ask for license
+                    success = db.create_group_config(group_id, admin_user_id)
+                    
+                    if success:
+                        logger.info(f"Created config for group {group_id}, now requesting license key")
+                        await safe_send_message(
+                            context=context,
+                            chat_id=group_id,
+                            text="🎉 **Welcome! I'm now managing this group!**\n\n"
+                            "🔑 **License Key Required**\n\n"
+                            "To activate the full wellness tracking features, please provide a license key.\n\n"
+                            "📋 **Please provide the license key:**\n"
+                            "Send me the license key that you received from the admin panel.\n\n"
+                            "💡 **Format:** WLB-xxxx-xxxx-xxxx-xxxx\n\n"
+                            "Once you send the license key, I'll be fully activated!",
+                            parse_mode="Markdown"
+                        )
+                    else:
+                        logger.error(f"Failed to create config for group {group_id}")
+
+            else:
+                await safe_send_message(
+                    context=context, 
+                    chat_id=group_id,
+                    text="⚠️ I need admin rights to function properly!\n"
+                    "Please make me an admin first.",
+                )
+                logger.warning(f"Bot is not admin in group {group_id}", exc_info=True)
+
+    except Exception as e:
+        logger.error(f"Error setting up group {group_id}: {e}", exc_info=True)
+
+
+async def handle_bot_promoted_to_admin(update, context):
+    """Handle when bot is promoted to admin in a group"""
+    chat = update.effective_chat
+    group_id = chat.id
+
+    logger.info(f"handle_bot_promoted_to_admin called for group {group_id}")
+
+    try:
+        # Check if group already has config
+        group_config = db.get_group_config(group_id)
+        logger.info(f"Group config for {group_id}: {group_config}")
+        
+        if group_config:
+            # Group has config, ask for license key to allow admin to provide their own
+            logger.info(f"Group {group_id} promoted to admin - requesting license key")
+            
+            await safe_send_message(
+                context=context,
+                chat_id=group_id,
+                text="🎉 **Admin Rights Granted!**\n\n"
+                "I'm now an administrator in this group!\n\n"
+                "🔑 **License Key Required**\n\n"
+                "To activate the full wellness tracking features, please provide a license key.\n\n"
+                "📋 **Please provide the license key:**\n"
+                "Send me the license key that you received from the admin panel.\n\n"
+                "💡 **Format:** WLB-xxxx-xxxx-xxxx-xxxx\n\n"
+                "Once you send the license key, I'll be fully activated!",
+                parse_mode="Markdown"
+            )
+        else:
+            # No config exists, create it and ask for license
+            logger.warning(f"No config found for group {group_id} during promotion, creating config")
+            success = db.create_group_config(group_id, update.effective_user.id if update.effective_user else None)
+            logger.info(f"Config creation result: {success}")
+            
+            if success:
+                await safe_send_message(
+                    context=context,
+                    chat_id=group_id,
+                    text="🎉 **Admin Rights Granted!**\n\n"
+                    "I'm now an administrator in this group!\n\n"
+                    "🔑 **License Key Required**\n\n"
+                    "To activate the full wellness tracking features, please provide a license key.\n\n"
+                    "📋 **Please provide the license key:**\n"
+                    "Send me the license key that you received from the admin panel.\n\n"
+                    "💡 **Format:** WLB-xxxx-xxxx-xxxx-xxxx\n\n"
+                    "Once you send the license key, I'll be fully activated!",
+                    parse_mode="Markdown"
+                )
+            else:
+                logger.error(f"Failed to create config for group {group_id} during promotion")
+
+    except Exception as e:
+        logger.error(f"Error handling bot promotion in group {group_id}: {e}", exc_info=True)
 
 
 def extract_status_change(chat_member_update):
