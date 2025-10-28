@@ -63,6 +63,7 @@ const Dashboard: React.FC = () => {
         kickResponse,
         undesignatedSlotResponse,
         leaderboardTime,
+        bannedWords,
         slots,
         slotErrors,
         currentSlotIndex,
@@ -77,6 +78,7 @@ const Dashboard: React.FC = () => {
         setKickResponse,
         setUndesignatedSlotResponse,
         setLeaderboardTime,
+        setBannedWords,
         setCurrentSlotIndex,
         setCurrentButtonIndex,
         handleSlotTypeChange,
@@ -112,6 +114,7 @@ const Dashboard: React.FC = () => {
                     setKickResponse(config.kick_response || '');
                     setUndesignatedSlotResponse(config.undesignated_slot_response || '');
                     setLeaderboardTime(config.leaderboard_time || '');
+                    setBannedWords(config.banned_words || '');
 
                     // Load slots if they exist
                     if (config.slots && config.slots.length > 0) {
@@ -139,7 +142,7 @@ const Dashboard: React.FC = () => {
         };
 
         loadConfiguration();
-    }, [setEventType, setEventName, setEventDays, setPassPoints, setSlotsPerDay, setWelcomeMessage, setKickResponse, setUndesignatedSlotResponse, setLeaderboardTime]);
+    }, [setEventType, setEventName, setEventDays, setPassPoints, setSlotsPerDay, setWelcomeMessage, setKickResponse, setUndesignatedSlotResponse, setLeaderboardTime, setBannedWords]);
 
     // Validation logic for save button
     const isConfigurationValid = () => {
@@ -198,6 +201,7 @@ const Dashboard: React.FC = () => {
                 kick_response: kickResponse,
                 undesignated_slot_response: undesignatedSlotResponse,
                 leaderboard_time: leaderboardTime,
+                banned_words: bannedWords,
                 max_members: getCurrentMaxMembers(),
                 slots: slots.filter(slot => slot.name.trim() !== '').map(slot => ({
                     name: slot.name,
@@ -382,6 +386,7 @@ const Dashboard: React.FC = () => {
                     kickResponse={kickResponse}
                     undesignatedSlotResponse={undesignatedSlotResponse}
                     leaderboardTime={leaderboardTime}
+                    bannedWords={bannedWords}
                     slots={slots}
                     slotErrors={slotErrors}
                     currentSlotIndex={currentSlotIndex}
@@ -396,6 +401,7 @@ const Dashboard: React.FC = () => {
                     onKickResponseChange={setKickResponse}
                     onUndesignatedSlotResponseChange={setUndesignatedSlotResponse}
                     onLeaderboardTimeChange={setLeaderboardTime}
+                    onBannedWordsChange={setBannedWords}
                     onSlotChange={handleSlotChange}
                     onCurrentSlotIndexChange={setCurrentSlotIndex}
                     onCurrentButtonIndexChange={setCurrentButtonIndex}

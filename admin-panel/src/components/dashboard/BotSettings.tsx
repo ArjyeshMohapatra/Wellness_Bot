@@ -39,6 +39,7 @@ interface BotSettingsProps {
     kickResponse: string;
     undesignatedSlotResponse: string;
     leaderboardTime: string;
+    bannedWords: string;
     slots: Slot[];
     slotErrors: { totalPoints: boolean; overlaps: boolean };
     currentSlotIndex: number;
@@ -53,6 +54,7 @@ interface BotSettingsProps {
     onKickResponseChange: (response: string) => void;
     onUndesignatedSlotResponseChange: (response: string) => void;
     onLeaderboardTimeChange: (time: string) => void;
+    onBannedWordsChange: (words: string) => void;
     onSlotChange: (index: number, field: keyof Slot, value: string | number | boolean | string[] | number[]) => void;
     onCurrentSlotIndexChange: (index: number) => void;
     onCurrentButtonIndexChange: (index: number) => void;
@@ -73,6 +75,7 @@ const BotSettings: React.FC<BotSettingsProps> = ({
     kickResponse,
     undesignatedSlotResponse,
     leaderboardTime,
+    bannedWords,
     slots,
     slotErrors,
     currentSlotIndex,
@@ -87,6 +90,7 @@ const BotSettings: React.FC<BotSettingsProps> = ({
     onKickResponseChange,
     onUndesignatedSlotResponseChange,
     onLeaderboardTimeChange,
+    onBannedWordsChange,
     onSlotChange,
     onCurrentSlotIndexChange,
     onCurrentButtonIndexChange,
@@ -140,6 +144,7 @@ const BotSettings: React.FC<BotSettingsProps> = ({
                         onChange={(e) => onSlotsPerDayChange(e.target.value)}
                         placeholder="Enter number of slots per day"
                         variant="outlined"
+                        inputProps={{ min: 1 }}
                     />
                 </Box>
             </Box>
@@ -148,8 +153,10 @@ const BotSettings: React.FC<BotSettingsProps> = ({
             <Typography variant="h6" sx={{ mb: 1, color: 'text.secondary', fontSize: '1rem' }}>
                 Bot Response Messages
             </Typography>
+            {/* Main container for response messages */}
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 3 }}>
-                <Box sx={{ flex: { xs: '1 1 calc(50% - 8px)', md: '1 1 calc(25% - 6px)' } }}>
+                {/* Row 1: Welcome, Kick, Undesignated */}
+                <Box sx={{ flex: { xs: '1 1 calc(50% - 8px)', md: '1 1 calc(33.333% - 11px)' } }}> {/* Adjusted flex basis */}
                     <TextField
                         fullWidth
                         size="small"
@@ -163,7 +170,7 @@ const BotSettings: React.FC<BotSettingsProps> = ({
                         sx={{ '& .MuiInputBase-root': { fontSize: '0.875rem' } }}
                     />
                 </Box>
-                <Box sx={{ flex: { xs: '1 1 calc(50% - 8px)', md: '1 1 calc(25% - 6px)' } }}>
+                <Box sx={{ flex: { xs: '1 1 calc(50% - 8px)', md: '1 1 calc(33.333% - 11px)' } }}> {/* Adjusted flex basis */}
                     <TextField
                         fullWidth
                         size="small"
@@ -177,7 +184,7 @@ const BotSettings: React.FC<BotSettingsProps> = ({
                         sx={{ '& .MuiInputBase-root': { fontSize: '0.875rem' } }}
                     />
                 </Box>
-                <Box sx={{ flex: { xs: '1 1 calc(50% - 8px)', md: '1 1 calc(25% - 10px)' } }}>
+                <Box sx={{ flex: { xs: '1 1 calc(50% - 8px)', md: '1 1 calc(33.333% - 11px)' } }}> {/* Adjusted flex basis */}
                     <TextField
                         fullWidth
                         size="small"
@@ -191,7 +198,9 @@ const BotSettings: React.FC<BotSettingsProps> = ({
                         sx={{ '& .MuiInputBase-root': { fontSize: '0.875rem' } }}
                     />
                 </Box>
-                <Box sx={{ flex: { xs: '1 1 calc(25% - 10px)', md: '1 1 calc(25% - 6px)' } }}>
+
+                {/* Row 2: Leaderboard Time, Banned Words */}
+                <Box sx={{ flex: { xs: '1 1 calc(50% - 8px)', md: '1 1 calc(25% - 12px)' } }}> {/* Adjusted flex basis for time */}
                     <TextField
                         fullWidth
                         size="small"
@@ -201,6 +210,18 @@ const BotSettings: React.FC<BotSettingsProps> = ({
                         onChange={(e) => onLeaderboardTimeChange(e.target.value)}
                         variant="outlined"
                         InputLabelProps={{ shrink: true }}
+                        sx={{ '& .MuiInputBase-root': { fontSize: '0.875rem' } }}
+                    />
+                </Box>
+                <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 calc(75% - 12px)' } }}> {/* Adjusted flex basis for words */}
+                    <TextField
+                        fullWidth
+                        size="small"
+                        label="Banned Words"
+                        value={bannedWords}
+                        onChange={(e) => onBannedWordsChange(e.target.value)}
+                        placeholder="Enter banned words separated by commas (e.g., xyz, abc, cvb)"
+                        variant="outlined"
                         sx={{ '& .MuiInputBase-root': { fontSize: '0.875rem' } }}
                     />
                 </Box>
@@ -217,6 +238,7 @@ const BotSettings: React.FC<BotSettingsProps> = ({
                             onChange={(e) => onEventDaysChange(e.target.value)}
                             placeholder="Enter number of days"
                             variant="outlined"
+                            inputProps={{ min: 1 }}
                         />
                     </Box>
                     <Box sx={{ flex: { xs: '1 1 calc(50% - 12px)', md: '1 1 calc(33.333% - 16px)' } }}>
@@ -228,6 +250,7 @@ const BotSettings: React.FC<BotSettingsProps> = ({
                             onChange={(e) => onPassPointsChange(e.target.value)}
                             placeholder="Enter pass points"
                             variant="outlined"
+                            inputProps={{ min: 0 }}
                         />
                     </Box>
                 </Box>

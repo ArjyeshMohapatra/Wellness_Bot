@@ -25,6 +25,7 @@ export const useSlotConfiguration = (initialSlots?: Slot[]) => {
     const [kickResponse, setKickResponse] = useState('');
     const [undesignatedSlotResponse, setUndesignatedSlotResponse] = useState('');
     const [leaderboardTime, setLeaderboardTime] = useState('');
+    const [bannedWords, setBannedWords] = useState('');
     const [slots, setSlots] = useState<Slot[]>([]);
     const [slotErrors, setSlotErrors] = useState<{ totalPoints: boolean; overlaps: boolean }>({ totalPoints: false, overlaps: false });
     const [currentSlotIndex, setCurrentSlotIndex] = useState<number>(0);
@@ -124,6 +125,7 @@ export const useSlotConfiguration = (initialSlots?: Slot[]) => {
         kickResponse,
         undesignatedSlotResponse,
         leaderboardTime,
+        bannedWords,
         slots,
         slotErrors,
         currentSlotIndex,
@@ -138,6 +140,7 @@ export const useSlotConfiguration = (initialSlots?: Slot[]) => {
         setKickResponse,
         setUndesignatedSlotResponse,
         setLeaderboardTime,
+        setBannedWords,
         setCurrentSlotIndex,
         setCurrentButtonIndex,
         handleSlotTypeChange,

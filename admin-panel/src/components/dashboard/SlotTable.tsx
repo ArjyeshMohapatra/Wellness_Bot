@@ -420,6 +420,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                                                         }}
                                                                         size="small"
                                                                         sx={{ width: 60 }}
+                                                                        inputProps={{ min: 0 }}
                                                                     />
                                                                 </Box>
                                                             ))}
