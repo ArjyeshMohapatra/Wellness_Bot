@@ -12,6 +12,7 @@ interface Slot {
     buttonValues?: number[];
     botResponse?: string;
     postResponse?: string;
+    image?: string; // Base64 encoded image or image URL
 }
 
 interface SlotCardProps {
@@ -216,6 +217,56 @@ const SlotCard: React.FC<SlotCardProps> = ({
                                 onChange={(e) => onSlotChange(currentSlotIndex, 'postResponse', e.target.value)}
                                 placeholder="Enter post response action"
                             />
+                        </div>
+
+                        {/* Image Upload Section */}
+                        <div className="mt-3 p-3 border rounded">
+                            <label className="form-label fw-bold">Slot Image (Optional)</label>
+
+                            {slots[currentSlotIndex]?.image && (
+                                <div className="text-center mb-3">
+                                    <img
+                                        src={slots[currentSlotIndex].image}
+                                        alt={`Slot ${currentSlotIndex + 1}`}
+                                        className="img-fluid rounded shadow-sm"
+                                        style={{ maxHeight: '150px' }}
+                                    />
+                                    <button
+                                        type="button"
+                                        className="btn btn-outline-danger btn-sm mt-2"
+                                        onClick={() => onSlotChange(currentSlotIndex, 'image', '')}
+                                    >
+                                        <i className="fas fa-trash me-1"></i>
+                                        Remove Image
+                                    </button>
+                                </div>
+                            )}
+
+                            <div className="mb-2">
+                                <label htmlFor={`image-${currentSlotIndex}`} className="form-label">
+                                    {slots[currentSlotIndex]?.image ? 'Change Image' : 'Upload Image'}
+                                </label>
+                                <input
+                                    type="file"
+                                    className="form-control"
+                                    id={`image-${currentSlotIndex}`}
+                                    accept="image/*"
+                                    onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                            const reader = new FileReader();
+                                            reader.onload = (event) => {
+                                                const base64 = event.target?.result as string;
+                                                onSlotChange(currentSlotIndex, 'image', base64);
+                                            };
+                                            reader.readAsDataURL(file);
+                                        }
+                                    }}
+                                />
+                            </div>
+                            <small className="text-muted">
+                                Recommended: 500x300px, max 2MB
+                            </small>
                         </div>
                     </div>
                 </div>

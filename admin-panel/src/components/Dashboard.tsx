@@ -57,6 +57,10 @@ const Dashboard: React.FC = () => {
         eventDays,
         passPoints,
         slotsPerDay,
+        welcomeMessage,
+        kickResponse,
+        undesignatedSlotResponse,
+        leaderboardTime,
         slots,
         slotErrors,
         currentSlotIndex,
@@ -67,6 +71,10 @@ const Dashboard: React.FC = () => {
         setEventDays,
         setPassPoints,
         setSlotsPerDay,
+        setWelcomeMessage,
+        setKickResponse,
+        setUndesignatedSlotResponse,
+        setLeaderboardTime,
         setCurrentSlotIndex,
         setCurrentButtonIndex,
         handleSlotTypeChange,
@@ -210,6 +218,10 @@ const Dashboard: React.FC = () => {
                     eventDays={eventDays}
                     passPoints={passPoints}
                     slotsPerDay={slotsPerDay}
+                    welcomeMessage={welcomeMessage}
+                    kickResponse={kickResponse}
+                    undesignatedSlotResponse={undesignatedSlotResponse}
+                    leaderboardTime={leaderboardTime}
                     slots={slots}
                     slotErrors={slotErrors}
                     currentSlotIndex={currentSlotIndex}
@@ -220,6 +232,10 @@ const Dashboard: React.FC = () => {
                     onEventDaysChange={setEventDays}
                     onPassPointsChange={setPassPoints}
                     onSlotsPerDayChange={setSlotsPerDay}
+                    onWelcomeMessageChange={setWelcomeMessage}
+                    onKickResponseChange={setKickResponse}
+                    onUndesignatedSlotResponseChange={setUndesignatedSlotResponse}
+                    onLeaderboardTimeChange={setLeaderboardTime}
                     onSlotChange={handleSlotChange}
                     onCurrentSlotIndexChange={setCurrentSlotIndex}
                     onCurrentButtonIndexChange={setCurrentButtonIndex}

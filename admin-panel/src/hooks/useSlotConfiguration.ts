@@ -12,6 +12,7 @@ interface Slot {
     buttonValues?: number[];
     botResponse?: string;
     postResponse?: string;
+    image?: string; // Base64 encoded image or image URL
 }
 
 export const useSlotConfiguration = () => {
@@ -20,6 +21,10 @@ export const useSlotConfiguration = () => {
     const [eventDays, setEventDays] = useState('');
     const [passPoints, setPassPoints] = useState('');
     const [slotsPerDay, setSlotsPerDay] = useState('');
+    const [welcomeMessage, setWelcomeMessage] = useState('');
+    const [kickResponse, setKickResponse] = useState('');
+    const [undesignatedSlotResponse, setUndesignatedSlotResponse] = useState('');
+    const [leaderboardTime, setLeaderboardTime] = useState('');
     const [slots, setSlots] = useState<Slot[]>([]);
     const [slotErrors, setSlotErrors] = useState<{ totalPoints: boolean; overlaps: boolean }>({ totalPoints: false, overlaps: false });
     const [currentSlotIndex, setCurrentSlotIndex] = useState<number>(0);
@@ -109,6 +114,10 @@ export const useSlotConfiguration = () => {
         eventDays,
         passPoints,
         slotsPerDay,
+        welcomeMessage,
+        kickResponse,
+        undesignatedSlotResponse,
+        leaderboardTime,
         slots,
         slotErrors,
         currentSlotIndex,
@@ -119,6 +128,10 @@ export const useSlotConfiguration = () => {
         setEventDays,
         setPassPoints,
         setSlotsPerDay,
+        setWelcomeMessage,
+        setKickResponse,
+        setUndesignatedSlotResponse,
+        setLeaderboardTime,
         setCurrentSlotIndex,
         setCurrentButtonIndex,
         handleSlotTypeChange,

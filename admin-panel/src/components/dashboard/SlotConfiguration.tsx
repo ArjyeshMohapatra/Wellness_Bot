@@ -14,6 +14,7 @@ interface Slot {
     buttonValues?: number[];
     botResponse?: string;
     postResponse?: string;
+    image?: string; // Base64 encoded image or image URL
 }
 
 interface SlotConfigurationProps {

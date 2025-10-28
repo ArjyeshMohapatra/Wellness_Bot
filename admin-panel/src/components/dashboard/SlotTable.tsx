@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
     Table,
     TableBody,
@@ -20,10 +20,13 @@ import {
     CardContent,
     useMediaQuery,
     useTheme,
+    Button,
 } from '@mui/material';
 import {
     KeyboardArrowDown as ExpandMoreIcon,
     KeyboardArrowUp as ExpandLessIcon,
+    PhotoCamera as PhotoIcon,
+    Delete as DeleteIcon,
 } from '@mui/icons-material';
 
 interface Slot {
@@ -38,6 +41,7 @@ interface Slot {
     buttonValues?: number[];
     botResponse?: string;
     postResponse?: string;
+    image?: string; // Base64 encoded image or image URL
 }
 
 interface SlotTableProps {
@@ -60,6 +64,27 @@ const SlotTable: React.FC<SlotTableProps> = ({
     const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
+    // Debounced slot change to improve INP performance
+    const debouncedTimeouts = useMemo(() => new Map<string, number>(), []);
+
+    const debouncedSlotChange = useCallback((index: number, field: keyof Slot, value: string | number | boolean | string[] | number[]) => {
+        const timeoutKey = `${index}-${field}`;
+
+        // Clear existing timeout
+        const existingTimeout = debouncedTimeouts.get(timeoutKey);
+        if (existingTimeout) {
+            clearTimeout(existingTimeout);
+        }
+
+        // Set new timeout
+        const timeoutId = setTimeout(() => {
+            onSlotChange(index, field, value);
+            debouncedTimeouts.delete(timeoutKey);
+        }, 150); // 150ms debounce for good INP
+
+        debouncedTimeouts.set(timeoutKey, timeoutId);
+    }, [onSlotChange, debouncedTimeouts]);
 
     const toggleRowExpansion = (index: number) => {
         const newExpanded = new Set(expandedRows);
@@ -207,6 +232,67 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                         fullWidth
                                         placeholder="Post-response message"
                                     />
+
+                                    {/* Image Upload Section */}
+                                    <Box sx={{ mt: 2, p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                                        <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
+                                            Slot Image (Optional)
+                                        </Typography>
+
+                                        {slot.image && (
+                                            <Box sx={{ mb: 2, textAlign: 'center' }}>
+                                                <Box
+                                                    component="img"
+                                                    src={slot.image}
+                                                    alt={`Slot ${index + 1}`}
+                                                    sx={{
+                                                        maxWidth: '100%',
+                                                        maxHeight: 150,
+                                                        borderRadius: 1,
+                                                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                                    }}
+                                                />
+                                                <Button
+                                                    size="small"
+                                                    color="error"
+                                                    startIcon={<DeleteIcon />}
+                                                    onClick={() => onSlotChange(index, 'image', '')}
+                                                    sx={{ mt: 1 }}
+                                                >
+                                                    Remove Image
+                                                </Button>
+                                            </Box>
+                                        )}
+
+                                        <Button
+                                            variant="outlined"
+                                            component="label"
+                                            size="small"
+                                            startIcon={<PhotoIcon />}
+                                            fullWidth
+                                        >
+                                            {slot.image ? 'Change Image' : 'Upload Image'}
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                hidden
+                                                onChange={(e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (file) {
+                                                        const reader = new FileReader();
+                                                        reader.onload = (event) => {
+                                                            const base64 = event.target?.result as string;
+                                                            onSlotChange(index, 'image', base64);
+                                                        };
+                                                        reader.readAsDataURL(file);
+                                                    }
+                                                }}
+                                            />
+                                        </Button>
+                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                                            Recommended: 500x300px, max 2MB
+                                        </Typography>
+                                    </Box>
                                 </Box>
                             </Collapse>
                         </CardContent>
@@ -239,7 +325,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                     <TableCell>
                                         <TextField
                                             value={slot.name}
-                                            onChange={(e) => onSlotChange(index, 'name', e.target.value)}
+                                            onChange={(e) => debouncedSlotChange(index, 'name', e.target.value)}
                                             size="small"
                                             placeholder="Enter slot name"
                                             fullWidth
@@ -268,14 +354,14 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                             <TextField
                                                 type="time"
                                                 value={slot.startTime}
-                                                onChange={(e) => onSlotChange(index, 'startTime', e.target.value)}
+                                                onChange={(e) => debouncedSlotChange(index, 'startTime', e.target.value)}
                                                 size="small"
                                                 sx={{ width: 100 }}
                                             />
                                             <TextField
                                                 type="time"
                                                 value={slot.endTime}
-                                                onChange={(e) => onSlotChange(index, 'endTime', e.target.value)}
+                                                onChange={(e) => debouncedSlotChange(index, 'endTime', e.target.value)}
                                                 size="small"
                                                 sx={{ width: 100 }}
                                             />
@@ -285,7 +371,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                         <TextField
                                             type="number"
                                             value={slot.points}
-                                            onChange={(e) => onSlotChange(index, 'points', Number(e.target.value))}
+                                            onChange={(e) => debouncedSlotChange(index, 'points', Number(e.target.value))}
                                             size="small"
                                             sx={{ width: 70 }}
                                             inputProps={{ min: 0, max: 100 }}
@@ -369,7 +455,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                                     <TextField
                                                         label="Bot Response"
                                                         value={slot.botResponse || ''}
-                                                        onChange={(e) => onSlotChange(index, 'botResponse', e.target.value)}
+                                                        onChange={(e) => debouncedSlotChange(index, 'botResponse', e.target.value)}
                                                         size="small"
                                                         sx={{ flex: 1 }}
                                                         placeholder="Bot response message"
@@ -377,11 +463,61 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                                     <TextField
                                                         label="Post Response"
                                                         value={slot.postResponse || ''}
-                                                        onChange={(e) => onSlotChange(index, 'postResponse', e.target.value)}
+                                                        onChange={(e) => debouncedSlotChange(index, 'postResponse', e.target.value)}
                                                         size="small"
                                                         sx={{ flex: 1 }}
                                                         placeholder="Post-response message"
                                                     />
+                                                </Box>
+                                                {/* Image Upload Section for Desktop Table */}
+                                                <Box sx={{ mt: 2, p: 2, border: '1px solid #e0e0e0', borderRadius: 1, backgroundColor: 'white' }}>
+                                                    <Typography variant="subtitle2" sx={{ mb: 1 }}>Slot Image (Optional)</Typography>
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                                        <Button
+                                                            variant="outlined"
+                                                            component="label"
+                                                            size="small"
+                                                            sx={{ minWidth: 120 }}
+                                                        >
+                                                            Upload Image
+                                                            <input
+                                                                type="file"
+                                                                accept="image/*"
+                                                                hidden
+                                                                onChange={(e) => {
+                                                                    const file = e.target.files?.[0];
+                                                                    if (file) {
+                                                                        const reader = new FileReader();
+                                                                        reader.onload = (event) => {
+                                                                            const base64 = event.target?.result as string;
+                                                                            onSlotChange(index, 'image', base64);
+                                                                        };
+                                                                        reader.readAsDataURL(file);
+                                                                    }
+                                                                }}
+                                                            />
+                                                        </Button>
+                                                        {slot.image && (
+                                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                                <Box
+                                                                    component="img"
+                                                                    src={slot.image}
+                                                                    alt="Slot preview"
+                                                                    sx={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 1 }}
+                                                                />
+                                                                <IconButton
+                                                                    size="small"
+                                                                    onClick={() => onSlotChange(index, 'image', '')}
+                                                                    color="error"
+                                                                >
+                                                                    <DeleteIcon fontSize="small" />
+                                                                </IconButton>
+                                                            </Box>
+                                                        )}
+                                                    </Box>
+                                                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                                                        Recommended: 500x300px, max 2MB
+                                                    </Typography>
                                                 </Box>
                                             </Box>
                                         </Collapse>
@@ -396,4 +532,4 @@ const SlotTable: React.FC<SlotTableProps> = ({
     );
 };
 
-export default SlotTable;
+export default SlotTable; ``
