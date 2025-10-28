@@ -24,6 +24,8 @@ import {
 const Dashboard: React.FC = () => {
     const { logout } = useAuth();
     const [loadedSlots, setLoadedSlots] = useState<Slot[]>([]);
+    const [configurationSaved, setConfigurationSaved] = useState(false);
+    const [botUsername, setBotUsername] = useState('WellnessBot');
     const {
         selectedPlan,
         selectedBilling,
@@ -237,7 +239,12 @@ const Dashboard: React.FC = () => {
             const result = await response.json();
 
             if (result.success) {
-                alert('Configuration saved successfully!');
+                // Show setup instructions instead of dialog
+                setConfigurationSaved(true);
+                // Store bot username for the instructions
+                if (result.bot_username) {
+                    setBotUsername(result.bot_username);
+                }
             } else {
                 alert(`Failed to save configuration: ${result.message}`);
             }
@@ -425,6 +432,117 @@ const Dashboard: React.FC = () => {
                 onPayment={handlePayment}
                 onPaymentClose={handlePaymentClose}
             />
+
+            {/* Bot Setup Instructions - Show after saving configuration */}
+            {configurationSaved && (
+                <Box sx={{ mt: 4, mb: 4 }}>
+                    <Box sx={{
+                        bgcolor: 'success.light',
+                        p: 3,
+                        borderRadius: 2,
+                        mb: 3,
+                        border: '2px solid',
+                        borderColor: 'success.main'
+                    }}>
+                        <Typography variant="h5" sx={{ mb: 2, fontWeight: 'bold', color: 'success.contrastText' }}>
+                            🎉 Configuration Saved Successfully!
+                        </Typography>
+                        <Typography variant="body1" sx={{ color: 'success.contrastText' }}>
+                            Your bot configuration has been saved. Follow the steps below to set up your bot in your Telegram group.
+                        </Typography>
+                    </Box>
+
+                    <Box sx={{
+                        bgcolor: 'background.paper',
+                        p: 4,
+                        borderRadius: 2,
+                        border: '2px solid',
+                        borderColor: 'primary.main'
+                    }}>
+                        <Typography variant="h4" sx={{ mb: 3, color: 'primary.main', fontWeight: 'bold' }}>
+                            🚀 Bot Setup Instructions
+                        </Typography>
+
+                        <Box sx={{
+                            bgcolor: 'grey.100',
+                            p: 3,
+                            borderRadius: 2,
+                            mb: 3,
+                            border: '2px solid',
+                            borderColor: 'primary.main'
+                        }}>
+                            <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
+                                🔗 Bot Link
+                            </Typography>
+                            <Button
+                                variant="contained"
+                                color="primary"
+                                size="large"
+                                href={`https://t.me/${botUsername}`}
+                                target="_blank"
+                                sx={{ fontSize: '1.1rem', py: 1.5, px: 3 }}
+                            >
+                                Open Bot: @{botUsername}
+                            </Button>
+                        </Box>
+
+                        <Typography variant="h5" sx={{ mb: 3, fontWeight: 'bold' }}>
+                            📋 Step-by-Step Setup Guide:
+                        </Typography>
+
+                        <Box sx={{ pl: 2 }}>
+                            <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: 'primary.main' }}>
+                                1️⃣ Start the Bot
+                            </Typography>
+                            <Typography variant="body1" sx={{ mb: 3, pl: 3 }}>
+                                Click the bot link above and click "Start" to begin interacting with the bot.
+                            </Typography>
+
+                            <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: 'primary.main' }}>
+                                2️⃣ Add Bot to Your Group
+                            </Typography>
+                            <Typography variant="body1" sx={{ mb: 3, pl: 3 }}>
+                                Go to your Telegram group → Click group name → "Add Members" → Search for "@{botUsername}" → Add the bot.
+                            </Typography>
+
+                            <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: 'primary.main' }}>
+                                3️⃣ Make Bot Administrator
+                            </Typography>
+                            <Typography variant="body1" sx={{ mb: 2, pl: 3 }}>
+                                In your group: Group Settings → Administrators → Add Administrator → Select "@{botUsername}"
+                            </Typography>
+                            <Typography variant="body1" sx={{ mb: 3, pl: 3 }}>
+                                Grant these permissions:
+                            </Typography>
+                            <Box component="ul" sx={{ pl: 6, mb: 3 }}>
+                                <Typography component="li" variant="body1" sx={{ mb: 1 }}>✅ Delete messages</Typography>
+                                <Typography component="li" variant="body1" sx={{ mb: 1 }}>✅ Ban users</Typography>
+                                <Typography component="li" variant="body1" sx={{ mb: 1 }}>✅ Manage chat</Typography>
+                                <Typography component="li" variant="body1" sx={{ mb: 1 }}>✅ Post messages</Typography>
+                            </Box>
+
+                            <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: 'primary.main' }}>
+                                4️⃣ Wait for Confirmation
+                            </Typography>
+                            <Typography variant="body1" sx={{ mb: 3, pl: 3 }}>
+                                Once the bot detects its admin status, you'll see a green checkmark and a "Publish" button will appear.
+                            </Typography>
+                        </Box>
+
+                        <Box sx={{
+                            bgcolor: 'info.light',
+                            p: 3,
+                            borderRadius: 1,
+                            mt: 3,
+                            color: 'info.contrastText'
+                        }}>
+                            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                                💡 Important: Complete all steps above before proceeding. The bot needs admin permissions to function properly in your group.
+                            </Typography>
+                        </Box>
+                    </Box>
+                </Box>
+            )}
         </Box>
     );
 };

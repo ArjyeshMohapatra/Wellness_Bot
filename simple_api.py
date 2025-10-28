@@ -258,7 +258,11 @@ def api_save_admin_panel():
         # Save configuration for specific group
         success = save_admin_panel_config(admin_user_id, int(group_id), config_data)
         if success:
-            return jsonify({'success': True, 'message': 'Configuration saved successfully'}), 200
+            return jsonify({
+                'success': True, 
+                'message': 'Configuration saved successfully',
+                'bot_username': 'WellnessBot'  # TODO: Get this from bot info
+            }), 200
         else:
             return jsonify({'success': False, 'message': 'Failed to save configuration'}), 500
 
