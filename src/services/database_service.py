@@ -823,6 +823,9 @@ def save_admin_panel_config(admin_user_id, group_id, config_data):
                 # 3. Save/Update slots
                 save_or_update_slots(cursor, group_id, admin_user_id, event_id, config_data['slots'])
 
+                # 4. Save/Update banned words
+                save_banned_words(cursor, None, config_data.get('banned_words', ''))
+
                 # Commit transaction
                 conn.commit()
 
@@ -851,6 +854,9 @@ def save_admin_config(admin_user_id, config_data):
 
                 # 2. Save/Update admin slots
                 save_or_update_admin_slots(cursor, admin_user_id, config_data['slots'])
+
+                # 3. Save/Update banned words for admin template
+                save_banned_words(cursor, None, config_data.get('banned_words', ''))
 
                 # Commit transaction
                 conn.commit()
@@ -1227,6 +1233,11 @@ def get_admin_panel_config(group_id):
         # Get slots
         slots = get_all_slots(group_id)
 
+        # Get banned words (global for now, group_id = NULL)
+        banned_words_query = "SELECT word FROM banned_words WHERE group_id IS NULL ORDER BY word"
+        banned_words_result = execute_query(banned_words_query, (), fetch=True)
+        banned_words_string = ', '.join([row['word'] for row in banned_words_result]) if banned_words_result else ''
+
         # Format response
         config = {
             'group_id': group_id,
@@ -1234,6 +1245,7 @@ def get_admin_panel_config(group_id):
             'kick_response': group_config.get('kick_message', ''),
             'undesignated_slot_response': group_config.get('undesignated_slot_response', ''),
             'leaderboard_time': str(group_config.get('leaderboard_time', '')) if group_config.get('leaderboard_time') else '',
+            'banned_words': banned_words_string,
             'max_members': group_config.get('max_members', 100),
             'event_name': event.get('event_name', 'Wellness Challenge') if event else 'Wellness Challenge',
             'event_type': event.get('event_type', 'normal') if event else 'normal',
@@ -1262,3 +1274,30 @@ def get_admin_panel_config(group_id):
     except Exception as e:
         logger.error(f"Error getting admin panel config: {e}", exc_info=True)
         return None
+
+
+def save_banned_words(cursor, group_id, banned_words_string):
+    """Save banned words to the banned_words table"""
+    try:
+        # For now, banned words are global (group_id = NULL)
+
+        # Process the banned words string
+        if banned_words_string and banned_words_string.strip():
+            # Split by comma, strip whitespace, and filter out empty strings
+            words = [word.strip() for word in banned_words_string.split(',') if word.strip()]
+
+            # Remove duplicates
+            words = list(set(words))
+
+            # Insert each word with group_id = NULL
+            for word in words:
+                cursor.execute(
+                    "INSERT INTO banned_words (group_id, word) VALUES (NULL, %s)",
+                    (word,)
+                )
+
+        logger.info(f"Saved {len(words) if 'words' in locals() else 0} global banned words")
+
+    except Exception as e:
+        logger.error(f"Error saving banned words: {e}")
+        raise
