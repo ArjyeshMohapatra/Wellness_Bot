@@ -5,11 +5,11 @@ export interface Slot {
     compulsory: boolean;
     startTime: string;
     endTime: string;
-    points: number;
+    points: number | string;
     type: 'media' | 'button';
     buttonCount?: number;
     buttonNames?: string[];
-    buttonValues?: number[];
+    buttonValues?: (number | string)[];
     botResponse?: string;
     postResponse?: string;
     image?: string; // Base64 encoded image or image URL
@@ -91,7 +91,7 @@ export const useSlotConfiguration = (initialSlots?: Slot[]) => {
     // Validate slots for errors
     useEffect(() => {
         let totalPoints = 0;
-        for (const slot of slots) totalPoints += slot.points;
+        for (const slot of slots) totalPoints += Number(slot.points) || 0;
 
         let overlaps = false;
         for (let i = 0; i < slots.length; i++) {

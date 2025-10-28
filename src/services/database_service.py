@@ -1266,7 +1266,10 @@ def get_admin_panel_config(group_id):
                 'type': 'button' if slot.get('slot_type') == 'button' else 'media',
                 'botResponse': slot.get('initial_message', ''),
                 'postResponse': slot.get('response_positive', ''),
-                'image': slot.get('image_file_path', '')
+                'image': slot.get('image_file_path', ''),
+                'buttonCount': slot.get('button_count', 0),
+                'buttonNames': json.loads(slot.get('button_names', '[]')) if slot.get('button_names') else [],
+                'buttonValues': json.loads(slot.get('button_values', '[]')) if slot.get('button_values') else []
             })
 
         return config

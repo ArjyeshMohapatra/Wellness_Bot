@@ -139,8 +139,8 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                         <TextField
                                             label="Points"
                                             type="number"
-                                            value={slot.points}
-                                            onChange={(e) => onSlotChange(index, 'points', Number(e.target.value))}
+                                            value={slot.points ?? ''}
+                                            onChange={(e) => onSlotChange(index, 'points', e.target.value === '' ? '' : Number(e.target.value))}
                                             size="small"
                                             sx={{ width: 80 }}
                                             inputProps={{ min: 0, max: 100 }}
@@ -352,8 +352,8 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                     <TableCell>
                                         <TextField
                                             type="number"
-                                            value={slot.points}
-                                            onChange={(e) => onSlotChange(index, 'points', Number(e.target.value))}
+                                            value={slot.points ?? ''}
+                                            onChange={(e) => onSlotChange(index, 'points', e.target.value === '' ? '' : Number(e.target.value))}
                                             size="small"
                                             sx={{ width: 70 }}
                                             inputProps={{ min: 0, max: 100 }}
@@ -407,19 +407,19 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                                                             onSlotChange(index, 'buttonNames', newNames);
                                                                         }}
                                                                         size="small"
-                                                                        sx={{ width: 120 }}
+                                                                        sx={{ width: 160 }}
                                                                     />
                                                                     <TextField
                                                                         label="Value"
                                                                         type="number"
-                                                                        value={slot.buttonValues?.[i] ?? 0}
+                                                                        value={slot.buttonValues?.[i] ?? ''}
                                                                         onChange={(e) => {
                                                                             const newValues = [...(slot.buttonValues || new Array(slot.buttonCount || 2).fill(0))];
-                                                                            newValues[i] = Number(e.target.value) || 0;
+                                                                            newValues[i] = e.target.value === '' ? '' : Number(e.target.value);
                                                                             onSlotChange(index, 'buttonValues', newValues);
                                                                         }}
                                                                         size="small"
-                                                                        sx={{ width: 60 }}
+                                                                        sx={{ width: 80 }}
                                                                         inputProps={{ min: 0 }}
                                                                     />
                                                                 </Box>
@@ -508,4 +508,4 @@ const SlotTable: React.FC<SlotTableProps> = ({
     );
 };
 
-export default SlotTable; ``
+export default SlotTable;

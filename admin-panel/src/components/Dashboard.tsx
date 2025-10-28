@@ -208,14 +208,14 @@ const Dashboard: React.FC = () => {
                     compulsory: slot.compulsory,
                     startTime: slot.startTime,
                     endTime: slot.endTime,
-                    points: slot.points,
+                    points: slot.points === '' ? 0 : Number(slot.points),
                     type: slot.type,
                     botResponse: slot.botResponse || '',
                     postResponse: slot.postResponse || '',
                     image: slot.image || '',
                     buttonCount: slot.buttonCount || 0,
                     buttonNames: slot.buttonNames || [],
-                    buttonValues: slot.buttonValues || []
+                    buttonValues: (slot.buttonValues || []).map(v => v === '' ? 0 : Number(v))
                 }))
             };
 
