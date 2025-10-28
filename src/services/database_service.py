@@ -750,3 +750,249 @@ def log_missed_slots(group_id, event_id, slot_id):
             logger.info(f"Logged {len(missed_members_data)} 'missed' entries for slot {slot_id} in group {group_id}", exc_info=True)
     except Exception as e:
         logger.error(f"Error in log_missed_slots_for_group: {e}", exc_info=True)
+
+
+# ADMIN PANEL SAVE FUNCTIONS
+
+def save_admin_panel_config(admin_user_id, group_id, config_data):
+    """
+    Save admin panel configuration data to database.
+    This function handles saving group config, events, and slots in a transaction.
+    """
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cursor:
+                # Start transaction
+                conn.start_transaction()
+
+                # 1. Update group configuration
+                update_group_config(cursor, group_id, config_data)
+
+                # 2. Save/Update event
+                event_id = save_or_update_event(cursor, group_id, config_data)
+
+                # 3. Save/Update slots
+                save_or_update_slots(cursor, group_id, event_id, config_data['slots'])
+
+                # Commit transaction
+                conn.commit()
+
+                logger.info(f"Successfully saved admin panel config for group {group_id} by admin {admin_user_id}")
+                return True
+
+    except Exception as e:
+        logger.error(f"Error saving admin panel config: {e}", exc_info=True)
+        # Rollback will happen automatically if we don't commit
+        return False
+
+
+def update_group_config(cursor, group_id, config_data):
+    """Update group configuration in groups_config table"""
+    query = """
+        INSERT INTO groups_config (group_id, license_key, admin_user_id, welcome_message, kick_message, max_members, undesignated_slot_response, leaderboard_time)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE
+            welcome_message = VALUES(welcome_message),
+            kick_message = VALUES(kick_message),
+            max_members = VALUES(max_members),
+            undesignated_slot_response = VALUES(undesignated_slot_response),
+            leaderboard_time = VALUES(leaderboard_time)
+    """
+    # For now, use a default license key and admin_user_id
+    # TODO: These should come from the config_data or be properly managed
+    license_key = config_data.get('license_key', 'DEFAULT_LICENSE')
+    admin_user_id = config_data.get('admin_user_id', 1)
+
+    params = (
+        group_id,
+        license_key,
+        admin_user_id,
+        config_data.get('welcome_message', ''),
+        config_data.get('kick_response', ''),  # kick_response maps to kick_message
+        config_data.get('max_members', 100),
+        config_data.get('undesignated_slot_response', ''),
+        config_data.get('leaderboard_time', None)
+    )
+    cursor.execute(query, params)
+
+
+def save_or_update_event(cursor, group_id, config_data):
+    """Save or update event configuration"""
+    from datetime import datetime, timedelta
+
+    event_name = config_data.get('event_name', 'Wellness Challenge')
+    event_type = config_data.get('event_type', 'normal')
+    event_days = int(config_data.get('event_days', 0)) if config_data.get('event_days') else 0
+    pass_points = int(config_data.get('pass_points', 250)) if config_data.get('pass_points') else 250
+
+    # Calculate start and end dates
+    start_date = datetime.now(ist).date()
+    if event_type == 'time-limited' and event_days > 0:
+        end_date = start_date + timedelta(days=event_days - 1)  # -1 because start day counts
+        is_active = True
+    else:
+        # For normal events, set a far future date
+        end_date = start_date + timedelta(days=365*10)  # 10 years
+        is_active = True
+
+    # Check if event already exists
+    cursor.execute("SELECT event_id FROM events WHERE group_id = %s", (group_id,))
+    existing_event = cursor.fetchone()
+
+    if existing_event:
+        # Update existing event
+        query = """
+            UPDATE events
+            SET event_name = %s, event_type = %s, event_days = %s, slots_per_day = %s,
+                start_date = %s, end_date = %s, min_pass_points = %s, is_active = %s
+            WHERE group_id = %s
+        """
+        params = (event_name, event_type, event_days, config_data.get('slots_per_day', 0),
+                 start_date, end_date, pass_points, is_active, group_id)
+        cursor.execute(query, params)
+        return existing_event[0]
+    else:
+        # Create new event
+        query = """
+            INSERT INTO events (group_id, event_name, event_type, event_days, slots_per_day,
+                               start_date, end_date, min_pass_points, is_active)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        params = (group_id, event_name, event_type, event_days, config_data.get('slots_per_day', 0),
+                 start_date, end_date, pass_points, is_active)
+        cursor.execute(query, params)
+        return cursor.lastrowid
+
+
+def save_or_update_slots(cursor, group_id, event_id, slots_data):
+    """Save or update slot configurations"""
+    # First, get existing slots for this group
+    cursor.execute("SELECT slot_id, slot_name FROM group_slots WHERE group_id = %s", (group_id,))
+    existing_slots = {row[1]: row[0] for row in cursor.fetchall()}  # slot_name -> slot_id
+
+    # Track which slots we've processed
+    processed_slot_names = set()
+
+    for slot_data in slots_data:
+        slot_name = slot_data.get('name', '').strip()
+        if not slot_name:
+            continue
+
+        processed_slot_names.add(slot_name)
+
+        slot_config = {
+            'group_id': group_id,
+            'event_id': event_id,
+            'slot_name': slot_name,
+            'start_time': slot_data.get('startTime', ''),
+            'end_time': slot_data.get('endTime', ''),
+            'initial_message': slot_data.get('botResponse', ''),
+            'response_positive': slot_data.get('postResponse', ''),
+            'image_file_path': slot_data.get('image', ''),
+            'slot_points': slot_data.get('points', 0),
+            'is_mandatory': slot_data.get('compulsory', False),
+            'slot_type': 'button' if slot_data.get('type') == 'button' else 'default'
+        }
+
+        if slot_name in existing_slots:
+            # Update existing slot
+            update_slot(cursor, existing_slots[slot_name], slot_config)
+        else:
+            # Create new slot
+            create_slot(cursor, slot_config)
+
+    # Remove slots that are no longer in the configuration
+    slots_to_remove = set(existing_slots.keys()) - processed_slot_names
+    for slot_name in slots_to_remove:
+        cursor.execute("DELETE FROM group_slots WHERE slot_id = %s", (existing_slots[slot_name],))
+
+
+def create_slot(cursor, slot_config):
+    """Create a new slot"""
+    query = """
+        INSERT INTO group_slots (
+            group_id, event_id, slot_name, start_time, end_time, initial_message,
+            response_positive, response_clarify, slot_points, is_mandatory, slot_type
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    """
+    params = (
+        slot_config['group_id'], slot_config['event_id'], slot_config['slot_name'],
+        slot_config['start_time'], slot_config['end_time'], slot_config['initial_message'],
+        slot_config['response_positive'], '',  # response_clarify is empty for now
+        slot_config['slot_points'], slot_config['is_mandatory'], slot_config['slot_type']
+    )
+    cursor.execute(query, params)
+
+
+def update_slot(cursor, slot_id, slot_config):
+    """Update an existing slot"""
+    query = """
+        UPDATE group_slots SET
+            event_id = %s, slot_name = %s, start_time = %s, end_time = %s,
+            initial_message = %s, response_positive = %s, response_clarify = %s,
+            image_file_path = %s, slot_points = %s, is_mandatory = %s, slot_type = %s
+        WHERE slot_id = %s
+    """
+    params = (
+        slot_config['event_id'], slot_config['slot_name'], slot_config['start_time'],
+        slot_config['end_time'], slot_config['initial_message'], slot_config['response_positive'],
+        '', slot_config['image_file_path'], slot_config['slot_points'], slot_config['is_mandatory'],  # response_clarify empty
+        slot_config['slot_type'], slot_id
+    )
+    cursor.execute(query, params)
+
+
+def get_admin_panel_config(group_id):
+    """
+    Get current admin panel configuration for a group.
+    Returns data in the format expected by the frontend.
+    """
+    try:
+        # Get group config
+        group_config = get_group_config(group_id)
+        if not group_config:
+            return None
+
+        # Get event
+        event_query = "SELECT * FROM events WHERE group_id = %s AND is_active = TRUE ORDER BY event_id DESC LIMIT 1"
+        event_result = execute_query(event_query, (group_id,), fetch=True)
+        event = event_result[0] if event_result else None
+
+        # Get slots
+        slots = get_all_slots(group_id)
+
+        # Format response
+        config = {
+            'group_id': group_id,
+            'welcome_message': group_config.get('welcome_message', ''),
+            'kick_response': group_config.get('kick_message', ''),
+            'undesignated_slot_response': group_config.get('undesignated_slot_response', ''),
+            'leaderboard_time': str(group_config.get('leaderboard_time', '')) if group_config.get('leaderboard_time') else '',
+            'max_members': group_config.get('max_members', 100),
+            'event_name': event.get('event_name', 'Wellness Challenge') if event else 'Wellness Challenge',
+            'event_type': event.get('event_type', 'normal') if event else 'normal',
+            'event_days': event.get('event_days', 0) if event else 0,
+            'slots_per_day': event.get('slots_per_day', 0) if event else 0,
+            'pass_points': event.get('min_pass_points', 250) if event else 250,
+            'slots': []
+        }
+
+        # Format slots
+        for slot in slots:
+            config['slots'].append({
+                'name': slot.get('slot_name', ''),
+                'compulsory': slot.get('is_mandatory', False),
+                'startTime': str(slot.get('start_time', '')),
+                'endTime': str(slot.get('end_time', '')),
+                'points': slot.get('slot_points', 0),
+                'type': 'button' if slot.get('slot_type') == 'button' else 'media',
+                'botResponse': slot.get('initial_message', ''),
+                'postResponse': slot.get('response_positive', ''),
+                'image': slot.get('image_file_path', '')
+            })
+
+        return config
+
+    except Exception as e:
+        logger.error(f"Error getting admin panel config: {e}", exc_info=True)
+        return None

@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Subscription from './dashboard/Subscription';
 import PaymentPopup from './dashboard/PaymentPopup';
 import BotSettings from './dashboard/BotSettings';
 import { useAuth } from '../hooks/useAuth';
 import { useSubscription } from '../hooks/useSubscription';
 import { usePayment } from '../hooks/usePayment';
-import { useSlotConfiguration } from '../hooks/useSlotConfiguration';
+import { useSlotConfiguration, type Slot } from '../hooks/useSlotConfiguration';
 import {
     AppBar,
     Toolbar,
@@ -23,6 +23,7 @@ import {
 
 const Dashboard: React.FC = () => {
     const { logout } = useAuth();
+    const [loadedSlots, setLoadedSlots] = useState<Slot[]>([]);
     const {
         selectedPlan,
         selectedBilling,
@@ -81,7 +82,171 @@ const Dashboard: React.FC = () => {
         handleSlotButtonCountChange,
         handleSlotButtonIndexChange,
         handleSlotChange
-    } = useSlotConfiguration();
+    } = useSlotConfiguration(loadedSlots);
+
+    // Load saved configuration on component mount
+    useEffect(() => {
+        const loadConfiguration = async () => {
+            try {
+                const userInfo = JSON.parse(localStorage.getItem('user') || '{}');
+                const adminUserId = userInfo.id;
+
+                if (!adminUserId) return;
+
+                // TODO: Make group ID dynamic
+                const groupId = -1002848263384;
+
+                const response = await fetch(`http://localhost:8001/api/admin/panel/config?group_id=${groupId}&admin_user_id=${adminUserId}`);
+                const result = await response.json();
+
+                if (result.success && result.config) {
+                    const config = result.config;
+
+                    // Load all the saved values
+                    setEventType(config.event_type || 'normal');
+                    setEventName(config.event_name || '');
+                    setEventDays(config.event_days?.toString() || '');
+                    setPassPoints(config.pass_points?.toString() || '');
+                    setSlotsPerDay(config.slots_per_day?.toString() || '');
+                    setWelcomeMessage(config.welcome_message || '');
+                    setKickResponse(config.kick_response || '');
+                    setUndesignatedSlotResponse(config.undesignated_slot_response || '');
+                    setLeaderboardTime(config.leaderboard_time || '');
+
+                    // Load slots if they exist
+                    if (config.slots && config.slots.length > 0) {
+                        // Transform loaded slots to match the expected format
+                        const transformedSlots: Slot[] = config.slots.map((slot: any) => ({
+                            name: slot.name || '',
+                            compulsory: slot.compulsory || false,
+                            startTime: slot.startTime || '',
+                            endTime: slot.endTime || '',
+                            points: slot.points || 0,
+                            type: slot.type || 'media',
+                            botResponse: slot.botResponse || '',
+                            postResponse: slot.postResponse || '',
+                            image: slot.image || '',
+                            buttonCount: slot.buttonCount || 0,
+                            buttonNames: slot.buttonNames || [],
+                            buttonValues: slot.buttonValues || []
+                        }));
+                        setLoadedSlots(transformedSlots);
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading configuration:', error);
+            }
+        };
+
+        loadConfiguration();
+    }, [setEventType, setEventName, setEventDays, setPassPoints, setSlotsPerDay, setWelcomeMessage, setKickResponse, setUndesignatedSlotResponse, setLeaderboardTime]);
+
+    // Validation logic for save button
+    const isConfigurationValid = () => {
+        // Basic required fields
+        if (!eventName.trim()) return false;
+        if (!eventType) return false;
+        if (!slotsPerDay || parseInt(slotsPerDay) <= 0) return false;
+        if (!welcomeMessage.trim()) return false;
+        if (!kickResponse.trim()) return false;
+        if (!undesignatedSlotResponse.trim()) return false;
+        if (!leaderboardTime) return false;
+
+        // Time-limited event specific fields
+        if (eventType === 'time-limited') {
+            if (!eventDays || parseInt(eventDays) <= 0) return false;
+            if (!passPoints || parseInt(passPoints) <= 0) return false;
+        }
+
+        // Slot validation
+        const validSlots = slots.filter(slot => slot.name.trim() !== '');
+        if (validSlots.length === 0) return false;
+
+        // Check each slot has required fields
+        for (const slot of validSlots) {
+            if (!slot.name.trim()) return false;
+            if (!slot.startTime) return false;
+            if (!slot.endTime) return false;
+            if (!slot.points || slot.points <= 0) return false;
+        }
+
+        // Check for slot errors
+        if (slotErrors.totalPoints || slotErrors.overlaps) return false;
+
+        return true;
+    };
+
+    // Save configuration handler
+    const handleSaveConfiguration = async () => {
+        try {
+            // Get current user info from localStorage (same way as payment system)
+            const adminUserId = localStorage.getItem('userId');
+
+            if (!adminUserId) {
+                alert('User not logged in. Please login again.');
+                return;
+            }
+
+            // TODO: Make group ID dynamic - should come from user's group selection
+            // For now, using a default group ID
+            const groupId = -1002848263384;
+
+            // Prepare configuration data
+            const configData = {
+                event_type: eventType,
+                event_name: eventName,
+                event_days: eventDays,
+                pass_points: passPoints,
+                slots_per_day: slotsPerDay,
+                welcome_message: welcomeMessage,
+                kick_response: kickResponse,
+                undesignated_slot_response: undesignatedSlotResponse,
+                leaderboard_time: leaderboardTime,
+                max_members: 100,
+                slots: slots.filter(slot => slot.name.trim() !== '').map(slot => ({
+                    name: slot.name,
+                    compulsory: slot.compulsory,
+                    startTime: slot.startTime,
+                    endTime: slot.endTime,
+                    points: slot.points,
+                    type: slot.type,
+                    botResponse: slot.botResponse || '',
+                    postResponse: slot.postResponse || '',
+                    image: slot.image || '',
+                    buttonCount: slot.buttonCount || 0,
+                    buttonNames: slot.buttonNames || [],
+                    buttonValues: slot.buttonValues || []
+                }))
+            };
+
+            // Show loading (you could add a loading state here)
+            console.log('Saving configuration...');
+
+            // Call API to save configuration
+            const response = await fetch('http://localhost:8001/api/admin/panel/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    admin_user_id: parseInt(adminUserId),
+                    group_id: groupId,
+                    config_data: configData
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                alert('Configuration saved successfully!');
+            } else {
+                alert(`Failed to save configuration: ${result.message}`);
+            }
+        } catch (error) {
+            console.error('Error saving configuration:', error);
+            alert('Error saving configuration. Please check your connection and try again.');
+        }
+    };
 
     return (
         <Box sx={{ minHeight: '100vh', background: 'linear-gradient(135deg, #f8fafc 0%, #e0f2fe 25%, #e8eaf6 100%)' }}>
@@ -242,6 +407,8 @@ const Dashboard: React.FC = () => {
                     onSlotTypeChange={handleSlotTypeChange}
                     onSlotButtonCountChange={handleSlotButtonCountChange}
                     onSlotButtonIndexChange={handleSlotButtonIndexChange}
+                    onSaveConfiguration={handleSaveConfiguration}
+                    isConfigurationValid={isConfigurationValid()}
                 />
             )}
 

@@ -6,6 +6,7 @@ import os
 # Add src directory to path so we can import simple_auth and db
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 from simple_auth import register_admin, login_admin, reset_admin_password, get_all_admins
+from services.database_service import save_admin_panel_config, get_admin_panel_config
 from db import execute_query, init_db_pool
 
 # Initialize database connection pool
@@ -13,7 +14,12 @@ init_db_pool()
 
 # Simple Flask app
 app = Flask(__name__)
-CORS(app, origins=["http://localhost:5173", "http://localhost:3000"])  # React dev servers
+CORS(app, origins=["http://localhost:5173", "http://localhost:3000"], 
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     allow_headers=["Content-Type", "Authorization"])
+
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=8001)
 
 @app.route('/api/admin/register', methods=['POST'])
 def api_register():
@@ -216,6 +222,57 @@ def api_check_subscription():
 
     except Exception as e:
         print(f"API Error in check-subscription: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Server error: {str(e)}'}), 500
+
+@app.route('/api/admin/panel/save', methods=['POST'])
+def api_save_admin_panel():
+    """Save admin panel configuration"""
+    try:
+        data = request.get_json()
+        admin_user_id = data.get('admin_user_id')
+        group_id = data.get('group_id')
+        config_data = data.get('config_data')
+
+        if not all([admin_user_id, group_id, config_data]):
+            return jsonify({'success': False, 'message': 'Missing required fields: admin_user_id, group_id, config_data'}), 400
+
+        # Import here to avoid circular imports
+        from services.database_service import save_admin_panel_config
+
+        success = save_admin_panel_config(admin_user_id, group_id, config_data)
+        if success:
+            return jsonify({'success': True, 'message': 'Configuration saved successfully'}), 200
+        else:
+            return jsonify({'success': False, 'message': 'Failed to save configuration'}), 500
+
+    except Exception as e:
+        print(f"API Error in save admin panel: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Server error: {str(e)}'}), 500
+
+@app.route('/api/admin/panel/config', methods=['GET'])
+def api_get_admin_panel_config():
+    """Get admin panel configuration for a group"""
+    try:
+        group_id = request.args.get('group_id')
+
+        if not group_id:
+            return jsonify({'success': False, 'message': 'Group ID required'}), 400
+
+        # Import here to avoid circular imports
+        from services.database_service import get_admin_panel_config
+
+        config = get_admin_panel_config(int(group_id))
+        if config:
+            return jsonify({'success': True, 'config': config}), 200
+        else:
+            return jsonify({'success': False, 'message': 'Configuration not found'}), 404
+
+    except Exception as e:
+        print(f"API Error in get admin panel config: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'message': f'Server error: {str(e)}'}), 500

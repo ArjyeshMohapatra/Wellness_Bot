@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState } from 'react';
 import {
     Table,
     TableBody,
@@ -65,26 +65,8 @@ const SlotTable: React.FC<SlotTableProps> = ({
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
-    // Debounced slot change to improve INP performance
-    const debouncedTimeouts = useMemo(() => new Map<string, number>(), []);
-
-    const debouncedSlotChange = useCallback((index: number, field: keyof Slot, value: string | number | boolean | string[] | number[]) => {
-        const timeoutKey = `${index}-${field}`;
-
-        // Clear existing timeout
-        const existingTimeout = debouncedTimeouts.get(timeoutKey);
-        if (existingTimeout) {
-            clearTimeout(existingTimeout);
-        }
-
-        // Set new timeout
-        const timeoutId = setTimeout(() => {
-            onSlotChange(index, field, value);
-            debouncedTimeouts.delete(timeoutKey);
-        }, 150); // 150ms debounce for good INP
-
-        debouncedTimeouts.set(timeoutKey, timeoutId);
-    }, [onSlotChange, debouncedTimeouts]);
+    // Removed debouncing from input fields for immediate responsiveness
+    // Debouncing can be added back for expensive operations like API calls if needed
 
     const toggleRowExpansion = (index: number) => {
         const newExpanded = new Set(expandedRows);
@@ -325,7 +307,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                     <TableCell>
                                         <TextField
                                             value={slot.name}
-                                            onChange={(e) => debouncedSlotChange(index, 'name', e.target.value)}
+                                            onChange={(e) => onSlotChange(index, 'name', e.target.value)}
                                             size="small"
                                             placeholder="Enter slot name"
                                             fullWidth
@@ -354,14 +336,14 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                             <TextField
                                                 type="time"
                                                 value={slot.startTime}
-                                                onChange={(e) => debouncedSlotChange(index, 'startTime', e.target.value)}
+                                                onChange={(e) => onSlotChange(index, 'startTime', e.target.value)}
                                                 size="small"
                                                 sx={{ width: 100 }}
                                             />
                                             <TextField
                                                 type="time"
                                                 value={slot.endTime}
-                                                onChange={(e) => debouncedSlotChange(index, 'endTime', e.target.value)}
+                                                onChange={(e) => onSlotChange(index, 'endTime', e.target.value)}
                                                 size="small"
                                                 sx={{ width: 100 }}
                                             />
@@ -371,7 +353,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                         <TextField
                                             type="number"
                                             value={slot.points}
-                                            onChange={(e) => debouncedSlotChange(index, 'points', Number(e.target.value))}
+                                            onChange={(e) => onSlotChange(index, 'points', Number(e.target.value))}
                                             size="small"
                                             sx={{ width: 70 }}
                                             inputProps={{ min: 0, max: 100 }}
@@ -455,7 +437,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                                     <TextField
                                                         label="Bot Response"
                                                         value={slot.botResponse || ''}
-                                                        onChange={(e) => debouncedSlotChange(index, 'botResponse', e.target.value)}
+                                                        onChange={(e) => onSlotChange(index, 'botResponse', e.target.value)}
                                                         size="small"
                                                         sx={{ flex: 1 }}
                                                         placeholder="Bot response message"
@@ -463,7 +445,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                                     <TextField
                                                         label="Post Response"
                                                         value={slot.postResponse || ''}
-                                                        onChange={(e) => debouncedSlotChange(index, 'postResponse', e.target.value)}
+                                                        onChange={(e) => onSlotChange(index, 'postResponse', e.target.value)}
                                                         size="small"
                                                         sx={{ flex: 1 }}
                                                         placeholder="Post-response message"

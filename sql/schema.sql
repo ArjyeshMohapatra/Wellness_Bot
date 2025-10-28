@@ -58,6 +58,8 @@ CREATE TABLE IF NOT EXISTS groups_config (
     max_members INT DEFAULT 0,
     welcome_message TEXT,
     kick_message TEXT,
+    undesignated_slot_response TEXT,
+    leaderboard_time TIME,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (license_key) REFERENCES licenses(license_key) ON DELETE CASCADE
 );
@@ -67,6 +69,9 @@ CREATE TABLE IF NOT EXISTS events (
     event_id INT AUTO_INCREMENT PRIMARY KEY,
     group_id BIGINT NOT NULL,
     event_name VARCHAR(255) NOT NULL DEFAULT 'Wellness Challenge',
+    event_type ENUM('normal', 'time-limited') DEFAULT 'normal',
+    event_days INT DEFAULT 0,
+    slots_per_day INT DEFAULT 0,
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
     min_pass_points INT DEFAULT 250,

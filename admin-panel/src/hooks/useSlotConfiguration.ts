@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-interface Slot {
+export interface Slot {
     name: string;
     compulsory: boolean;
     startTime: string;
@@ -15,7 +15,7 @@ interface Slot {
     image?: string; // Base64 encoded image or image URL
 }
 
-export const useSlotConfiguration = () => {
+export const useSlotConfiguration = (initialSlots?: Slot[]) => {
     const [eventType, setEventType] = useState<'normal' | 'time-limited'>('normal');
     const [eventName, setEventName] = useState('');
     const [eventDays, setEventDays] = useState('');
@@ -37,18 +37,24 @@ export const useSlotConfiguration = () => {
         return h * 60 + m;
     };
 
-    // Initialize slots when slotsPerDay changes
+    // Initialize slots when slotsPerDay changes or initialSlots is provided
     useEffect(() => {
-        const num = parseInt(slotsPerDay) || 0;
-        setSlots(Array.from({ length: num }, () => ({
-            name: '',
-            compulsory: false,
-            startTime: '',
-            endTime: '',
-            points: 0,
-            type: 'media' as const,
-        })));
-    }, [slotsPerDay]);
+        if (initialSlots && initialSlots.length > 0) {
+            // Use provided initial slots
+            setSlots(initialSlots);
+        } else {
+            // Initialize empty slots based on slotsPerDay
+            const num = parseInt(slotsPerDay) || 0;
+            setSlots(Array.from({ length: num }, () => ({
+                name: '',
+                compulsory: false,
+                startTime: '',
+                endTime: '',
+                points: 0,
+                type: 'media' as const,
+            })));
+        }
+    }, [slotsPerDay, initialSlots]);
 
     const handleSlotTypeChange = (index: number, type: 'media' | 'button') => {
         const newSlots = [...slots];

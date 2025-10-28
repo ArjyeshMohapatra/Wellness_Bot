@@ -7,7 +7,8 @@ export const useAuth = () => {
     // Check authentication on component mount
     useEffect(() => {
         const isLoggedIn = localStorage.getItem('isLoggedIn');
-        if (!isLoggedIn || isLoggedIn !== 'true') {
+        const userId = localStorage.getItem('userId');
+        if (!isLoggedIn || isLoggedIn !== 'true' || !userId) {
             navigate('/login');
         }
     }, [navigate]);
@@ -17,7 +18,7 @@ export const useAuth = () => {
         navigate('/login');
     };
 
-    const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+    const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true' && !!localStorage.getItem('userId');
 
     return {
         isLoggedIn,

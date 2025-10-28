@@ -8,6 +8,7 @@ import {
     InputLabel,
     Box,
     Alert,
+    Button,
 } from '@mui/material';
 
 // Lazy load the heavy SlotConfiguration component
@@ -58,6 +59,8 @@ interface BotSettingsProps {
     onSlotTypeChange: (index: number, type: 'media' | 'button') => void;
     onSlotButtonCountChange: (index: number, count: number) => void;
     onSlotButtonIndexChange: (index: number, buttonIndex: number) => void;
+    onSaveConfiguration?: () => void;
+    isConfigurationValid?: boolean;
 }
 
 const BotSettings: React.FC<BotSettingsProps> = ({
@@ -89,8 +92,14 @@ const BotSettings: React.FC<BotSettingsProps> = ({
     onCurrentButtonIndexChange,
     onSlotTypeChange,
     onSlotButtonCountChange,
-    onSlotButtonIndexChange
+    onSlotButtonIndexChange,
+    onSaveConfiguration,
+    isConfigurationValid = false
 }) => {
+    // Debounced change handlers to improve INP performance
+    // Removed debouncing from input fields for immediate responsiveness
+    // Debouncing can be added back for expensive operations like API calls if needed
+
     return (
         <Box sx={{ mt: 3, px: 2 }}>
             <Typography variant="h5" sx={{ mb: 3, fontWeight: 'bold' }}>
@@ -98,23 +107,23 @@ const BotSettings: React.FC<BotSettingsProps> = ({
             </Typography>
 
             {/* Basic Event Configuration */}
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, mb: 4 }}>
-                <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 calc(33.333% - 16px)' } }}>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: { xs: 1, md: 3 }, mb: 4 }}>
+                <Box sx={{ flex: { xs: '1 1 calc(33.333% - 8px)', md: '1 1 calc(33.333% - 16px)' } }}>
                     <TextField
                         fullWidth
-                        label="Event Name"
+                        label="Event Name *"
                         value={eventName}
                         onChange={(e) => onEventNameChange(e.target.value)}
                         placeholder="Enter event name"
                         variant="outlined"
                     />
                 </Box>
-                <Box sx={{ flex: { xs: '1 1 calc(50% - 12px)', md: '1 1 calc(33.333% - 16px)' } }}>
+                <Box sx={{ flex: { xs: '1 1 calc(33.333% - 8px)', md: '1 1 calc(33.333% - 16px)' } }}>
                     <FormControl fullWidth>
-                        <InputLabel>Event Type</InputLabel>
+                        <InputLabel>Event Type *</InputLabel>
                         <Select
                             value={eventType}
-                            label="Event Type"
+                            label="Event Type *"
                             onChange={(e) => onEventTypeChange(e.target.value as 'normal' | 'time-limited')}
                         >
                             <MenuItem value="normal">Normal</MenuItem>
@@ -122,10 +131,10 @@ const BotSettings: React.FC<BotSettingsProps> = ({
                         </Select>
                     </FormControl>
                 </Box>
-                <Box sx={{ flex: { xs: '1 1 calc(50% - 12px)', md: '1 1 calc(33.333% - 16px)' } }}>
+                <Box sx={{ flex: { xs: '1 1 calc(33.333% - 8px)', md: '1 1 calc(33.333% - 16px)' } }}>
                     <TextField
                         fullWidth
-                        label="Slots Per Day"
+                        label="Slots Per Day *"
                         type="number"
                         value={slotsPerDay}
                         onChange={(e) => onSlotsPerDayChange(e.target.value)}
@@ -144,7 +153,7 @@ const BotSettings: React.FC<BotSettingsProps> = ({
                     <TextField
                         fullWidth
                         size="small"
-                        label="Welcome Message"
+                        label="Welcome Message *"
                         multiline
                         rows={2}
                         value={welcomeMessage}
@@ -158,7 +167,7 @@ const BotSettings: React.FC<BotSettingsProps> = ({
                     <TextField
                         fullWidth
                         size="small"
-                        label="Kick Response"
+                        label="Kick Response *"
                         multiline
                         rows={2}
                         value={kickResponse}
@@ -168,25 +177,25 @@ const BotSettings: React.FC<BotSettingsProps> = ({
                         sx={{ '& .MuiInputBase-root': { fontSize: '0.875rem' } }}
                     />
                 </Box>
-                <Box sx={{ flex: { xs: '1 1 calc(50% - 8px)', md: '1 1 calc(25% - 6px)' } }}>
+                <Box sx={{ flex: { xs: '1 1 calc(50% - 8px)', md: '1 1 calc(25% - 10px)' } }}>
                     <TextField
                         fullWidth
                         size="small"
-                        label="Undesignated Response"
+                        label="Undesignated Slot Response *"
                         multiline
                         rows={2}
                         value={undesignatedSlotResponse}
                         onChange={(e) => onUndesignatedSlotResponseChange(e.target.value)}
-                        placeholder="Undesignated response"
+                        placeholder="Undesignated slot response"
                         variant="outlined"
                         sx={{ '& .MuiInputBase-root': { fontSize: '0.875rem' } }}
                     />
                 </Box>
-                <Box sx={{ flex: { xs: '1 1 calc(50% - 8px)', md: '1 1 calc(25% - 6px)' } }}>
+                <Box sx={{ flex: { xs: '1 1 calc(25% - 10px)', md: '1 1 calc(25% - 6px)' } }}>
                     <TextField
                         fullWidth
                         size="small"
-                        label="Leaderboard Time"
+                        label="Leaderboard Time *"
                         type="time"
                         value={leaderboardTime}
                         onChange={(e) => onLeaderboardTimeChange(e.target.value)}
@@ -202,7 +211,7 @@ const BotSettings: React.FC<BotSettingsProps> = ({
                     <Box sx={{ flex: { xs: '1 1 calc(50% - 12px)', md: '1 1 calc(33.333% - 16px)' } }}>
                         <TextField
                             fullWidth
-                            label="Number of Days"
+                            label="Number of Days *"
                             type="number"
                             value={eventDays}
                             onChange={(e) => onEventDaysChange(e.target.value)}
@@ -213,7 +222,7 @@ const BotSettings: React.FC<BotSettingsProps> = ({
                     <Box sx={{ flex: { xs: '1 1 calc(50% - 12px)', md: '1 1 calc(33.333% - 16px)' } }}>
                         <TextField
                             fullWidth
-                            label="Pass Points"
+                            label="Pass Points *"
                             type="number"
                             value={passPoints}
                             onChange={(e) => onPassPointsChange(e.target.value)}
@@ -258,6 +267,29 @@ const BotSettings: React.FC<BotSettingsProps> = ({
                             onCurrentButtonIndexChange={onCurrentButtonIndexChange}
                         />
                     </Suspense>
+
+                    {/* Save Button */}
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mt: 4, mb: 2 }}>
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            size="large"
+                            onClick={onSaveConfiguration}
+                            disabled={!isConfigurationValid}
+                            sx={{ minWidth: 200, py: 1.5 }}
+                        >
+                            Save Configuration
+                        </Button>
+                        {!isConfigurationValid && (
+                            <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                sx={{ mt: 1, textAlign: 'center', maxWidth: 300 }}
+                            >
+                                Please fill in all required fields and ensure slot configurations are valid before saving.
+                            </Typography>
+                        )}
+                    </Box>
                 </>
             )}
         </Box>
