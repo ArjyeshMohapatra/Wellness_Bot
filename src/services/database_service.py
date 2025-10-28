@@ -792,15 +792,15 @@ def update_group_config(cursor, group_id, config_data):
         INSERT INTO groups_config (group_id, license_key, admin_user_id, welcome_message, kick_message, max_members, undesignated_slot_response, leaderboard_time)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
+            license_key = VALUES(license_key),
             welcome_message = VALUES(welcome_message),
             kick_message = VALUES(kick_message),
             max_members = VALUES(max_members),
             undesignated_slot_response = VALUES(undesignated_slot_response),
             leaderboard_time = VALUES(leaderboard_time)
     """
-    # For now, use a default license key and admin_user_id
-    # TODO: These should come from the config_data or be properly managed
-    license_key = config_data.get('license_key', 'DEFAULT_LICENSE')
+    # For now, license_key can be NULL until it's generated later
+    license_key = config_data.get('license_key', None)
     admin_user_id = config_data.get('admin_user_id', 1)
 
     params = (

@@ -53,15 +53,15 @@ CREATE TABLE IF NOT EXISTS payment_transactions (
 CREATE TABLE IF NOT EXISTS groups_config (
     config_id INT AUTO_INCREMENT PRIMARY KEY,
     group_id BIGINT NOT NULL UNIQUE,
-    license_key VARCHAR(50) NOT NULL UNIQUE,
+    license_key VARCHAR(50) NULL UNIQUE,
     admin_user_id BIGINT NOT NULL,
     max_members INT DEFAULT 0,
     welcome_message TEXT,
     kick_message TEXT,
     undesignated_slot_response TEXT,
     leaderboard_time TIME,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (license_key) REFERENCES licenses(license_key) ON DELETE CASCADE
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    -- FOREIGN KEY (license_key) REFERENCES licenses(license_key) ON DELETE CASCADE  -- Temporarily removed
 );
 
 -- EVENTS TABLE
