@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 import sys
 import os
@@ -19,8 +19,15 @@ CORS(app, origins=["http://localhost:5173", "http://localhost:3000"],
      allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
      supports_credentials=True)
 
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=8001)
+@app.before_request
+def handle_options():
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', 'http://localhost:5173')
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        return response
 
 @app.route('/api/admin/register', methods=['POST'])
 def api_register():
@@ -236,13 +243,20 @@ def api_save_admin_panel():
         group_id = data.get('group_id')
         config_data = data.get('config_data')
 
-        if not all([admin_user_id, group_id, config_data]):
-            return jsonify({'success': False, 'message': 'Missing required fields: admin_user_id, group_id, config_data'}), 400
+        if not all([admin_user_id, config_data]):
+            return jsonify({'success': False, 'message': 'Missing required fields: admin_user_id, config_data'}), 400
 
-        # Import here to avoid circular imports
-        from services.database_service import save_admin_panel_config
+        # If group_id is not provided, save as admin template with group_id=None
+        if not group_id:
+            # Save configuration with NULL group_id using admin_user_id
+            success = save_admin_panel_config(admin_user_id, None, config_data)
+            if success:
+                return jsonify({'success': True, 'message': 'Configuration template saved successfully'}), 200
+            else:
+                return jsonify({'success': False, 'message': 'Failed to save configuration template'}), 500
 
-        success = save_admin_panel_config(admin_user_id, group_id, config_data)
+        # Save configuration for specific group
+        success = save_admin_panel_config(admin_user_id, int(group_id), config_data)
         if success:
             return jsonify({'success': True, 'message': 'Configuration saved successfully'}), 200
         else:

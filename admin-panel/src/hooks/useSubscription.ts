@@ -68,6 +68,12 @@ export const useSubscription = () => {
         return `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`;
     };
 
+    const getCurrentMaxMembers = () => {
+        if (!selectedPlan) return 25; // Default to basic
+        const plan = plans.find(p => p.name === selectedPlan);
+        return plan ? plan.maxMembers : 25;
+    };
+
     // Check for active subscription on component mount
     useEffect(() => {
         const checkSubscriptionStatus = async () => {
@@ -126,6 +132,7 @@ export const useSubscription = () => {
         setShowSubscriptionPanel,
         setPaymentCompleted,
         setHasActiveSubscription,
-        getValidity
+        getValidity,
+        getCurrentMaxMembers
     };
 };

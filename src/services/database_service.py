@@ -4,6 +4,7 @@ from pytz import timezone
 from config import NEW_MEMBER_RESTRICTION_MINUTES
 from db import execute_query, get_db_connection
 import mysql.connector
+import json
 
 ist=timezone("Asia/Kolkata")
 logger = logging.getLogger(__name__)
@@ -766,13 +767,15 @@ def save_admin_panel_config(admin_user_id, group_id, config_data):
                 conn.start_transaction()
 
                 # 1. Update group configuration
-                update_group_config(cursor, group_id, config_data)
+                update_group_config(cursor, group_id, admin_user_id, config_data)
 
-                # 2. Save/Update event
-                event_id = save_or_update_event(cursor, group_id, config_data)
+                # 2. Save/Update event (only if group_id is provided)
+                event_id = None
+                if group_id is not None:
+                    event_id = save_or_update_event(cursor, group_id, config_data)
 
                 # 3. Save/Update slots
-                save_or_update_slots(cursor, group_id, event_id, config_data['slots'])
+                save_or_update_slots(cursor, group_id, admin_user_id, event_id, config_data['slots'])
 
                 # Commit transaction
                 conn.commit()
@@ -786,33 +789,232 @@ def save_admin_panel_config(admin_user_id, group_id, config_data):
         return False
 
 
-def update_group_config(cursor, group_id, config_data):
-    """Update group configuration in groups_config table"""
-    query = """
-        INSERT INTO groups_config (group_id, license_key, admin_user_id, welcome_message, kick_message, max_members, undesignated_slot_response, leaderboard_time)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        ON DUPLICATE KEY UPDATE
-            license_key = VALUES(license_key),
-            welcome_message = VALUES(welcome_message),
-            kick_message = VALUES(kick_message),
-            max_members = VALUES(max_members),
-            undesignated_slot_response = VALUES(undesignated_slot_response),
-            leaderboard_time = VALUES(leaderboard_time)
+def save_admin_config(admin_user_id, config_data):
     """
-    # For now, license_key can be NULL until it's generated later
-    license_key = config_data.get('license_key', None)
-    admin_user_id = config_data.get('admin_user_id', 1)
+    Save admin configuration data to admin_configs table.
+    This saves the configuration template that will be applied to groups later.
+    """
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cursor:
+                # Start transaction
+                conn.start_transaction()
+
+                # 1. Save/Update admin config
+                update_admin_config(cursor, admin_user_id, config_data)
+
+                # 2. Save/Update admin slots
+                save_or_update_admin_slots(cursor, admin_user_id, config_data['slots'])
+
+                # Commit transaction
+                conn.commit()
+
+                logger.info(f"Successfully saved admin config for admin {admin_user_id}")
+                return True
+
+    except Exception as e:
+        logger.error(f"Error saving admin config: {e}", exc_info=True)
+        # Rollback will happen automatically if we don't commit
+        return False
+
+
+def update_admin_config(cursor, admin_user_id, config_data):
+    """Update admin configuration in admin_configs table"""
+    query = """
+        INSERT INTO admin_configs 
+        (admin_user_id, event_type, event_name, event_days, pass_points, slots_per_day, welcome_message, kick_response, undesignated_slot_response, leaderboard_time, max_members)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE
+            event_type = VALUES(event_type),
+            event_name = VALUES(event_name),
+            event_days = VALUES(event_days),
+            pass_points = VALUES(pass_points),
+            slots_per_day = VALUES(slots_per_day),
+            welcome_message = VALUES(welcome_message),
+            kick_response = VALUES(kick_response),
+            undesignated_slot_response = VALUES(undesignated_slot_response),
+            leaderboard_time = VALUES(leaderboard_time),
+            max_members = VALUES(max_members)
+    """
 
     params = (
-        group_id,
-        license_key,
         admin_user_id,
+        config_data.get('event_type', 'normal'),
+        config_data.get('event_name', 'Wellness Challenge'),
+        config_data.get('event_days', 0),
+        config_data.get('pass_points', 250),
+        config_data.get('slots_per_day', 0),
         config_data.get('welcome_message', ''),
-        config_data.get('kick_response', ''),  # kick_response maps to kick_message
-        config_data.get('max_members', 100),
+        config_data.get('kick_response', ''),
         config_data.get('undesignated_slot_response', ''),
-        config_data.get('leaderboard_time', None)
+        config_data.get('leaderboard_time', None),
+        config_data.get('max_members', 25)
     )
+    cursor.execute(query, params)
+
+
+def save_or_update_admin_slots(cursor, admin_user_id, slots_data):
+    """Save or update admin slots"""
+    # First, delete existing slots for this admin
+    cursor.execute("DELETE FROM admin_slot_keywords WHERE slot_id IN (SELECT slot_id FROM admin_slots WHERE admin_user_id = %s)", (admin_user_id,))
+    cursor.execute("DELETE FROM admin_slots WHERE admin_user_id = %s", (admin_user_id,))
+
+    # Insert new slots
+    for slot_data in slots_data:
+        query = """
+            INSERT INTO admin_slots 
+            (admin_user_id, slot_name, start_time, end_time, initial_message, response_positive, response_clarify, image_file_path, slot_type, slot_points, is_mandatory, button_count, button_names, button_values)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        params = (
+            admin_user_id,
+            slot_data.get('name', ''),
+            slot_data.get('startTime', '00:00'),
+            slot_data.get('endTime', '00:00'),
+            slot_data.get('botResponse', ''),
+            slot_data.get('postResponse', ''),
+            '',  # response_clarify
+            slot_data.get('image', ''),
+            slot_data.get('type', 'media'),
+            slot_data.get('points', 0),
+            slot_data.get('compulsory', False),
+            slot_data.get('buttonCount', 0),
+            json.dumps(slot_data.get('buttonNames', [])),
+            json.dumps(slot_data.get('buttonValues', []))
+        )
+        cursor.execute(query, params)
+
+
+def get_admin_config(admin_user_id):
+    """
+    Get admin configuration from admin_configs table.
+    Returns data in the format expected by the frontend.
+    """
+    try:
+        # Get admin config
+        query = "SELECT * FROM admin_configs WHERE admin_user_id = %s"
+        result = execute_query(query, (admin_user_id,), fetch=True)
+        if not result:
+            return None
+
+        admin_config = result[0]
+
+        # Get admin slots
+        slots = get_admin_slots(admin_user_id)
+
+        # Format response
+        config = {
+            'admin_user_id': admin_user_id,
+            'welcome_message': admin_config.get('welcome_message', ''),
+            'kick_response': admin_config.get('kick_response', ''),
+            'undesignated_slot_response': admin_config.get('undesignated_slot_response', ''),
+            'leaderboard_time': str(admin_config.get('leaderboard_time', '')) if admin_config.get('leaderboard_time') else '',
+            'max_members': admin_config.get('max_members', 25),
+            'event_name': admin_config.get('event_name', 'Wellness Challenge'),
+            'event_type': admin_config.get('event_type', 'normal'),
+            'event_days': admin_config.get('event_days', 0),
+            'slots_per_day': admin_config.get('slots_per_day', 0),
+            'pass_points': admin_config.get('pass_points', 250),
+            'slots': []
+        }
+
+        # Format slots
+        for slot in slots:
+            config['slots'].append({
+                'name': slot.get('slot_name', ''),
+                'compulsory': slot.get('is_mandatory', False),
+                'startTime': str(slot.get('start_time', '')),
+                'endTime': str(slot.get('end_time', '')),
+                'points': slot.get('slot_points', 0),
+                'type': 'button' if slot.get('slot_type') == 'button' else 'media',
+                'botResponse': slot.get('initial_message', ''),
+                'postResponse': slot.get('response_positive', ''),
+                'image': slot.get('image_file_path', ''),
+                'buttonCount': slot.get('button_count', 0),
+                'buttonNames': json.loads(slot.get('button_names', '[]')),
+                'buttonValues': json.loads(slot.get('button_values', '[]'))
+            })
+
+        return config
+
+    except Exception as e:
+        logger.error(f"Error getting admin config: {e}", exc_info=True)
+        return None
+
+
+def get_admin_slots(admin_user_id):
+    """Get all slots for an admin"""
+    query = "SELECT * FROM admin_slots WHERE admin_user_id = %s ORDER BY start_time ASC"
+    result = execute_query(query, (admin_user_id,), fetch=True)
+    return result if result else []
+
+
+def update_group_config(cursor, group_id, admin_user_id, config_data):
+    """Update group configuration in groups_config table"""
+    if group_id is None:
+        # For admin templates, check if config already exists for this admin
+        cursor.execute("SELECT config_id FROM groups_config WHERE group_id IS NULL AND admin_user_id = %s", (admin_user_id,))
+        existing = cursor.fetchone()
+        
+        if existing:
+            # Update existing admin template
+            query = """
+                UPDATE groups_config SET
+                    license_key = %s, welcome_message = %s, kick_message = %s, 
+                    max_members = %s, undesignated_slot_response = %s, leaderboard_time = %s
+                WHERE config_id = %s
+            """
+            params = (
+                None,  # license_key
+                config_data.get('welcome_message', ''),
+                config_data.get('kick_response', ''),  # kick_response maps to kick_message
+                config_data.get('max_members', 100),
+                config_data.get('undesignated_slot_response', ''),
+                config_data.get('leaderboard_time', None),
+                existing[0]  # config_id
+            )
+        else:
+            # Insert new admin template
+            query = """
+                INSERT INTO groups_config (group_id, license_key, admin_user_id, welcome_message, kick_message, max_members, undesignated_slot_response, leaderboard_time)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """
+            params = (
+                None,  # group_id
+                None,  # license_key
+                admin_user_id,
+                config_data.get('welcome_message', ''),
+                config_data.get('kick_response', ''),  # kick_response maps to kick_message
+                config_data.get('max_members', 100),
+                config_data.get('undesignated_slot_response', ''),
+                config_data.get('leaderboard_time', None)
+            )
+    else:
+        # Update existing config with group_id
+        query = """
+            INSERT INTO groups_config (group_id, license_key, admin_user_id, welcome_message, kick_message, max_members, undesignated_slot_response, leaderboard_time)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                license_key = VALUES(license_key),
+                welcome_message = VALUES(welcome_message),
+                kick_message = VALUES(kick_message),
+                max_members = VALUES(max_members),
+                undesignated_slot_response = VALUES(undesignated_slot_response),
+                leaderboard_time = VALUES(leaderboard_time)
+        """
+        # For now, license_key can be NULL until it's generated later
+        license_key = config_data.get('license_key', None)
+
+        params = (
+            group_id,
+            license_key,
+            admin_user_id,
+            config_data.get('welcome_message', ''),
+            config_data.get('kick_response', ''),  # kick_response maps to kick_message
+            config_data.get('max_members', 100),
+            config_data.get('undesignated_slot_response', ''),
+            config_data.get('leaderboard_time', None)
+        )
     cursor.execute(query, params)
 
 
@@ -864,10 +1066,13 @@ def save_or_update_event(cursor, group_id, config_data):
         return cursor.lastrowid
 
 
-def save_or_update_slots(cursor, group_id, event_id, slots_data):
+def save_or_update_slots(cursor, group_id, admin_user_id, event_id, slots_data):
     """Save or update slot configurations"""
-    # First, get existing slots for this group
-    cursor.execute("SELECT slot_id, slot_name FROM group_slots WHERE group_id = %s", (group_id,))
+    # First, get existing slots for this group or admin
+    if group_id is not None:
+        cursor.execute("SELECT slot_id, slot_name FROM group_slots WHERE group_id = %s", (group_id,))
+    else:
+        cursor.execute("SELECT slot_id, slot_name FROM group_slots WHERE group_id IS NULL AND admin_user_id = %s", (admin_user_id,))
     existing_slots = {row[1]: row[0] for row in cursor.fetchall()}  # slot_name -> slot_id
 
     # Track which slots we've processed
@@ -882,6 +1087,7 @@ def save_or_update_slots(cursor, group_id, event_id, slots_data):
 
         slot_config = {
             'group_id': group_id,
+            'admin_user_id': admin_user_id,
             'event_id': event_id,
             'slot_name': slot_name,
             'start_time': slot_data.get('startTime', ''),
@@ -891,7 +1097,10 @@ def save_or_update_slots(cursor, group_id, event_id, slots_data):
             'image_file_path': slot_data.get('image', ''),
             'slot_points': slot_data.get('points', 0),
             'is_mandatory': slot_data.get('compulsory', False),
-            'slot_type': 'button' if slot_data.get('type') == 'button' else 'default'
+            'slot_type': 'button' if slot_data.get('type') == 'button' else 'default',
+            'button_count': slot_data.get('buttonCount', 0),
+            'button_names': json.dumps(slot_data.get('buttonNames', [])),
+            'button_values': json.dumps(slot_data.get('buttonValues', []))
         }
 
         if slot_name in existing_slots:
@@ -911,15 +1120,17 @@ def create_slot(cursor, slot_config):
     """Create a new slot"""
     query = """
         INSERT INTO group_slots (
-            group_id, event_id, slot_name, start_time, end_time, initial_message,
-            response_positive, response_clarify, slot_points, is_mandatory, slot_type
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            group_id, admin_user_id, event_id, slot_name, start_time, end_time, initial_message,
+            response_positive, response_clarify, image_file_path, slot_points, is_mandatory, slot_type,
+            button_count, button_names, button_values
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
     params = (
-        slot_config['group_id'], slot_config['event_id'], slot_config['slot_name'],
+        slot_config['group_id'], slot_config['admin_user_id'], slot_config['event_id'], slot_config['slot_name'],
         slot_config['start_time'], slot_config['end_time'], slot_config['initial_message'],
         slot_config['response_positive'], '',  # response_clarify is empty for now
-        slot_config['slot_points'], slot_config['is_mandatory'], slot_config['slot_type']
+        slot_config['image_file_path'], slot_config['slot_points'], slot_config['is_mandatory'], 
+        slot_config['slot_type'], slot_config['button_count'], slot_config['button_names'], slot_config['button_values']
     )
     cursor.execute(query, params)
 
@@ -930,14 +1141,16 @@ def update_slot(cursor, slot_id, slot_config):
         UPDATE group_slots SET
             event_id = %s, slot_name = %s, start_time = %s, end_time = %s,
             initial_message = %s, response_positive = %s, response_clarify = %s,
-            image_file_path = %s, slot_points = %s, is_mandatory = %s, slot_type = %s
+            image_file_path = %s, slot_points = %s, is_mandatory = %s, slot_type = %s,
+            button_count = %s, button_names = %s, button_values = %s
         WHERE slot_id = %s
     """
     params = (
         slot_config['event_id'], slot_config['slot_name'], slot_config['start_time'],
         slot_config['end_time'], slot_config['initial_message'], slot_config['response_positive'],
         '', slot_config['image_file_path'], slot_config['slot_points'], slot_config['is_mandatory'],  # response_clarify empty
-        slot_config['slot_type'], slot_id
+        slot_config['slot_type'], slot_config['button_count'], slot_config['button_names'], 
+        slot_config['button_values'], slot_id
     )
     cursor.execute(query, params)
 

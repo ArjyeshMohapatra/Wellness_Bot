@@ -36,7 +36,8 @@ const Dashboard: React.FC = () => {
         setSelectedBilling,
         setShowSubscriptionPanel,
         setPaymentCompleted,
-        setHasActiveSubscription
+        setHasActiveSubscription,
+        getCurrentMaxMembers
     } = useSubscription();
     const {
         paymentLoading,
@@ -187,10 +188,6 @@ const Dashboard: React.FC = () => {
                 return;
             }
 
-            // TODO: Make group ID dynamic - should come from user's group selection
-            // For now, using a default group ID
-            const groupId = -1002848263384;
-
             // Prepare configuration data
             const configData = {
                 event_type: eventType,
@@ -202,7 +199,7 @@ const Dashboard: React.FC = () => {
                 kick_response: kickResponse,
                 undesignated_slot_response: undesignatedSlotResponse,
                 leaderboard_time: leaderboardTime,
-                max_members: 100,
+                max_members: getCurrentMaxMembers(),
                 slots: slots.filter(slot => slot.name.trim() !== '').map(slot => ({
                     name: slot.name,
                     compulsory: slot.compulsory,
@@ -230,7 +227,6 @@ const Dashboard: React.FC = () => {
                 },
                 body: JSON.stringify({
                     admin_user_id: parseInt(adminUserId),
-                    group_id: groupId,
                     config_data: configData
                 })
             });
