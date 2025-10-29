@@ -6,6 +6,8 @@ const Login = lazy(() => import('./components/Login'));
 const ForgotPassword = lazy(() => import('./components/ForgotPassword'));
 const DeveloperView = lazy(() => import('./components/DeveloperView'));
 const Dashboard = lazy(() => import('./components/Dashboard'));
+const DashboardSubscription = lazy(() => import('./pages/DashboardSubscription'));
+const DashboardGenerateId = lazy(() => import('./pages/DashboardGenerateId'));
 
 function App() {
   return (
@@ -20,6 +22,8 @@ function App() {
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/developer" element={<DeveloperView />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/dashboard/subscription" element={<DashboardSubscription />} />
+        <Route path="/dashboard/generateid" element={<DashboardGenerateId />} />
         {/* Add more routes later */}
       </Routes>
     </Suspense>

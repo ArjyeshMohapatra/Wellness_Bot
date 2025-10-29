@@ -1,8 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import Subscription from './dashboard/Subscription';
+import { useNavigate } from 'react-router-dom';
 import PaymentPopup from './dashboard/PaymentPopup';
 import BotSettings from './dashboard/BotSettings';
-import UserIDGenerator from './UserIDGenerator';
 import { useAuth } from '../hooks/useAuth';
 import { useSubscription } from '../hooks/useSubscription';
 import { usePayment } from '../hooks/usePayment';
@@ -35,7 +34,7 @@ import {
 const Dashboard: React.FC = () => {
     const { logout } = useAuth();
     const [loadedSlots, setLoadedSlots] = useState<Slot[]>([]);
-    const [botUsername, setBotUsername] = useState('WellnessBot');
+    const [botUsername, setBotUsername] = useState('BeHumanAgainBot');
     const [hasAdminPermissions, setHasAdminPermissions] = useState(false);
     const [licenseKey, setLicenseKey] = useState<string | null>(null);
     const [showConfigurationDialog, setShowConfigurationDialog] = useState(false);
@@ -43,18 +42,15 @@ const Dashboard: React.FC = () => {
         botUsername: string;
         licenseKey: string | null;
     } | null>(null);
-    const [currentView, setCurrentView] = useState<'dashboard' | 'user-ids'>('dashboard');
+    const navigate = useNavigate();
+
     const {
         selectedPlan,
         selectedBilling,
         paymentCompleted,
         hasActiveSubscription,
-        showSubscriptionPanel,
         subscriptionLoading,
         plans,
-        handlePlanSelect,
-        setSelectedBilling,
-        setShowSubscriptionPanel,
         setPaymentCompleted,
         setHasActiveSubscription,
         getCurrentMaxMembers
@@ -114,7 +110,7 @@ const Dashboard: React.FC = () => {
             const savedDashboardState = localStorage.getItem('dashboardState');
             if (savedDashboardState) {
                 const state = JSON.parse(savedDashboardState);
-                setBotUsername(state.botUsername || 'WellnessBot');
+                setBotUsername(state.botUsername || 'BeHumanAgainBot');
                 setHasAdminPermissions(state.hasAdminPermissions || false);
                 setLicenseKey(state.licenseKey || null);
                 setLoadedSlots(state.loadedSlots || []);
@@ -133,7 +129,7 @@ const Dashboard: React.FC = () => {
             const dashboardResult = await dashboardResponse.json();
             if (dashboardResult.success && dashboardResult.settings) {
                 const dbSettings = dashboardResult.settings;
-                setBotUsername(dbSettings.bot_username || 'WellnessBot');
+                setBotUsername(dbSettings.bot_username || 'BeHumanAgainBot');
                 setHasAdminPermissions(dbSettings.has_admin_permissions || false);
                 setLicenseKey(dbSettings.license_key || null);
                 setLoadedSlots(dbSettings.loaded_slots || []);
@@ -428,21 +424,21 @@ const Dashboard: React.FC = () => {
                                     variant="outlined"
                                     color="primary"
                                     size="small"
-                                    onClick={() => setShowSubscriptionPanel(!showSubscriptionPanel)}
+                                    onClick={() => navigate('/dashboard/subscription')}
                                     disabled={subscriptionLoading}
                                     startIcon={subscriptionLoading ? <CircularProgress size={16} /> : <CreditCardIcon />}
                                     sx={{ mr: 1, whiteSpace: 'nowrap' }}
                                 >
-                                    {subscriptionLoading ? 'Loading...' : (showSubscriptionPanel ? 'Hide' : 'Manage')} Subscription
+                                    {subscriptionLoading ? 'Loading...' : 'Manage Subscription'}
                                 </Button>
                                 <Button
                                     variant="outlined"
                                     color="secondary"
                                     size="small"
-                                    onClick={() => setCurrentView(currentView === 'dashboard' ? 'user-ids' : 'dashboard')}
+                                    onClick={() => navigate('/dashboard/generateid')}
                                     sx={{ mr: 1, whiteSpace: 'nowrap' }}
                                 >
-                                    {currentView === 'dashboard' ? 'Generate User IDs' : 'Hide User IDs'}
+                                    Generate User IDs
                                 </Button>
                             </>
                         )}
@@ -464,19 +460,19 @@ const Dashboard: React.FC = () => {
                                 <IconButton
                                     color="primary"
                                     size="small"
-                                    onClick={() => setShowSubscriptionPanel(!showSubscriptionPanel)}
+                                    onClick={() => navigate('/dashboard/subscription')}
                                     disabled={subscriptionLoading}
                                     sx={{ p: 1 }}
-                                    title={subscriptionLoading ? 'Loading...' : (showSubscriptionPanel ? 'Hide Subscription' : 'Manage Subscription')}
+                                    title={subscriptionLoading ? 'Loading...' : 'Manage Subscription'}
                                 >
                                     {subscriptionLoading ? <CircularProgress size={20} /> : <CreditCardIcon />}
                                 </IconButton>
                                 <IconButton
                                     color="secondary"
                                     size="small"
-                                    onClick={() => setCurrentView(currentView === 'dashboard' ? 'user-ids' : 'dashboard')}
+                                    onClick={() => navigate('/dashboard/generateid')}
                                     sx={{ p: 1 }}
-                                    title={currentView === 'dashboard' ? 'Generate User IDs' : 'Hide User IDs'}
+                                    title={'Generate User IDs'}
                                 >
                                     <PersonAddIcon />
                                 </IconButton>
@@ -532,7 +528,7 @@ const Dashboard: React.FC = () => {
             )}
 
             {/* Bot Information Display */}
-            {hasActiveSubscription && !showSubscriptionPanel && licenseKey && currentView === 'dashboard' && (
+            {hasActiveSubscription && licenseKey && (
                 <Box sx={{ mt: 2, mb: 2 }}>
                     <Box sx={{
                         bgcolor: 'info.light',
@@ -597,64 +593,48 @@ const Dashboard: React.FC = () => {
             )}
 
             {/* Main Content */}
-            {currentView === 'dashboard' && (
-                <>
-                    {(!hasActiveSubscription || showSubscriptionPanel) && (
-                        <Subscription
-                            plans={plans}
-                            selectedPlan={selectedPlan}
-                            selectedBilling={selectedBilling}
-                            hasActiveSubscription={hasActiveSubscription}
-                            showSubscriptionPanel={showSubscriptionPanel}
-                            onPlanSelect={handlePlanSelect}
-                            onBillingSelect={setSelectedBilling}
-                            onProceedToPayment={() => setShowPaymentPopup(true)}
-                        />
-                    )}
+            <>
+                {/* Bot settings remain on dashboard when subscription is not being managed */}
+                {hasActiveSubscription && (
+                    <BotSettings
+                        eventType={eventType}
+                        eventName={eventName}
+                        eventDays={eventDays}
+                        passPoints={passPoints}
+                        slotsPerDay={slotsPerDay}
+                        welcomeMessage={welcomeMessage}
+                        kickResponse={kickResponse}
+                        undesignatedSlotResponse={undesignatedSlotResponse}
+                        leaderboardTime={leaderboardTime}
+                        bannedWords={bannedWords}
+                        slots={slots}
+                        slotErrors={slotErrors}
+                        currentSlotIndex={currentSlotIndex}
+                        currentButtonIndex={currentButtonIndex}
+                        slotButtonIndices={slotButtonIndices}
+                        onEventTypeChange={setEventType}
+                        onEventNameChange={setEventName}
+                        onEventDaysChange={setEventDays}
+                        onPassPointsChange={setPassPoints}
+                        onSlotsPerDayChange={setSlotsPerDay}
+                        onWelcomeMessageChange={setWelcomeMessage}
+                        onKickResponseChange={setKickResponse}
+                        onUndesignatedSlotResponseChange={setUndesignatedSlotResponse}
+                        onLeaderboardTimeChange={setLeaderboardTime}
+                        onBannedWordsChange={setBannedWords}
+                        onSlotChange={handleSlotChange}
+                        onCurrentSlotIndexChange={setCurrentSlotIndex}
+                        onCurrentButtonIndexChange={setCurrentButtonIndex}
+                        onSlotTypeChange={handleSlotTypeChange}
+                        onSlotButtonCountChange={handleSlotButtonCountChange}
+                        onSlotButtonIndexChange={handleSlotButtonIndexChange}
+                        onSaveConfiguration={handleSaveConfiguration}
+                        isConfigurationValid={isConfigurationValid()}
+                    />
+                )}
+            </>
 
-                    {hasActiveSubscription && !showSubscriptionPanel && (
-                        <BotSettings
-                            eventType={eventType}
-                            eventName={eventName}
-                            eventDays={eventDays}
-                            passPoints={passPoints}
-                            slotsPerDay={slotsPerDay}
-                            welcomeMessage={welcomeMessage}
-                            kickResponse={kickResponse}
-                            undesignatedSlotResponse={undesignatedSlotResponse}
-                            leaderboardTime={leaderboardTime}
-                            bannedWords={bannedWords}
-                            slots={slots}
-                            slotErrors={slotErrors}
-                            currentSlotIndex={currentSlotIndex}
-                            currentButtonIndex={currentButtonIndex}
-                            slotButtonIndices={slotButtonIndices}
-                            onEventTypeChange={setEventType}
-                            onEventNameChange={setEventName}
-                            onEventDaysChange={setEventDays}
-                            onPassPointsChange={setPassPoints}
-                            onSlotsPerDayChange={setSlotsPerDay}
-                            onWelcomeMessageChange={setWelcomeMessage}
-                            onKickResponseChange={setKickResponse}
-                            onUndesignatedSlotResponseChange={setUndesignatedSlotResponse}
-                            onLeaderboardTimeChange={setLeaderboardTime}
-                            onBannedWordsChange={setBannedWords}
-                            onSlotChange={handleSlotChange}
-                            onCurrentSlotIndexChange={setCurrentSlotIndex}
-                            onCurrentButtonIndexChange={setCurrentButtonIndex}
-                            onSlotTypeChange={handleSlotTypeChange}
-                            onSlotButtonCountChange={handleSlotButtonCountChange}
-                            onSlotButtonIndexChange={handleSlotButtonIndexChange}
-                            onSaveConfiguration={handleSaveConfiguration}
-                            isConfigurationValid={isConfigurationValid()}
-                        />
-                    )}
-                </>
-            )}
 
-            {currentView === 'user-ids' && (
-                <UserIDGenerator />
-            )}
 
             {/* Payment Confirmation Popup */}
             <PaymentPopup

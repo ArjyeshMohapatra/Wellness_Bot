@@ -398,17 +398,17 @@ def api_generate_unique_user_ids():
         traceback.print_exc()
         return jsonify({'success': False, 'message': f'Server error: {str(e)}'}), 500
 
-@app.route('/api/admin/get-group-id', methods=['GET'])
-def api_get_group_id():
-    """Get group ID for an admin"""
+@app.route('/api/admin/get-available-user-ids', methods=['GET'])
+def api_get_available_user_ids():
+    """Get available (unused) user IDs for a group"""
     try:
         admin_user_id = request.args.get('admin_user_id')
 
         if not admin_user_id:
             return jsonify({'success': False, 'message': 'Admin user ID required'}), 400
 
-        # Find groups that have licenses assigned to this admin
-        result = execute_query(
+        # Get group ID for this admin
+        group_result = execute_query(
             """
             SELECT DISTINCT gc.group_id
             FROM groups_config gc
@@ -420,13 +420,69 @@ def api_get_group_id():
             fetch=True
         )
 
-        if result:
-            return jsonify({'success': True, 'group_id': result[0]['group_id']}), 200
-        else:
+        if not group_result:
             return jsonify({'success': False, 'message': 'No group found for this admin'}), 404
 
+        group_id = group_result[0]['group_id']
+
+        # Get available user IDs
+        from services.database_service import get_available_unique_user_ids
+        available_ids = get_available_unique_user_ids(group_id)
+
+        return jsonify({
+            'success': True,
+            'user_ids': available_ids,
+            'count': len(available_ids),
+            'message': f'Found {len(available_ids)} available user IDs'
+        }), 200
+
     except Exception as e:
-        print(f"API Error in get group ID: {e}")
+        print(f"API Error in get available user IDs: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Server error: {str(e)}'}), 500
+
+
+@app.route('/api/admin/get-available-user-ids', methods=['GET'])
+def api_get_available_user_ids():
+    """Get available (unused) user IDs for a group"""
+    try:
+        admin_user_id = request.args.get('admin_user_id')
+
+        if not admin_user_id:
+            return jsonify({'success': False, 'message': 'Admin user ID required'}), 400
+
+        # Get group ID for this admin
+        group_result = execute_query(
+            """
+            SELECT DISTINCT gc.group_id
+            FROM groups_config gc
+            JOIN licenses l ON gc.license_key = l.license_key
+            WHERE l.assigned_admin_id = %s AND l.is_active = TRUE
+            LIMIT 1
+            """,
+            (admin_user_id,),
+            fetch=True
+        )
+
+        if not group_result:
+            return jsonify({'success': False, 'message': 'No group found for this admin'}), 404
+
+        group_id = group_result[0]['group_id']
+
+        # Get available user IDs
+        from services.database_service import get_available_unique_user_ids
+        available_ids = get_available_unique_user_ids(group_id)
+
+        return jsonify({
+            'success': True,
+            'user_ids': available_ids,
+            'count': len(available_ids),
+            'message': f'Found {len(available_ids)} available user IDs'
+        }), 200
+
+    except Exception as e:
+        print(f"API Error in get available user IDs: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'message': f'Server error: {str(e)}'}), 500

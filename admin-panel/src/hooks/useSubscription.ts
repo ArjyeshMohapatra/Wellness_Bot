@@ -18,8 +18,24 @@ interface Plan {
 }
 
 export const useSubscription = () => {
-    const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
-    const [selectedBilling, setSelectedBilling] = useState<string | null>(null);
+    const [selectedPlan, setSelectedPlan] = useState<string | null>(() => {
+        // Load from localStorage on initialization
+        try {
+            const saved = localStorage.getItem('selectedPlan');
+            return saved ? JSON.parse(saved) : null;
+        } catch {
+            return null;
+        }
+    });
+    const [selectedBilling, setSelectedBilling] = useState<string | null>(() => {
+        // Load from localStorage on initialization
+        try {
+            const saved = localStorage.getItem('selectedBilling');
+            return saved ? JSON.parse(saved) : null;
+        } catch {
+            return null;
+        }
+    });
     const [paymentCompleted, setPaymentCompleted] = useState(false);
     const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
     const [showSubscriptionPanel, setShowSubscriptionPanel] = useState(false);
@@ -61,6 +77,32 @@ export const useSubscription = () => {
         setSelectedPlan(plan);
     };
 
+    // Save selectedPlan to localStorage whenever it changes
+    useEffect(() => {
+        try {
+            if (selectedPlan) {
+                localStorage.setItem('selectedPlan', JSON.stringify(selectedPlan));
+            } else {
+                localStorage.removeItem('selectedPlan');
+            }
+        } catch (error) {
+            console.warn('Error saving selectedPlan to localStorage:', error);
+        }
+    }, [selectedPlan]);
+
+    // Save selectedBilling to localStorage whenever it changes
+    useEffect(() => {
+        try {
+            if (selectedBilling) {
+                localStorage.setItem('selectedBilling', JSON.stringify(selectedBilling));
+            } else {
+                localStorage.removeItem('selectedBilling');
+            }
+        } catch (error) {
+            console.warn('Error saving selectedBilling to localStorage:', error);
+        }
+    }, [selectedBilling]);
+
     const getValidity = (months: number) => {
         const start = new Date();
         const end = new Date();
@@ -99,16 +141,18 @@ export const useSubscription = () => {
                         console.log('API Response:', data);
                         setHasActiveSubscription(false);
                         setPaymentCompleted(false);
-                        setSelectedPlan(null);
-                        setSelectedBilling(null);
+                        // Don't reset selectedPlan/selectedBilling here - preserve user's selections
+                        // setSelectedPlan(null);
+                        // setSelectedBilling(null);
                     }
                 } catch (error) {
                     console.error('Error checking subscription status:', error);
-                    // On error, assume no subscription
+                    // On error, assume no subscription but preserve user selections
                     setHasActiveSubscription(false);
                     setPaymentCompleted(false);
-                    setSelectedPlan(null);
-                    setSelectedBilling(null);
+                    // Don't reset selectedPlan/selectedBilling on error - preserve user's selections
+                    // setSelectedPlan(null);
+                    // setSelectedBilling(null);
                 }
             } else {
                 console.log('No user email found in localStorage');

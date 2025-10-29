@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Box,
     Typography,
@@ -15,6 +15,34 @@ const UserIDGenerator: React.FC = () => {
     const [generatingUserIds, setGeneratingUserIds] = useState(false);
     const [generatedUserIds, setGeneratedUserIds] = useState<string[]>([]);
     const [showUserIdSection, setShowUserIdSection] = useState(false);
+    const [loadingExisting, setLoadingExisting] = useState(true);
+
+    // Load existing user IDs on component mount
+    useEffect(() => {
+        loadExistingUserIds();
+    }, []);
+
+    const loadExistingUserIds = async () => {
+        try {
+            const adminUserId = localStorage.getItem('userId');
+            if (!adminUserId) {
+                setLoadingExisting(false);
+                return;
+            }
+
+            const response = await fetch(`http://localhost:8001/api/admin/get-available-user-ids?admin_user_id=${adminUserId}`);
+            const result = await response.json();
+
+            if (result.success && result.user_ids && result.user_ids.length > 0) {
+                setGeneratedUserIds(result.user_ids);
+                setShowUserIdSection(true);
+            }
+        } catch (error) {
+            console.error('Error loading existing user IDs:', error);
+        } finally {
+            setLoadingExisting(false);
+        }
+    };
 
     // Copy to clipboard function
     const copyToClipboard = async (text: string, label: string) => {
@@ -70,9 +98,11 @@ const UserIDGenerator: React.FC = () => {
             const result = await response.json();
 
             if (result.success) {
-                setGeneratedUserIds(result.user_ids);
+                // Append new IDs to existing ones (avoid duplicates)
+                const newIds = result.user_ids.filter((id: string) => !generatedUserIds.includes(id));
+                setGeneratedUserIds(prev => [...prev, ...newIds]);
                 setShowUserIdSection(true);
-                alert(`Successfully generated ${result.user_ids.length} unique user IDs!`);
+                alert(`Successfully generated ${newIds.length} additional unique user IDs!`);
             } else {
                 alert(`Failed to generate user IDs: ${result.message}`);
             }
@@ -96,7 +126,7 @@ const UserIDGenerator: React.FC = () => {
                     </Typography>
 
                     <Typography variant="body1" sx={{ mb: 4, textAlign: 'center', color: 'text.secondary' }}>
-                        Generate unique user IDs for your group members. Each member will need one of these IDs to join your group after completing KYC verification.
+                        View and generate unique user IDs for your group members. Each member will need one of these IDs to join your group after completing KYC verification.
                     </Typography>
 
                     {/* Generate Button */}
@@ -106,16 +136,21 @@ const UserIDGenerator: React.FC = () => {
                             color="primary"
                             size="large"
                             onClick={handleGenerateUserIds}
-                            disabled={generatingUserIds}
+                            disabled={generatingUserIds || loadingExisting}
                             sx={{ minWidth: 250, py: 1.5, fontSize: '1.1rem' }}
                         >
-                            {generatingUserIds ? (
+                            {loadingExisting ? (
+                                <>
+                                    <CircularProgress size={20} sx={{ mr: 1 }} />
+                                    Loading existing IDs...
+                                </>
+                            ) : generatingUserIds ? (
                                 <>
                                     <CircularProgress size={20} sx={{ mr: 1 }} />
                                     Generating...
                                 </>
                             ) : (
-                                '🎯 Generate'
+                                '🎯 Generate More IDs'
                             )}
                         </Button>
                     </Box>
@@ -130,10 +165,10 @@ const UserIDGenerator: React.FC = () => {
                             borderColor: 'primary.main'
                         }}>
                             <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: 'primary.contrastText' }}>
-                                🎉 Unique User IDs Generated!
+                                🎉 Available User IDs ({generatedUserIds.length})
                             </Typography>
                             <Typography variant="body1" sx={{ mb: 2, color: 'primary.contrastText' }}>
-                                Here are your generated unique user IDs. Share these with your potential group members along with the bot link:
+                                Here are your available unique user IDs. Share these with your potential group members along with the bot link:
                             </Typography>
 
                             <Box sx={{
