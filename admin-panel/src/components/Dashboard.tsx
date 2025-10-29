@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Subscription from './dashboard/Subscription';
 import PaymentPopup from './dashboard/PaymentPopup';
 import BotSettings from './dashboard/BotSettings';
+import UserIDGenerator from './UserIDGenerator';
 import { useAuth } from '../hooks/useAuth';
 import { useSubscription } from '../hooks/useSubscription';
 import { usePayment } from '../hooks/usePayment';
@@ -14,25 +15,34 @@ import {
     Box,
     IconButton,
     CircularProgress,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    Accordion,
+    AccordionSummary,
+    AccordionDetails,
 } from '@mui/material';
 import {
     Logout as LogoutIcon,
     CreditCard as CreditCardIcon,
     LocalHospital as HospitalIcon,
     ContentCopy as ContentCopyIcon,
+    ExpandMore as ExpandMoreIcon,
 } from '@mui/icons-material';
 
 const Dashboard: React.FC = () => {
     const { logout } = useAuth();
     const [loadedSlots, setLoadedSlots] = useState<Slot[]>([]);
-    const [configurationSaved, setConfigurationSaved] = useState(false);
     const [botUsername, setBotUsername] = useState('WellnessBot');
     const [hasAdminPermissions, setHasAdminPermissions] = useState(false);
     const [licenseKey, setLicenseKey] = useState<string | null>(null);
-    const [generatingLicense, setGeneratingLicense] = useState(false);
-    const [generatingUserIds, setGeneratingUserIds] = useState(false);
-    const [generatedUserIds, setGeneratedUserIds] = useState<string[]>([]);
-    const [showUserIdSection, setShowUserIdSection] = useState(false);
+    const [showConfigurationDialog, setShowConfigurationDialog] = useState(false);
+    const [configurationDialogData, setConfigurationDialogData] = useState<{
+        botUsername: string;
+        licenseKey: string | null;
+    } | null>(null);
+    const [currentView, setCurrentView] = useState<'dashboard' | 'user-ids'>('dashboard');
     const {
         selectedPlan,
         selectedBilling,
@@ -279,9 +289,13 @@ const Dashboard: React.FC = () => {
                     alert('Configuration saved to bot, but dashboard persistence failed. Settings may not be restored on next login.');
                 }
 
-                // Show setup instructions instead of dialog
-                setConfigurationSaved(true);
-                // Store bot username for the instructions
+                // Show configuration dialog instead of setting configurationSaved
+                setConfigurationDialogData({
+                    botUsername: result.bot_username || botUsername,
+                    licenseKey: licenseKey
+                });
+                setShowConfigurationDialog(true);
+                // Store bot username for future use
                 if (result.bot_username) {
                     setBotUsername(result.bot_username);
                 }
@@ -348,104 +362,6 @@ const Dashboard: React.FC = () => {
         }
     };
 
-    // Publish configuration handler
-    const handlePublishConfiguration = async () => {
-        try {
-            setGeneratingLicense(true);
-
-            // Get current user info
-            const adminUserId = localStorage.getItem('userId');
-
-            if (!adminUserId) {
-                alert('User not logged in. Please login again.');
-                setGeneratingLicense(false);
-                return;
-            }
-
-            // Call API to generate license key
-            const response = await fetch('http://localhost:8001/api/admin/generate-license', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    admin_user_id: parseInt(adminUserId),
-                    group_id: null  // Will be assigned when bot joins group
-                })
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                setLicenseKey(result.license_key);
-                alert(`License key generated successfully: ${result.license_key}`);
-
-                // Save dashboard settings to database with the new license key
-                const dashboardSaveSuccess = await saveDashboardSettings(result.license_key);
-                if (!dashboardSaveSuccess) {
-                    alert('License generated, but dashboard persistence failed. Settings may not be restored on next login.');
-                }
-            } else {
-                alert(`Failed to generate license key: ${result.message}`);
-            }
-        } catch (error) {
-            console.error('Error generating license key:', error);
-            alert('Error generating license key. Please check your connection and try again.');
-        } finally {
-            setGeneratingLicense(false);
-        }
-    };
-
-    const handleGenerateUserIds = async () => {
-        try {
-            setGeneratingUserIds(true);
-            const adminUserId = localStorage.getItem('userId');
-            if (!adminUserId) {
-                alert('User not logged in. Please login again.');
-                return;
-            }
-
-            // First, get the group ID for this admin (we need it to generate user IDs)
-            const groupResponse = await fetch(`http://localhost:8001/api/admin/get-group-id?admin_user_id=${adminUserId}`);
-            const groupResult = await groupResponse.json();
-
-            if (!groupResult.success || !groupResult.group_id) {
-                alert('No group found for this admin. Please make sure the bot has been added to your group and license key has been activated.');
-                return;
-            }
-
-            const groupId = groupResult.group_id;
-
-            // Generate unique user IDs
-            const response = await fetch('http://localhost:8001/api/admin/generate-unique-user-ids', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    admin_user_id: parseInt(adminUserId),
-                    group_id: groupId,
-                    count: getCurrentMaxMembers()
-                })
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                setGeneratedUserIds(result.user_ids);
-                setShowUserIdSection(true);
-                alert(`Successfully generated ${result.user_ids.length} unique user IDs!`);
-            } else {
-                alert(`Failed to generate user IDs: ${result.message}`);
-            }
-        } catch (error) {
-            console.error('Error generating user IDs:', error);
-            alert('Error generating user IDs. Please check your connection and try again.');
-        } finally {
-            setGeneratingUserIds(false);
-        }
-    };
-
     return (
         <Box sx={{ minHeight: '100vh', background: 'linear-gradient(135deg, #f8fafc 0%, #e0f2fe 25%, #e8eaf6 100%)' }}>
             {/* Header */}
@@ -476,17 +392,28 @@ const Dashboard: React.FC = () => {
                             Welcome, Admin
                         </Typography>
                         {hasActiveSubscription && (
-                            <Button
-                                variant="outlined"
-                                color="primary"
-                                size="small"
-                                onClick={() => setShowSubscriptionPanel(!showSubscriptionPanel)}
-                                disabled={subscriptionLoading}
-                                startIcon={subscriptionLoading ? <CircularProgress size={16} /> : <CreditCardIcon />}
-                                sx={{ mr: 1, whiteSpace: 'nowrap' }}
-                            >
-                                {subscriptionLoading ? 'Loading...' : (showSubscriptionPanel ? 'Hide' : 'Manage')} Subscription
-                            </Button>
+                            <>
+                                <Button
+                                    variant="outlined"
+                                    color="primary"
+                                    size="small"
+                                    onClick={() => setShowSubscriptionPanel(!showSubscriptionPanel)}
+                                    disabled={subscriptionLoading}
+                                    startIcon={subscriptionLoading ? <CircularProgress size={16} /> : <CreditCardIcon />}
+                                    sx={{ mr: 1, whiteSpace: 'nowrap' }}
+                                >
+                                    {subscriptionLoading ? 'Loading...' : (showSubscriptionPanel ? 'Hide' : 'Manage')} Subscription
+                                </Button>
+                                <Button
+                                    variant="outlined"
+                                    color="secondary"
+                                    size="small"
+                                    onClick={() => setCurrentView(currentView === 'dashboard' ? 'user-ids' : 'dashboard')}
+                                    sx={{ mr: 1, whiteSpace: 'nowrap' }}
+                                >
+                                    {currentView === 'dashboard' ? 'Generate User IDs' : 'Hide User IDs'}
+                                </Button>
+                            </>
                         )}
                         <Button
                             variant="outlined"
@@ -561,7 +488,7 @@ const Dashboard: React.FC = () => {
             )}
 
             {/* Bot Information Display */}
-            {hasActiveSubscription && !showSubscriptionPanel && licenseKey && (
+            {hasActiveSubscription && !showSubscriptionPanel && licenseKey && currentView === 'dashboard' && (
                 <Box sx={{ mt: 2, mb: 2 }}>
                     <Box sx={{
                         bgcolor: 'info.light',
@@ -626,55 +553,63 @@ const Dashboard: React.FC = () => {
             )}
 
             {/* Main Content */}
-            {(!hasActiveSubscription || showSubscriptionPanel) && (
-                <Subscription
-                    plans={plans}
-                    selectedPlan={selectedPlan}
-                    selectedBilling={selectedBilling}
-                    hasActiveSubscription={hasActiveSubscription}
-                    showSubscriptionPanel={showSubscriptionPanel}
-                    onPlanSelect={handlePlanSelect}
-                    onBillingSelect={setSelectedBilling}
-                    onProceedToPayment={() => setShowPaymentPopup(true)}
-                />
+            {currentView === 'dashboard' && (
+                <>
+                    {(!hasActiveSubscription || showSubscriptionPanel) && (
+                        <Subscription
+                            plans={plans}
+                            selectedPlan={selectedPlan}
+                            selectedBilling={selectedBilling}
+                            hasActiveSubscription={hasActiveSubscription}
+                            showSubscriptionPanel={showSubscriptionPanel}
+                            onPlanSelect={handlePlanSelect}
+                            onBillingSelect={setSelectedBilling}
+                            onProceedToPayment={() => setShowPaymentPopup(true)}
+                        />
+                    )}
+
+                    {hasActiveSubscription && !showSubscriptionPanel && (
+                        <BotSettings
+                            eventType={eventType}
+                            eventName={eventName}
+                            eventDays={eventDays}
+                            passPoints={passPoints}
+                            slotsPerDay={slotsPerDay}
+                            welcomeMessage={welcomeMessage}
+                            kickResponse={kickResponse}
+                            undesignatedSlotResponse={undesignatedSlotResponse}
+                            leaderboardTime={leaderboardTime}
+                            bannedWords={bannedWords}
+                            slots={slots}
+                            slotErrors={slotErrors}
+                            currentSlotIndex={currentSlotIndex}
+                            currentButtonIndex={currentButtonIndex}
+                            slotButtonIndices={slotButtonIndices}
+                            onEventTypeChange={setEventType}
+                            onEventNameChange={setEventName}
+                            onEventDaysChange={setEventDays}
+                            onPassPointsChange={setPassPoints}
+                            onSlotsPerDayChange={setSlotsPerDay}
+                            onWelcomeMessageChange={setWelcomeMessage}
+                            onKickResponseChange={setKickResponse}
+                            onUndesignatedSlotResponseChange={setUndesignatedSlotResponse}
+                            onLeaderboardTimeChange={setLeaderboardTime}
+                            onBannedWordsChange={setBannedWords}
+                            onSlotChange={handleSlotChange}
+                            onCurrentSlotIndexChange={setCurrentSlotIndex}
+                            onCurrentButtonIndexChange={setCurrentButtonIndex}
+                            onSlotTypeChange={handleSlotTypeChange}
+                            onSlotButtonCountChange={handleSlotButtonCountChange}
+                            onSlotButtonIndexChange={handleSlotButtonIndexChange}
+                            onSaveConfiguration={handleSaveConfiguration}
+                            isConfigurationValid={isConfigurationValid()}
+                        />
+                    )}
+                </>
             )}
 
-            {hasActiveSubscription && !showSubscriptionPanel && (
-                <BotSettings
-                    eventType={eventType}
-                    eventName={eventName}
-                    eventDays={eventDays}
-                    passPoints={passPoints}
-                    slotsPerDay={slotsPerDay}
-                    welcomeMessage={welcomeMessage}
-                    kickResponse={kickResponse}
-                    undesignatedSlotResponse={undesignatedSlotResponse}
-                    leaderboardTime={leaderboardTime}
-                    bannedWords={bannedWords}
-                    slots={slots}
-                    slotErrors={slotErrors}
-                    currentSlotIndex={currentSlotIndex}
-                    currentButtonIndex={currentButtonIndex}
-                    slotButtonIndices={slotButtonIndices}
-                    onEventTypeChange={setEventType}
-                    onEventNameChange={setEventName}
-                    onEventDaysChange={setEventDays}
-                    onPassPointsChange={setPassPoints}
-                    onSlotsPerDayChange={setSlotsPerDay}
-                    onWelcomeMessageChange={setWelcomeMessage}
-                    onKickResponseChange={setKickResponse}
-                    onUndesignatedSlotResponseChange={setUndesignatedSlotResponse}
-                    onLeaderboardTimeChange={setLeaderboardTime}
-                    onBannedWordsChange={setBannedWords}
-                    onSlotChange={handleSlotChange}
-                    onCurrentSlotIndexChange={setCurrentSlotIndex}
-                    onCurrentButtonIndexChange={setCurrentButtonIndex}
-                    onSlotTypeChange={handleSlotTypeChange}
-                    onSlotButtonCountChange={handleSlotButtonCountChange}
-                    onSlotButtonIndexChange={handleSlotButtonIndexChange}
-                    onSaveConfiguration={handleSaveConfiguration}
-                    isConfigurationValid={isConfigurationValid()}
-                />
+            {currentView === 'user-ids' && (
+                <UserIDGenerator />
             )}
 
             {/* Payment Confirmation Popup */}
@@ -690,209 +625,113 @@ const Dashboard: React.FC = () => {
                 onPaymentClose={handlePaymentClose}
             />
 
-            {/* Bot Setup Instructions - Show after saving configuration */}
-            {configurationSaved && (
-                <Box sx={{ mt: 4, mb: 4 }}>
-                    <Box sx={{
-                        bgcolor: 'success.light',
-                        p: 3,
-                        borderRadius: 2,
-                        mb: 3,
-                        border: '2px solid',
-                        borderColor: 'success.main'
-                    }}>
-                        <Typography variant="h5" sx={{ mb: 2, fontWeight: 'bold', color: 'success.contrastText' }}>
-                            🎉 Configuration Saved Successfully!
+            {/* Configuration Success Dialog */}
+            <Dialog
+                open={showConfigurationDialog}
+                onClose={() => setShowConfigurationDialog(false)}
+                maxWidth="md"
+                fullWidth
+            >
+                <DialogTitle sx={{ textAlign: 'center', bgcolor: 'success.light', color: 'success.contrastText' }}>
+                    <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+                        🎉 Congratulations!
+                    </Typography>
+                    <Typography variant="h6">
+                        Bot's settings saved successfully
+                    </Typography>
+                </DialogTitle>
+                <DialogContent sx={{ p: 3 }}>
+                    {/* Bot Link */}
+                    <Box sx={{ mb: 3, textAlign: 'center' }}>
+                        <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
+                            🤖 Bot Link
                         </Typography>
-                        <Typography variant="body1" sx={{ color: 'success.contrastText' }}>
-                            Your bot configuration has been saved. Follow the steps below to set up your bot in your Telegram group.
-                        </Typography>
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            size="large"
+                            href={`https://t.me/${configurationDialogData?.botUsername || 'BeHumanAgainBot'}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            sx={{ minWidth: 200 }}
+                        >
+                            @{configurationDialogData?.botUsername || 'BeHumanAgainBot'}
+                        </Button>
                     </Box>
 
-                    <Box sx={{
-                        bgcolor: 'background.paper',
-                        p: 4,
-                        borderRadius: 2,
-                        border: '2px solid',
-                        borderColor: 'primary.main'
-                    }}>
-                        <Typography variant="h4" sx={{ mb: 3, color: 'primary.main', fontWeight: 'bold' }}>
-                            🚀 Bot Setup Instructions
+                    {/* Collapsible Bot Setup Instructions */}
+                    <Accordion defaultExpanded={false} sx={{ mb: 3 }}>
+                        <AccordionSummary
+                            expandIcon={<ExpandMoreIcon />}
+                            aria-controls="setup-instructions-content"
+                            id="setup-instructions-header"
+                        >
+                            <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                                📋 Bot Setup Instructions (Step-by-Step Guide)
+                            </Typography>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                            <Typography variant="body1" sx={{ mb: 2 }}>
+                                Follow these steps to set up your bot in your Telegram group:
+                            </Typography>
+                            <Box component="ol" sx={{ pl: 2 }}>
+                                <li style={{ marginBottom: '8px' }}>
+                                    <strong>Add the bot to your group:</strong> Click the bot link above and add @{configurationDialogData?.botUsername || 'BeHumanAgainBot'} to your Telegram group as an administrator.
+                                </li>
+                                <li style={{ marginBottom: '8px' }}>
+                                    <strong>Grant admin permissions:</strong> Make sure the bot has admin permissions in your group (can delete messages, ban users, etc.).
+                                </li>
+                                <li style={{ marginBottom: '8px' }}>
+                                    <strong>Activate the bot:</strong> Send your license key to the group chat. The bot will automatically detect it and activate your configuration.
+                                </li>
+                                <li style={{ marginBottom: '8px' }}>
+                                    <strong>Generate user IDs:</strong> Use the "Generate User IDs" option in the navbar to create unique IDs for your group members.
+                                </li>
+                                <li style={{ marginBottom: '8px' }}>
+                                    <strong>Share with members:</strong> Distribute the bot link and unique user IDs to your potential group members.
+                                </li>
+                                <li style={{ marginBottom: '8px' }}>
+                                    <strong>Monitor activity:</strong> The bot will now manage your wellness program according to your configured settings.
+                                </li>
+                            </Box>
+                        </AccordionDetails>
+                    </Accordion>
+
+                    {/* Admin Permission Confirmed & License Key */}
+                    <Box sx={{ textAlign: 'center' }}>
+                        <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: 'success.main' }}>
+                            ✅ Admin Permission Confirmed
+                        </Typography>
+                        <Typography variant="body1" sx={{ mb: 2 }}>
+                            Your admin permissions have been verified and your bot configuration is ready.
                         </Typography>
 
-                        <Box sx={{
-                            bgcolor: 'grey.100',
-                            p: 3,
-                            borderRadius: 2,
-                            mb: 3,
-                            border: '2px solid',
-                            borderColor: 'primary.main'
-                        }}>
-                            <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
-                                🔗 Bot Link
-                            </Typography>
-                            <Button
-                                variant="contained"
-                                color="primary"
-                                size="large"
-                                href={`https://t.me/BeHumanAgainBot`}
-                                target="_blank"
-                                sx={{ fontSize: '1.1rem', py: 1.5, px: 3 }}
-                            >
-                                Open Bot: @{"BeHumanAgainBot"}
-                            </Button>
-                        </Box>
-
-                        <Typography variant="h5" sx={{ mb: 3, fontWeight: 'bold' }}>
-                            📋 Step-by-Step Setup Guide:
-                        </Typography>
-
-                        <Box sx={{ pl: 2 }}>
-                            <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: 'primary.main' }}>
-                                1️⃣ Start the Bot
-                            </Typography>
-                            <Typography variant="body1" sx={{ mb: 3, pl: 3 }}>
-                                Click the bot link above and click "Start" to begin interacting with the bot.
-                            </Typography>
-
-                            <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: 'primary.main' }}>
-                                2️⃣ Add Bot to Your Group
-                            </Typography>
-                            <Typography variant="body1" sx={{ mb: 3, pl: 3 }}>
-                                Go to your Telegram group → Click group name → "Add Members" → Search for "@{botUsername}" → Add the bot.
-                            </Typography>
-
-                            <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: 'primary.main' }}>
-                                3️⃣ Make Bot Administrator
-                            </Typography>
-                            <Typography variant="body1" sx={{ mb: 2, pl: 3 }}>
-                                In your group: Group Settings → Administrators → Add Administrator → Select "@{botUsername}"
-                            </Typography>
-                            <Typography variant="body1" sx={{ mb: 3, pl: 3 }}>
-                                Grant these permissions:
-                            </Typography>
-                            <Box component="ul" sx={{ pl: 6, mb: 3 }}>
-                                <Typography component="li" variant="body1" sx={{ mb: 1 }}>✅ Delete messages</Typography>
-                                <Typography component="li" variant="body1" sx={{ mb: 1 }}>✅ Ban users</Typography>
-                                <Typography component="li" variant="body1" sx={{ mb: 1 }}>✅ Manage chat</Typography>
-                                <Typography component="li" variant="body1" sx={{ mb: 1 }}>✅ Post messages</Typography>
-                            </Box>
-
-                            <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: 'primary.main' }}>
-                                4️⃣ Wait for Confirmation
-                            </Typography>
-                            <Typography variant="body1" sx={{ mb: 3, pl: 3 }}>
-                                Once the bot detects its admin status, you'll see a green checkmark and a "Publish" button will appear.
-                            </Typography>
-                        </Box>
-
-                        <Box sx={{
-                            bgcolor: 'info.light',
-                            p: 3,
-                            borderRadius: 1,
-                            mt: 3,
-                            color: 'info.contrastText'
-                        }}>
-                            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                                💡 Important: Complete all steps above before proceeding. The bot needs admin permissions to function properly in your group.
-                            </Typography>
-                        </Box>
-
-                        {/* Admin Permission Status */}
-                        <Box sx={{
-                            bgcolor: hasAdminPermissions ? 'success.light' : 'warning.light',
-                            p: 3,
-                            borderRadius: 2,
-                            mt: 3,
-                            border: '2px solid',
-                            borderColor: hasAdminPermissions ? 'success.main' : 'warning.main'
-                        }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                                {hasAdminPermissions ? (
-                                    <Typography variant="h6" sx={{ color: 'success.main', fontWeight: 'bold' }}>
-                                        ✅ Admin Permissions Confirmed
-                                    </Typography>
-                                ) : (
-                                    <Typography variant="h6" sx={{ color: 'warning.main', fontWeight: 'bold' }}>
-                                        ⏳ Waiting for Admin Setup
-                                    </Typography>
-                                )}
-                            </Box>
-
-                            {!hasAdminPermissions && (
-                                <Typography variant="body1" sx={{ mb: 2 }}>
-                                    After completing the setup steps above, click the button below to confirm that the bot has been added to your group and granted admin permissions.
+                        {configurationDialogData?.licenseKey && (
+                            <Box sx={{ mt: 3 }}>
+                                <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
+                                    🔑 License Key
                                 </Typography>
-                            )}
-
-                            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                                {!hasAdminPermissions && (
-                                    <Button
-                                        variant="contained"
-                                        color="primary"
-                                        onClick={() => setHasAdminPermissions(true)}
-                                        sx={{ minWidth: 200 }}
-                                    >
-                                        Confirm Admin Setup Complete
-                                    </Button>
-                                )}
-
-                                {hasAdminPermissions && !licenseKey && (
-                                    <Button
-                                        variant="contained"
-                                        color="success"
-                                        size="large"
-                                        onClick={handlePublishConfiguration}
-                                        disabled={generatingLicense}
-                                        sx={{ minWidth: 200, py: 1.5 }}
-                                    >
-                                        {generatingLicense ? 'Generating...' : '🚀 Publish Configuration'}
-                                    </Button>
-                                )}
-                            </Box>
-                        </Box>
-
-                        {/* License Key Display */}
-                        {licenseKey && (
-                            <Box sx={{
-                                bgcolor: 'success.light',
-                                p: 3,
-                                borderRadius: 2,
-                                mt: 3,
-                                border: '2px solid',
-                                borderColor: 'success.main'
-                            }}>
-                                <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: 'success.main' }}>
-                                    🎉 License Key Generated!
-                                </Typography>
-                                <Typography variant="body1" sx={{ mb: 2 }}>
-                                    Your license key has been generated and saved. Copy this key and send it to your bot in the group:
-                                </Typography>
-
                                 <Box sx={{
-                                    bgcolor: 'grey.100',
-                                    p: 2,
-                                    borderRadius: 1,
-                                    border: '1px solid',
-                                    borderColor: 'grey.300',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     gap: 1,
-                                    mb: 2
+                                    bgcolor: 'grey.100',
+                                    p: 2,
+                                    borderRadius: 1,
+                                    border: '1px solid',
+                                    borderColor: 'grey.300'
                                 }}>
                                     <Typography variant="body1" sx={{
                                         fontFamily: 'monospace',
-                                        fontSize: '1.2rem',
-                                        fontWeight: 'bold',
-                                        flex: 1,
-                                        textAlign: 'center'
+                                        fontSize: '1.1rem',
+                                        fontWeight: 'bold'
                                     }}>
-                                        {licenseKey}
+                                        {configurationDialogData.licenseKey}
                                     </Typography>
                                     <IconButton
                                         size="small"
-                                        onClick={() => copyToClipboard(licenseKey, 'License Key')}
+                                        onClick={() => copyToClipboard(configurationDialogData.licenseKey!, 'License Key')}
                                         sx={{
                                             '&:hover': {
                                                 bgcolor: 'rgba(0, 0, 0, 0.1)'
@@ -903,123 +742,25 @@ const Dashboard: React.FC = () => {
                                         <ContentCopyIcon />
                                     </IconButton>
                                 </Box>
-
-                                <Typography variant="body2" sx={{ color: 'success.contrastText' }}>
-                                    <strong>Next step:</strong> Copy this license key and paste it in your Telegram group. The bot will automatically detect it and activate your configuration for that group.
-                                </Typography>
-
-                                {/* Unique User ID Generation Section */}
-                                <Box sx={{ mt: 3, p: 2, bgcolor: 'info.light', borderRadius: 1, border: '1px solid', borderColor: 'info.main' }}>
-                                    <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: 'info.contrastText' }}>
-                                        🔐 Generate Unique User IDs
-                                    </Typography>
-                                    <Typography variant="body2" sx={{ mb: 2, color: 'info.contrastText' }}>
-                                        Generate unique user IDs for your group members. Each member will need one of these IDs to join your group after completing KYC verification.
-                                    </Typography>
-                                    <Button
-                                        variant="contained"
-                                        color="primary"
-                                        onClick={handleGenerateUserIds}
-                                        disabled={generatingUserIds}
-                                        sx={{ minWidth: 200 }}
-                                    >
-                                        {generatingUserIds ? 'Generating...' : '🎯 Generate User IDs'}
-                                    </Button>
-                                </Box>
-                            </Box>
-                        )}
-
-                        {/* Generated User IDs Display */}
-                        {showUserIdSection && generatedUserIds.length > 0 && (
-                            <Box sx={{
-                                bgcolor: 'primary.light',
-                                p: 3,
-                                borderRadius: 2,
-                                mt: 3,
-                                border: '2px solid',
-                                borderColor: 'primary.main'
-                            }}>
-                                <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: 'primary.contrastText' }}>
-                                    🎉 Unique User IDs Generated!
-                                </Typography>
-                                <Typography variant="body1" sx={{ mb: 2, color: 'primary.contrastText' }}>
-                                    Here are your generated unique user IDs. Share these with your potential group members along with the bot link:
-                                </Typography>
-
-                                <Box sx={{
-                                    bgcolor: 'grey.100',
-                                    p: 2,
-                                    borderRadius: 1,
-                                    border: '1px solid',
-                                    borderColor: 'grey.300',
-                                    mb: 2
-                                }}>
-                                    <Typography variant="body2" sx={{ color: 'primary.contrastText', fontWeight: 'bold', mb: 2 }}>
-                                        Generated User IDs ({generatedUserIds.length}):
-                                    </Typography>
-                                    <Box sx={{
-                                        display: 'flex',
-                                        flexWrap: 'wrap',
-                                        gap: 1,
-                                        border: '2px solid',
-                                        borderColor: 'primary.main',
-                                        borderRadius: 1,
-                                        p: 2,
-                                        bgcolor: 'white',
-                                        maxHeight: '200px',
-                                        overflowY: 'auto'
-                                    }}>
-                                        {generatedUserIds.map((userId, index) => (
-                                            <Box key={index} sx={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: 0.5,
-                                                fontFamily: 'monospace',
-                                                fontSize: '0.9rem',
-                                                fontWeight: 'bold',
-                                                p: 1,
-                                                bgcolor: 'grey.50',
-                                                borderRadius: 1,
-                                                border: '1px solid',
-                                                borderColor: 'grey.200',
-                                                whiteSpace: 'nowrap'
-                                            }}>
-                                                <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                                                    {userId}
-                                                </Typography>
-                                                <IconButton
-                                                    size="small"
-                                                    onClick={() => copyToClipboard(userId, `User ID ${userId}`)}
-                                                    sx={{
-                                                        p: 0.5,
-                                                        '&:hover': {
-                                                            bgcolor: 'rgba(0, 0, 0, 0.1)'
-                                                        }
-                                                    }}
-                                                    title={`Copy ${userId}`}
-                                                >
-                                                    <ContentCopyIcon fontSize="small" />
-                                                </IconButton>
-                                            </Box>
-                                        ))}
-                                    </Box>
-                                </Box>
-
-                                <Typography variant="body2" sx={{ color: 'primary.contrastText', fontWeight: 'bold' }}>
-                                    📋 Instructions for members:
-                                </Typography>
-                                <Typography variant="body2" sx={{ color: 'primary.contrastText', mt: 1 }}>
-                                    1. Share the bot link (@{botUsername}) and one unique user ID with each potential member<br />
-                                    2. Members will DM the bot and provide their user ID<br />
-                                    3. Bot will collect their KYC information (name, DOB, phone, profile pic, age, gender)<br />
-                                    4. After verification, bot will provide the group invitation link<br />
-                                    5. Members can then join the group freely
+                                <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
+                                    Copy this license key and send it to your group chat to activate the bot.
                                 </Typography>
                             </Box>
                         )}
                     </Box>
-                </Box>
-            )}
+                </DialogContent>
+                <DialogActions sx={{ p: 3, justifyContent: 'center' }}>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        size="large"
+                        onClick={() => setShowConfigurationDialog(false)}
+                        sx={{ minWidth: 150 }}
+                    >
+                        Proceed
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 };
