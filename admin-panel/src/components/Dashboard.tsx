@@ -248,18 +248,21 @@ const Dashboard: React.FC = () => {
             const result = await response.json();
 
             if (result.success) {
+                // Update loadedSlots to reflect the current slots configuration
+                setLoadedSlots(slots);
+
+                // Also save dashboard settings to persist across sessions
+                const dashboardSaveSuccess = await saveDashboardSettings();
+                if (!dashboardSaveSuccess) {
+                    alert('Configuration saved to bot, but dashboard persistence failed. Settings may not be restored on next login.');
+                }
+
                 // Show setup instructions instead of dialog
                 setConfigurationSaved(true);
                 // Store bot username for the instructions
                 if (result.bot_username) {
                     setBotUsername(result.bot_username);
                 }
-
-                // Update loadedSlots to reflect the current slots configuration
-                setLoadedSlots(slots);
-
-                // Also save dashboard settings to persist across sessions
-                await saveDashboardSettings();
             } else {
                 alert(`Failed to save configuration: ${result.message}`);
             }
@@ -270,12 +273,12 @@ const Dashboard: React.FC = () => {
     };
 
     // Save dashboard settings to database
-    const saveDashboardSettings = async (overrideLicenseKey?: string | null) => {
+    const saveDashboardSettings = async (overrideLicenseKey?: string | null): Promise<boolean> => {
         try {
             const adminUserId = localStorage.getItem('userId');
             if (!adminUserId) {
                 console.error('No adminUserId found in localStorage');
-                return;
+                return false;
             }
 
             const settings = {
@@ -314,9 +317,12 @@ const Dashboard: React.FC = () => {
 
             if (!result.success) {
                 console.error('Failed to save dashboard settings:', result.message);
+                return false;
             }
+            return true;
         } catch (error) {
             console.error('Error saving dashboard settings:', error);
+            return false;
         }
     };
 
@@ -353,7 +359,10 @@ const Dashboard: React.FC = () => {
                 alert(`License key generated successfully: ${result.license_key}`);
 
                 // Save dashboard settings to database with the new license key
-                await saveDashboardSettings(result.license_key);
+                const dashboardSaveSuccess = await saveDashboardSettings(result.license_key);
+                if (!dashboardSaveSuccess) {
+                    alert('License generated, but dashboard persistence failed. Settings may not be restored on next login.');
+                }
             } else {
                 alert(`Failed to generate license key: ${result.message}`);
             }
@@ -477,6 +486,57 @@ const Dashboard: React.FC = () => {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Bot Information Display */}
+            {hasActiveSubscription && !showSubscriptionPanel && (
+                <Box sx={{ mt: 2, mb: 2 }}>
+                    <Box sx={{
+                        bgcolor: 'info.light',
+                        p: 3,
+                        borderRadius: 2,
+                        border: '2px solid',
+                        borderColor: 'info.main'
+                    }}>
+                        <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: 'info.contrastText' }}>
+                            🤖 Bot Information
+                        </Typography>
+                        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
+                            <Box sx={{ flex: 1 }}>
+                                <Typography variant="body2" sx={{ color: 'info.contrastText', opacity: 0.9 }}>
+                                    Bot Link
+                                </Typography>
+                                <Button
+                                    variant="contained"
+                                    color="primary"
+                                    size="small"
+                                    href={`https://t.me/BeHumanAgainBot`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    sx={{ mt: 1 }}
+                                >
+                                    @{"BeHumanAgainBot"}
+                                </Button>
+                            </Box>
+                            {licenseKey && (
+                                <Box sx={{ flex: 1 }}>
+                                    <Typography variant="body2" sx={{ color: 'info.contrastText', opacity: 0.9 }}>
+                                        License Key
+                                    </Typography>
+                                    <Typography variant="body1" sx={{
+                                        color: 'info.contrastText',
+                                        fontWeight: 'bold',
+                                        fontFamily: 'monospace',
+                                        mt: 1,
+                                        wordBreak: 'break-all'
+                                    }}>
+                                        {licenseKey}
+                                    </Typography>
+                                </Box>
+                            )}
+                        </Box>
+                    </Box>
+                </Box>
             )}
 
             {/* Main Content */}
