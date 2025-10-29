@@ -1,8 +1,12 @@
 import logging
 from datetime import datetime, timedelta
 from pytz import timezone
-from ..config import NEW_MEMBER_RESTRICTION_MINUTES
-from ..db import execute_query, get_db_connection
+try:
+    from ..config import NEW_MEMBER_RESTRICTION_MINUTES
+    from ..db import execute_query, get_db_connection
+except ImportError:
+    from config import NEW_MEMBER_RESTRICTION_MINUTES
+    from db import execute_query, get_db_connection
 import mysql.connector
 import json
 import base64

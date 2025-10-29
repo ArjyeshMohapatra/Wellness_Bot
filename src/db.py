@@ -1,7 +1,10 @@
 import mysql.connector
 from mysql.connector import pooling
 import logging
-from . import config
+try:
+    from . import config
+except ImportError:
+    import config
 import time
 
 logger = logging.getLogger(__name__)

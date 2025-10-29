@@ -379,9 +379,15 @@ def api_get_group_id():
         if not admin_user_id:
             return jsonify({'success': False, 'message': 'Admin user ID required'}), 400
 
-        # Get the group ID for this admin
+        # Find groups that have licenses assigned to this admin
         result = execute_query(
-            "SELECT group_id FROM groups_config WHERE admin_user_id = %s LIMIT 1",
+            """
+            SELECT DISTINCT gc.group_id
+            FROM groups_config gc
+            JOIN licenses l ON gc.license_key = l.license_key
+            WHERE l.assigned_admin_id = %s AND l.is_active = TRUE
+            LIMIT 1
+            """,
             (admin_user_id,),
             fetch=True
         )
@@ -407,7 +413,7 @@ def api_get_admin_dashboard_settings():
         if not admin_user_id:
             return jsonify({'success': False, 'message': 'Admin user ID required'}), 400
 
-        from services.database_service import get_admin_dashboard_settings
+        from src.services.database_service import get_admin_dashboard_settings
 
         settings = get_admin_dashboard_settings(int(admin_user_id))
         print(f"API: Retrieved settings: {settings}")
@@ -435,7 +441,7 @@ def api_save_admin_dashboard_settings():
             print("API: No admin_user_id provided")
             return jsonify({'success': False, 'message': 'Admin user ID required'}), 400
 
-        from services.database_service import save_admin_dashboard_settings
+        from src.services.database_service import save_admin_dashboard_settings
 
         success = save_admin_dashboard_settings(int(admin_user_id), settings)
         print(f"API: Save result: {success}")
