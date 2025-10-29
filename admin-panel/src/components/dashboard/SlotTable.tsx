@@ -338,14 +338,14 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                                 value={slot.startTime}
                                                 onChange={(e) => onSlotChange(index, 'startTime', e.target.value)}
                                                 size="small"
-                                                sx={{ width: 100 }}
+                                                sx={{ width: 135 }}
                                             />
                                             <TextField
                                                 type="time"
                                                 value={slot.endTime}
                                                 onChange={(e) => onSlotChange(index, 'endTime', e.target.value)}
                                                 size="small"
-                                                sx={{ width: 100 }}
+                                                sx={{ width: 135 }}
                                             />
                                         </Box>
                                     </TableCell>
