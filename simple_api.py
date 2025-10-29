@@ -331,5 +331,58 @@ def api_generate_license():
         traceback.print_exc()
         return jsonify({'success': False, 'message': f'Server error: {str(e)}'}), 500
 
+@app.route('/api/admin/dashboard/settings', methods=['GET'])
+def api_get_admin_dashboard_settings():
+    """Get admin dashboard settings"""
+    try:
+        admin_user_id = request.args.get('admin_user_id')
+        print(f"API: Getting dashboard settings for admin_user_id: {admin_user_id}")
+
+        if not admin_user_id:
+            return jsonify({'success': False, 'message': 'Admin user ID required'}), 400
+
+        from services.database_service import get_admin_dashboard_settings
+
+        settings = get_admin_dashboard_settings(int(admin_user_id))
+        print(f"API: Retrieved settings: {settings}")
+        if settings:
+            return jsonify({'success': True, 'settings': settings}), 200
+        else:
+            return jsonify({'success': True, 'settings': None}), 200  # No settings yet
+
+    except Exception as e:
+        print(f"API Error in get admin dashboard settings: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Server error: {str(e)}'}), 500
+
+@app.route('/api/admin/dashboard/settings', methods=['POST'])
+def api_save_admin_dashboard_settings():
+    """Save admin dashboard settings"""
+    try:
+        data = request.get_json()
+        print(f"API: Saving dashboard settings for data: {data}")
+        admin_user_id = data.get('admin_user_id')
+        settings = data.get('settings', {})
+
+        if not admin_user_id:
+            print("API: No admin_user_id provided")
+            return jsonify({'success': False, 'message': 'Admin user ID required'}), 400
+
+        from services.database_service import save_admin_dashboard_settings
+
+        success = save_admin_dashboard_settings(int(admin_user_id), settings)
+        print(f"API: Save result: {success}")
+        if success:
+            return jsonify({'success': True, 'message': 'Settings saved successfully'}), 200
+        else:
+            return jsonify({'success': False, 'message': 'Failed to save settings'}), 500
+
+    except Exception as e:
+        print(f"API Error in save admin dashboard settings: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Server error: {str(e)}'}), 500
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8001, debug=False)

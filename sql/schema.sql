@@ -28,6 +28,30 @@ CREATE TABLE users (
     is_active BOOLEAN DEFAULT TRUE
 );
 
+-- ADMIN DASHBOARD SETTINGS TABLE
+CREATE TABLE IF NOT EXISTS admin_dashboard_settings (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    admin_user_id INT NOT NULL,
+    bot_username VARCHAR(255) DEFAULT 'WellnessBot',
+    has_admin_permissions BOOLEAN DEFAULT FALSE,
+    license_key VARCHAR(50),
+    loaded_slots JSON,
+    event_type VARCHAR(50) DEFAULT 'normal',
+    event_name VARCHAR(255),
+    event_days INT DEFAULT 7,
+    pass_points INT DEFAULT 250,
+    slots_per_day INT DEFAULT 2,
+    welcome_message TEXT,
+    kick_response TEXT,
+    undesignated_slot_response TEXT,
+    leaderboard_time VARCHAR(10) DEFAULT '11:00',
+    banned_words JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (admin_user_id) REFERENCES users (id) ON DELETE CASCADE,
+    UNIQUE KEY unique_admin (admin_user_id)
+);
+
 CREATE TABLE password_resets (
     id INT PRIMARY KEY AUTO_INCREMENT,
     user_id INT,

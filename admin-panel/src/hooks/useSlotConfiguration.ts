@@ -38,6 +38,49 @@ export const useSlotConfiguration = (initialSlots?: Slot[]) => {
         return h * 60 + m;
     };
 
+    // Load slot configuration from localStorage on mount
+    useEffect(() => {
+        const savedSlotConfig = localStorage.getItem('slotConfiguration');
+        if (savedSlotConfig) {
+            const config = JSON.parse(savedSlotConfig);
+            setEventType(config.eventType || 'normal');
+            setEventName(config.eventName || '');
+            setEventDays(config.eventDays || '');
+            setPassPoints(config.passPoints || '');
+            setSlotsPerDay(config.slotsPerDay || '');
+            setWelcomeMessage(config.welcomeMessage || '');
+            setKickResponse(config.kickResponse || '');
+            setUndesignatedSlotResponse(config.undesignatedSlotResponse || '');
+            setLeaderboardTime(config.leaderboardTime || '');
+            setBannedWords(config.bannedWords || []);
+            setSlots(config.slots || []);
+            setCurrentSlotIndex(config.currentSlotIndex || 0);
+            setCurrentButtonIndex(config.currentButtonIndex || 0);
+            setSlotButtonIndices(config.slotButtonIndices || {});
+        }
+    }, []);
+
+    // Save slot configuration to localStorage whenever it changes
+    useEffect(() => {
+        const slotConfig = {
+            eventType,
+            eventName,
+            eventDays,
+            passPoints,
+            slotsPerDay,
+            welcomeMessage,
+            kickResponse,
+            undesignatedSlotResponse,
+            leaderboardTime,
+            bannedWords,
+            slots,
+            currentSlotIndex,
+            currentButtonIndex,
+            slotButtonIndices
+        };
+        localStorage.setItem('slotConfiguration', JSON.stringify(slotConfig));
+    }, [eventType, eventName, eventDays, passPoints, slotsPerDay, welcomeMessage, kickResponse, undesignatedSlotResponse, leaderboardTime, bannedWords, slots, currentSlotIndex, currentButtonIndex, slotButtonIndices]);
+
     // Initialize slots when slotsPerDay changes or initialSlots is provided
     useEffect(() => {
         if (initialSlots && initialSlots.length > 0) {

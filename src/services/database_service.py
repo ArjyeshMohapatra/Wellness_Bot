@@ -1430,3 +1430,80 @@ def create_group_config(group_id, admin_user_id):
     except Exception as e:
         logger.error(f"Error in create_group_config: {e}")
         return False
+
+
+def save_admin_dashboard_settings(admin_user_id, settings):
+    """Save admin dashboard settings to database."""
+    try:
+        print(f"DB: Saving dashboard settings for admin {admin_user_id}: {settings}")
+        query = """
+        INSERT INTO admin_dashboard_settings 
+        (admin_user_id, bot_username, has_admin_permissions, license_key, loaded_slots,
+         event_type, event_name, event_days, pass_points, slots_per_day, 
+         welcome_message, kick_response, undesignated_slot_response, leaderboard_time, banned_words) 
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE
+        bot_username = VALUES(bot_username),
+        has_admin_permissions = VALUES(has_admin_permissions),
+        license_key = VALUES(license_key),
+        loaded_slots = VALUES(loaded_slots),
+        event_type = VALUES(event_type),
+        event_name = VALUES(event_name),
+        event_days = VALUES(event_days),
+        pass_points = VALUES(pass_points),
+        slots_per_day = VALUES(slots_per_day),
+        welcome_message = VALUES(welcome_message),
+        kick_response = VALUES(kick_response),
+        undesignated_slot_response = VALUES(undesignated_slot_response),
+        leaderboard_time = VALUES(leaderboard_time),
+        banned_words = VALUES(banned_words),
+        updated_at = CURRENT_TIMESTAMP
+        """
+        import json
+        loaded_slots_json = json.dumps(settings.get('loaded_slots', [])) if settings.get('loaded_slots') else None
+        banned_words_json = json.dumps(settings.get('banned_words', [])) if settings.get('banned_words') else None
+        
+        params = (
+            admin_user_id,
+            settings.get('bot_username', 'WellnessBot'),
+            settings.get('has_admin_permissions', False),
+            settings.get('license_key'),
+            loaded_slots_json,
+            settings.get('event_type', 'normal'),
+            settings.get('event_name'),
+            settings.get('event_days'),
+            settings.get('pass_points'),
+            settings.get('slots_per_day'),
+            settings.get('welcome_message'),
+            settings.get('kick_response'),
+            settings.get('undesignated_slot_response'),
+            settings.get('leaderboard_time'),
+            banned_words_json
+        )
+        print(f"DB: Executing query with params: {params}")
+        execute_query(query, params)
+        print(f"DB: Successfully saved dashboard settings for admin {admin_user_id}")
+        return True
+    except Exception as e:
+        print(f"DB: Error saving admin dashboard settings: {e}")
+        logger.error(f"Error saving admin dashboard settings: {e}", exc_info=True)
+        return False
+
+
+def get_admin_dashboard_settings(admin_user_id):
+    """Get admin dashboard settings from database."""
+    try:
+        query = "SELECT * FROM admin_dashboard_settings WHERE admin_user_id = %s"
+        result = execute_query(query, (admin_user_id,), fetch=True)
+        if result:
+            import json
+            settings = result[0]
+            if settings.get('loaded_slots'):
+                settings['loaded_slots'] = json.loads(settings['loaded_slots'])
+            if settings.get('banned_words'):
+                settings['banned_words'] = json.loads(settings['banned_words'])
+            return settings
+        return None
+    except Exception as e:
+        logger.error(f"Error getting admin dashboard settings: {e}", exc_info=True)
+        return None

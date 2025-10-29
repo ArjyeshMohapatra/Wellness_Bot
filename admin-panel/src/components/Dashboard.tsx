@@ -96,50 +96,45 @@ const Dashboard: React.FC = () => {
     useEffect(() => {
         const loadConfiguration = async () => {
             try {
-                const userInfo = JSON.parse(localStorage.getItem('user') || '{}');
-                const adminUserId = userInfo.id;
+                // Load dashboard state from localStorage first
+                const savedDashboardState = localStorage.getItem('dashboardState');
+                if (savedDashboardState) {
+                    const state = JSON.parse(savedDashboardState);
+                    setBotUsername(state.botUsername || 'WellnessBot');
+                    setHasAdminPermissions(state.hasAdminPermissions || false);
+                    setLicenseKey(state.licenseKey || null);
+                    setLoadedSlots(state.loadedSlots || []);
+                }
 
-                if (!adminUserId) return;
+                // Load dashboard settings from database
+                const adminUserId = localStorage.getItem('userId');
+                console.log('Loading dashboard for adminUserId:', adminUserId);
 
-                // TODO: Make group ID dynamic
-                const groupId = "";
-                const response = await fetch(`http://localhost:8001/api/admin/panel/config?group_id=${groupId}&admin_user_id=${adminUserId}`);
-                const result = await response.json();
+                if (!adminUserId) {
+                    console.error('No adminUserId found');
+                    return;
+                }
 
-                if (result.success && result.config) {
-                    const config = result.config;
+                const dashboardResponse = await fetch(`http://localhost:8001/api/admin/dashboard/settings?admin_user_id=${adminUserId}`);
+                const dashboardResult = await dashboardResponse.json();
+                if (dashboardResult.success && dashboardResult.settings) {
+                    const dbSettings = dashboardResult.settings;
+                    setBotUsername(dbSettings.bot_username || 'WellnessBot');
+                    setHasAdminPermissions(dbSettings.has_admin_permissions || false);
+                    setLicenseKey(dbSettings.license_key || null);
+                    setLoadedSlots(dbSettings.loaded_slots || []);
 
-                    // Load all the saved values
-                    setEventType(config.event_type || 'normal');
-                    setEventName(config.event_name || '');
-                    setEventDays(config.event_days?.toString() || '');
-                    setPassPoints(config.pass_points?.toString() || '');
-                    setSlotsPerDay(config.slots_per_day?.toString() || '');
-                    setWelcomeMessage(config.welcome_message || '');
-                    setKickResponse(config.kick_response || '');
-                    setUndesignatedSlotResponse(config.undesignated_slot_response || '');
-                    setLeaderboardTime(config.leaderboard_time || '');
-                    setBannedWords(config.banned_words ? config.banned_words.split(', ').filter((w: string) => w.trim()) : []);
-
-                    // Load slots if they exist
-                    if (config.slots && config.slots.length > 0) {
-                        // Transform loaded slots to match the expected format
-                        const transformedSlots: Slot[] = config.slots.map((slot: any) => ({
-                            name: slot.name || '',
-                            compulsory: slot.compulsory || false,
-                            startTime: slot.startTime || '',
-                            endTime: slot.endTime || '',
-                            points: slot.points || 0,
-                            type: slot.type || 'media',
-                            botResponse: slot.botResponse || '',
-                            postResponse: slot.postResponse || '',
-                            image: slot.image || '',
-                            buttonCount: slot.buttonCount || 0,
-                            buttonNames: slot.buttonNames || [],
-                            buttonValues: slot.buttonValues || []
-                        }));
-                        setLoadedSlots(transformedSlots);
-                    }
+                    // Load event configuration
+                    setEventType(dbSettings.event_type || 'normal');
+                    setEventName(dbSettings.event_name || '');
+                    setEventDays(dbSettings.event_days?.toString() || '');
+                    setPassPoints(dbSettings.pass_points?.toString() || '');
+                    setSlotsPerDay(dbSettings.slots_per_day?.toString() || '');
+                    setWelcomeMessage(dbSettings.welcome_message || '');
+                    setKickResponse(dbSettings.kick_response || '');
+                    setUndesignatedSlotResponse(dbSettings.undesignated_slot_response || '');
+                    setLeaderboardTime(dbSettings.leaderboard_time || '');
+                    setBannedWords(dbSettings.banned_words || []);
                 }
             } catch (error) {
                 console.error('Error loading configuration:', error);
@@ -148,6 +143,17 @@ const Dashboard: React.FC = () => {
 
         loadConfiguration();
     }, [setEventType, setEventName, setEventDays, setPassPoints, setSlotsPerDay, setWelcomeMessage, setKickResponse, setUndesignatedSlotResponse, setLeaderboardTime, setBannedWords]);
+
+    // Save dashboard state to localStorage whenever it changes
+    useEffect(() => {
+        const dashboardState = {
+            botUsername,
+            hasAdminPermissions,
+            licenseKey,
+            loadedSlots: slots // Save current slots instead of loadedSlots
+        };
+        localStorage.setItem('dashboardState', JSON.stringify(dashboardState));
+    }, [botUsername, hasAdminPermissions, licenseKey, slots]);
 
     // Validation logic for save button
     const isConfigurationValid = () => {
@@ -248,12 +254,69 @@ const Dashboard: React.FC = () => {
                 if (result.bot_username) {
                     setBotUsername(result.bot_username);
                 }
+
+                // Update loadedSlots to reflect the current slots configuration
+                setLoadedSlots(slots);
+
+                // Also save dashboard settings to persist across sessions
+                await saveDashboardSettings();
             } else {
                 alert(`Failed to save configuration: ${result.message}`);
             }
         } catch (error) {
             console.error('Error saving configuration:', error);
             alert('Error saving configuration. Please check your connection and try again.');
+        }
+    };
+
+    // Save dashboard settings to database
+    const saveDashboardSettings = async (overrideLicenseKey?: string | null) => {
+        try {
+            const adminUserId = localStorage.getItem('userId');
+            if (!adminUserId) {
+                console.error('No adminUserId found in localStorage');
+                return;
+            }
+
+            const settings = {
+                bot_username: botUsername,
+                has_admin_permissions: hasAdminPermissions,
+                license_key: overrideLicenseKey !== undefined ? overrideLicenseKey : licenseKey,
+                loaded_slots: slots, // Use current slots instead of loadedSlots
+                // Event configuration
+                event_type: eventType,
+                event_name: eventName,
+                event_days: eventDays,
+                pass_points: passPoints,
+                slots_per_day: slotsPerDay,
+                welcome_message: welcomeMessage,
+                kick_response: kickResponse,
+                undesignated_slot_response: undesignatedSlotResponse,
+                leaderboard_time: leaderboardTime,
+                banned_words: bannedWords
+            };
+
+            console.log('Saving dashboard settings:', { adminUserId, settings });
+
+            const response = await fetch('http://localhost:8001/api/admin/dashboard/settings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    admin_user_id: parseInt(adminUserId),
+                    settings
+                })
+            });
+
+            const result = await response.json();
+            console.log('Save dashboard settings response:', result);
+
+            if (!result.success) {
+                console.error('Failed to save dashboard settings:', result.message);
+            }
+        } catch (error) {
+            console.error('Error saving dashboard settings:', error);
         }
     };
 
@@ -288,6 +351,9 @@ const Dashboard: React.FC = () => {
             if (result.success) {
                 setLicenseKey(result.license_key);
                 alert(`License key generated successfully: ${result.license_key}`);
+
+                // Save dashboard settings to database with the new license key
+                await saveDashboardSettings(result.license_key);
             } else {
                 alert(`Failed to generate license key: ${result.message}`);
             }
