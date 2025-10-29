@@ -331,6 +331,72 @@ def api_generate_license():
         traceback.print_exc()
         return jsonify({'success': False, 'message': f'Server error: {str(e)}'}), 500
 
+@app.route('/api/admin/generate-unique-user-ids', methods=['POST'])
+def api_generate_unique_user_ids():
+    """Generate unique user IDs for a group"""
+    try:
+        data = request.get_json()
+        admin_user_id = data.get('admin_user_id')
+        group_id = data.get('group_id')
+        count = data.get('count', 25)
+
+        if not admin_user_id or not group_id:
+            return jsonify({'success': False, 'message': 'Admin user ID and group ID required'}), 400
+
+        # Verify that this admin owns this group
+        group_check = execute_query(
+            "SELECT group_id FROM groups_config WHERE group_id = %s AND admin_user_id = %s",
+            (group_id, admin_user_id),
+            fetch=True
+        )
+
+        if not group_check:
+            return jsonify({'success': False, 'message': 'Unauthorized: You do not own this group'}), 403
+
+        # Generate unique user IDs
+        from services.database_service import generate_unique_user_ids_for_group
+        user_ids = generate_unique_user_ids_for_group(group_id, count)
+
+        return jsonify({
+            'success': True,
+            'user_ids': user_ids,
+            'count': len(user_ids),
+            'message': f'Successfully generated {len(user_ids)} unique user IDs'
+        }), 200
+
+    except Exception as e:
+        print(f"API Error in generate unique user IDs: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Server error: {str(e)}'}), 500
+
+@app.route('/api/admin/get-group-id', methods=['GET'])
+def api_get_group_id():
+    """Get group ID for an admin"""
+    try:
+        admin_user_id = request.args.get('admin_user_id')
+
+        if not admin_user_id:
+            return jsonify({'success': False, 'message': 'Admin user ID required'}), 400
+
+        # Get the group ID for this admin
+        result = execute_query(
+            "SELECT group_id FROM groups_config WHERE admin_user_id = %s LIMIT 1",
+            (admin_user_id,),
+            fetch=True
+        )
+
+        if result:
+            return jsonify({'success': True, 'group_id': result[0]['group_id']}), 200
+        else:
+            return jsonify({'success': False, 'message': 'No group found for this admin'}), 404
+
+    except Exception as e:
+        print(f"API Error in get group ID: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Server error: {str(e)}'}), 500
+
 @app.route('/api/admin/dashboard/settings', methods=['GET'])
 def api_get_admin_dashboard_settings():
     """Get admin dashboard settings"""

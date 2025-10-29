@@ -1,15 +1,15 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions, ReplyKeyboardMarkup
 from telegram.ext import MessageHandler, filters, ContextTypes
 import logging
 from datetime import datetime, timedelta
 import re
 from pytz import timezone, utc
-from services import database_service as db
-from services.file_storage import FileStorage
-import config
-from handlers.start_handler import points, schedule
-from db import execute_query
-from bot_utils import safe_send_message
+from ..services import database_service as db
+from ..services.file_storage import FileStorage
+from .. import config
+from .start_handler import points, schedule
+from ..db import execute_query
+from ..bot_utils import safe_send_message
 
 logger = logging.getLogger(__name__)
 storage = FileStorage(config.STORAGE_PATH)
@@ -36,13 +36,370 @@ def extract_license_key(text):
     return match.group(0) if match else None
 
 
+async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle private messages for user validation and KYC process."""
+    message = update.message
+    user_id = message.from_user.id
+    text = message.text or ""
+
+    # Check if this user is already in a validation process
+    user_state = context.user_data.get('kyc_state', {})
+
+    if not user_state:
+        # First message from user, ask if they have a unique user ID
+        await safe_send_message(
+            context=context,
+            chat_id=user_id,
+            text="👋 **Welcome to the Wellness Bot!**\n\n"
+            "To join a wellness group, you need a unique user ID provided by the group admin.\n\n"
+            "❓ **Do you have a unique user ID?**\n\n"
+            "• If **YES**, please reply with your 6-digit user ID\n"
+            "• If **NO**, please contact your group admin to get one\n\n"
+            "💡 Example: `123456`",
+            parse_mode="Markdown"
+        )
+        context.user_data['kyc_state'] = {'step': 'awaiting_user_id'}
+        return
+
+    # Handle different KYC steps
+    current_step = user_state.get('step')
+
+    if current_step == 'awaiting_user_id':
+        # Validate the user ID
+        if not text.strip().isdigit() or len(text.strip()) != 6:
+            await safe_send_message(
+                context=context,
+                chat_id=user_id,
+                text="❌ **Invalid User ID Format**\n\n"
+                "Please provide a valid 6-digit user ID.\n"
+                "Example: `123456`\n\n"
+                "If you don't have a user ID, please contact your group admin.",
+                parse_mode="Markdown"
+            )
+            return
+
+        user_id_input = text.strip()
+
+        # Validate user ID exists and get group info
+        from ..services.database_service import validate_unique_user_id
+        validation = validate_unique_user_id(user_id_input)
+
+        if not validation['valid']:
+            await safe_send_message(
+                context=context,
+                chat_id=user_id,
+                text="❌ **Invalid User ID**\n\n"
+                "The user ID you provided is not valid or doesn't exist.\n\n"
+                "Please check with your group admin and try again.",
+                parse_mode="Markdown"
+            )
+            return
+
+        if validation['used']:
+            await safe_send_message(
+                context=context,
+                chat_id=user_id,
+                text="❌ **User ID Already Used**\n\n"
+                "This user ID has already been used by another member.\n\n"
+                "Please contact your group admin for a new user ID.",
+                parse_mode="Markdown"
+            )
+            return
+
+        # User ID is valid, start KYC collection
+        context.user_data['kyc_state'] = {
+            'step': 'collecting_kyc',
+            'user_id': user_id_input,
+            'group_id': validation['group_id'],
+            'kyc_data': {}
+        }
+
+        await safe_send_message(
+            context=context,
+            chat_id=user_id,
+            text="✅ **User ID Validated!**\n\n"
+            "Now I need to collect some information for KYC verification.\n\n"
+            "📝 **Please provide your full name:**\n"
+            "(Example: John Doe)",
+            parse_mode="Markdown"
+        )
+        context.user_data['kyc_state']['kyc_data']['telegram_user_id'] = user_id
+        return
+
+    elif current_step == 'collecting_kyc':
+        kyc_data = user_state.get('kyc_data', {})
+
+        if 'full_name' not in kyc_data:
+            # Collecting full name
+            if not text.strip():
+                await safe_send_message(
+                    context=context,
+                    chat_id=user_id,
+                    text="❌ **Invalid Name**\n\nPlease provide your full name.",
+                    parse_mode="Markdown"
+                )
+                return
+
+            kyc_data['full_name'] = text.strip()
+            context.user_data['kyc_state']['kyc_data'] = kyc_data
+
+            await safe_send_message(
+                context=context,
+                chat_id=user_id,
+                text="📅 **Please provide your date of birth:**\n"
+                "(Format: DD/MM/YYYY)\n"
+                "Example: `15/10/1990`",
+                parse_mode="Markdown"
+            )
+            return
+
+        elif 'date_of_birth' not in kyc_data:
+            # Collecting date of birth
+            import re
+            if not re.match(r'^\d{2}/\d{2}/\d{4}$', text.strip()):
+                await safe_send_message(
+                    context=context,
+                    chat_id=user_id,
+                    text="❌ **Invalid Date Format**\n\n"
+                    "Please use DD/MM/YYYY format.\n"
+                    "Example: `15/10/1990`",
+                    parse_mode="Markdown"
+                )
+                return
+
+            kyc_data['date_of_birth'] = text.strip()
+            context.user_data['kyc_state']['kyc_data'] = kyc_data
+
+            await safe_send_message(
+                context=context,
+                chat_id=user_id,
+                text="📱 **Please provide your phone number:**\n"
+                "(Include country code)\n"
+                "Example: `+91 9876543210`",
+                parse_mode="Markdown"
+            )
+            return
+
+        elif 'phone_number' not in kyc_data:
+            # Collecting phone number
+            if not text.strip():
+                await safe_send_message(
+                    context=context,
+                    chat_id=user_id,
+                    text="❌ **Invalid Phone Number**\n\nPlease provide your phone number.",
+                    parse_mode="Markdown"
+                )
+                return
+
+            kyc_data['phone_number'] = text.strip()
+            context.user_data['kyc_state']['kyc_data'] = kyc_data
+
+            await safe_send_message(
+                context=context,
+                chat_id=user_id,
+                text="🖼️ **Please send your profile picture:**\n\n"
+                "Upload a clear photo of yourself.",
+                parse_mode="Markdown"
+            )
+            return
+
+        elif 'profile_picture' not in kyc_data:
+            # Collecting profile picture
+            if not message.photo:
+                await safe_send_message(
+                    context=context,
+                    chat_id=user_id,
+                    text="❌ **Profile Picture Required**\n\n"
+                    "Please send a photo of yourself.",
+                    parse_mode="Markdown"
+                )
+                return
+
+            # Get the highest quality photo
+            photo = message.photo[-1]
+            file_id = photo.file_id
+            kyc_data['profile_picture_file_id'] = file_id
+            context.user_data['kyc_state']['kyc_data'] = kyc_data
+
+            await safe_send_message(
+                context=context,
+                chat_id=user_id,
+                text="🎂 **Please provide your age:**\n"
+                "(Just the number)\n"
+                "Example: `25`",
+                parse_mode="Markdown"
+            )
+            return
+
+        elif 'age' not in kyc_data:
+            # Collecting age
+            if not text.strip().isdigit():
+                await safe_send_message(
+                    context=context,
+                    chat_id=user_id,
+                    text="❌ **Invalid Age**\n\nPlease provide a valid number for your age.",
+                    parse_mode="Markdown"
+                )
+                return
+
+            kyc_data['age'] = int(text.strip())
+            context.user_data['kyc_state']['kyc_data'] = kyc_data
+
+            # Create gender selection keyboard
+            keyboard = [
+                ["Male", "Female"],
+                ["Other", "Prefer not to say"]
+            ]
+            reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
+
+            await safe_send_message(
+                context=context,
+                chat_id=user_id,
+                text="🚹🚺 **Please select your gender:**",
+                parse_mode="Markdown",
+                reply_markup=reply_markup
+            )
+            return
+
+        elif 'gender' not in kyc_data:
+            # Collecting gender
+            valid_genders = ["Male", "Female", "Other", "Prefer not to say"]
+            if text.strip() not in valid_genders:
+                await safe_send_message(
+                    context=context,
+                    chat_id=user_id,
+                    text="❌ **Invalid Gender Selection**\n\nPlease select from the options provided.",
+                    parse_mode="Markdown"
+                )
+                return
+
+            kyc_data['gender'] = text.strip()
+            context.user_data['kyc_state']['kyc_data'] = kyc_data
+
+            # KYC collection complete, assign user ID and provide group link
+            await complete_kyc_process(update, context)
+            return
+
+    # If we reach here, it's an unexpected message
+    await safe_send_message(
+        context=context,
+        chat_id=user_id,
+        text="🤔 **I'm not sure what you mean.**\n\n"
+        "If you have a unique user ID, please provide it.\n"
+        "Otherwise, contact your group admin.",
+        parse_mode="Markdown"
+    )
+
+
+async def complete_kyc_process(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Complete the KYC process and provide group invitation link."""
+    user_id = update.message.from_user.id
+    user_state = context.user_data.get('kyc_state', {})
+    kyc_data = user_state.get('kyc_data', {})
+    group_id = user_state.get('group_id')
+    unique_user_id = user_state.get('user_id')
+
+    try:
+        # Assign the unique user ID to this member
+        from ..services.database_service import assign_unique_user_id_to_member
+        success = assign_unique_user_id_to_member(group_id, user_id, unique_user_id)
+
+        if not success:
+            await safe_send_message(
+                context=context,
+                chat_id=user_id,
+                text="❌ **Error Completing Registration**\n\n"
+                "There was an issue with your registration. Please contact support.",
+                parse_mode="Markdown"
+            )
+            return
+
+        # Store KYC data in database
+        try:
+            kyc_query = """
+                INSERT INTO kyc_data
+                (user_id, group_id, unique_user_id, full_name, date_of_birth, phone_number, profile_picture_file_id, age, gender)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """
+            execute_query(kyc_query, (
+                user_id,
+                group_id,
+                unique_user_id,
+                kyc_data['full_name'],
+                kyc_data['date_of_birth'],
+                kyc_data['phone_number'],
+                kyc_data.get('profile_picture_file_id'),
+                kyc_data['age'],
+                kyc_data['gender']
+            ))
+        except Exception as kyc_error:
+            logger.error(f"Error storing KYC data: {kyc_error}")
+            # Don't fail the entire process for KYC storage error
+
+        # Get group invite link
+        try:
+            chat = await context.bot.get_chat(group_id)
+            if chat.invite_link:
+                invite_link = chat.invite_link
+            else:
+                # Create a new invite link
+                invite_link_obj = await context.bot.create_chat_invite_link(
+                    chat_id=group_id,
+                    name=f"Welcome - {kyc_data.get('full_name', 'New Member')}",
+                    creates_join_request=False
+                )
+                invite_link = invite_link_obj.invite_link
+        except Exception as e:
+            logger.error(f"Error getting/creating invite link: {e}")
+            await safe_send_message(
+                context=context,
+                chat_id=user_id,
+                text="❌ **Error Getting Group Link**\n\n"
+                "There was an issue generating your group invitation link. Please contact the group admin.",
+                parse_mode="Markdown"
+            )
+            return
+
+        # Send success message with group link
+        await safe_send_message(
+            context=context,
+            chat_id=user_id,
+            text="🎉 **KYC Verification Complete!**\n\n"
+            f"✅ **Welcome {kyc_data.get('full_name', 'New Member')}!**\n\n"
+            "Your registration has been completed successfully.\n\n"
+            "🔗 **Click below to join your wellness group:**\n\n"
+            f"{invite_link}\n\n"
+            "📋 **Your Details:**\n"
+            f"• Name: {kyc_data.get('full_name')}\n"
+            f"• Age: {kyc_data.get('age')}\n"
+            f"• User ID: {unique_user_id}\n\n"
+            "💪 **Get ready for an amazing wellness journey!**",
+            parse_mode="Markdown"
+        )
+
+        # Clear user state
+        context.user_data.clear()
+
+        logger.info(f"User {user_id} completed KYC and was assigned user ID {unique_user_id} for group {group_id}")
+
+    except Exception as e:
+        logger.error(f"Error completing KYC process: {e}")
+        await safe_send_message(
+            context=context,
+            chat_id=user_id,
+            text="❌ **Error Completing Registration**\n\n"
+            "There was an issue with your registration. Please try again or contact support.",
+            parse_mode="Markdown"
+        )
+
+
 async def handle_license_key(message, context, license_key):
     """Handle license key activation"""
     try:
         # Check if license key exists and is available
         license_query = "SELECT license_id, assigned_group_id, is_active FROM licenses WHERE license_key = %s"
         license_result = execute_query(license_query, (license_key,), fetch=True)
-        
+
         if not license_result:
             await safe_send_message(
                 context=context,
@@ -51,9 +408,9 @@ async def handle_license_key(message, context, license_key):
                 parse_mode="Markdown"
             )
             return
-        
+
         license_data = license_result[0]
-        
+
         if license_data['assigned_group_id'] is not None:
             await safe_send_message(
                 context=context,
@@ -62,7 +419,7 @@ async def handle_license_key(message, context, license_key):
                 parse_mode="Markdown"
             )
             return
-        
+
         if not license_data['is_active']:
             await safe_send_message(
                 context=context,
@@ -71,20 +428,20 @@ async def handle_license_key(message, context, license_key):
                 parse_mode="Markdown"
             )
             return
-        
+
         # License is valid, assign it to the current group
         group_id = message.chat.id
-        
+
         # Update the license with group assignment
         update_query = "UPDATE licenses SET assigned_group_id = %s WHERE license_key = %s"
         execute_query(update_query, (group_id, license_key))
-        
+
         # Update group config with license key
         config_query = "UPDATE groups_config SET license_key = %s WHERE group_id = %s"
         execute_query(config_query, (license_key, group_id))
-        
+
         logger.info(f"License key {license_key} assigned to group {group_id}")
-        
+
         # Send success message
         await safe_send_message(
             context=context,
@@ -98,28 +455,32 @@ async def handle_license_key(message, context, license_key):
             f"• Leaderboard system\n"
             f"• Content moderation\n"
             f"• Member management\n\n"
-            f"📋 **Commands:**\n"
-            f"/start - Bot status\n"
-            f"/schedule - View time slots\n"
-            f"/points - Check your points\n"
-            f"/leaderboard - Group rankings\n\n"
-            f"🎯 **Ready to start your wellness journey!**",
+            f"💡 **Next Steps:**\n"
+            f"• Set up your wellness slots in the admin panel\n"
+            f"• Configure banned words and bot responses\n"
+            f"• Generate unique user IDs for your members\n"
+            f"• Share the bot link and user IDs with potential members",
             parse_mode="Markdown"
         )
-        
+
     except Exception as e:
         logger.error(f"Error handling license key {license_key}: {e}", exc_info=True)
         await safe_send_message(
             context=context,
             chat_id=message.chat.id,
-            text="❌ **Error Activating License**\n\nThere was an error activating your license key. Please try again or contact support.",
+            text="❌ **Error Activating License**\n\nThere was an error activating your license. Please try again or contact support.",
             parse_mode="Markdown"
         )
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle incoming messages in groups."""
+    """Handle incoming messages in groups and private chats."""
     message = update.message
+
+    # Handle private messages for user validation/KYC process
+    if message.chat.type == "private":
+        await handle_private_message(update, context)
+        return
 
     # Check if bot was added to a group
     if message.new_chat_members:
@@ -127,7 +488,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             if member.id == context.bot.id:
                 # Bot was added to this group
                 logger.info(f"Bot added to group {message.chat.id} via message handler")
-                from handlers.join_handler import handle_bot_added_to_group
+                from .join_handler import handle_bot_added_to_group
                 await handle_bot_added_to_group(update, context)
                 return
 

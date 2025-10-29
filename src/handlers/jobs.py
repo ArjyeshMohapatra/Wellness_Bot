@@ -4,9 +4,9 @@ import logging
 import os
 from datetime import datetime, time, timedelta
 from pytz import timezone
-from services import database_service as db
-from db import get_db_connection, execute_query
-from bot_utils import safe_send_message
+from ..services import database_service as db
+from ..db import get_db_connection, execute_query
+from ..bot_utils import safe_send_message
 
 logger = logging.getLogger(__name__)
 ist = timezone("Asia/Kolkata")
@@ -489,7 +489,7 @@ async def sync_admin_status(context: ContextTypes.DEFAULT_TYPE):
                     if group_config and (not group_config.get('license_key') or group_config.get('license_key', '').startswith('AUTO_')):
                         # Bot is admin but no license or has auto-generated license - trigger license request
                         logger.info(f"Bot is admin in group {group_id} but no valid license found - requesting license")
-                        from handlers.join_handler import handle_bot_promoted_to_admin
+                        from .join_handler import handle_bot_promoted_to_admin
                         
                         # Create a mock update object for the handler
                         class MockUpdate:

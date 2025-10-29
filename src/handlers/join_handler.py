@@ -4,10 +4,10 @@ import logging
 import time
 from datetime import datetime, timedelta
 from pytz import timezone
-from bot_utils import safe_send_message
-from config import NEW_MEMBER_RESTRICTION_MINUTES
-from services import database_service as db
-from db import execute_query
+from ..bot_utils import safe_send_message
+from ..config import NEW_MEMBER_RESTRICTION_MINUTES
+from ..services import database_service as db
+from ..db import execute_query
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -235,7 +235,42 @@ async def track_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # if a new member joins so lets continue with rest of the function
     elif not was_member and is_member:
-        pass
+        # Check if user has a valid unique user ID before allowing them to join
+        from ..services.database_service import get_member
+        existing_member = get_member(group_id, user_id)
+
+        # If user is not in database or doesn't have a unique_user_id assigned, kick them
+        if not existing_member or not existing_member.get('unique_user_id') or existing_member.get('user_id') == 0:
+            try:
+                # Kick the user immediately
+                await context.bot.ban_chat_member(
+                    chat_id=group_id,
+                    user_id=user_id,
+                    revoke_messages=False
+                )
+
+                # Send message explaining why they were kicked
+                await safe_send_message(
+                    context=context,
+                    chat_id=group_id,
+                    text=f"🚫 **Access Denied**\n\n"
+                    f"@{username or user_id} was removed from the group.\n\n"
+                    f"**Reason:** You haven't completed the necessary KYC verification.\n\n"
+                    f"**To join this group:**\n"
+                    f"1. Contact the group admin to get a unique user ID\n"
+                    f"2. Start a private chat with this bot: @{context.bot.username or 'WellnessBot'}\n"
+                    f"3. Provide your user ID and complete KYC verification\n"
+                    f"4. You'll receive a group invitation link\n\n"
+                    f"💡 **Need help?** Contact the group administrator.",
+                    parse_mode="Markdown"
+                )
+
+                logger.info(f"🚫 Kicked user {user_id} ({first_name} @{username}) from group {group_id} - no valid user ID")
+                return
+
+            except Exception as kick_error:
+                logger.error(f"Failed to kick user {user_id} without valid user ID: {kick_error}")
+                # Continue with normal flow if kicking fails
 
     # if any other case rather than if and elif
     else:

@@ -2,9 +2,9 @@ import logging
 import sys
 from telegram import Update
 from telegram.ext import Application
-import config
-from handlers import setup_handlers
-from db import init_db_pool
+from . import config
+from .handlers import setup_handlers
+from .db import init_db_pool
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.DEBUG

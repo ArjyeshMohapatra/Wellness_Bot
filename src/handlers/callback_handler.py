@@ -2,12 +2,12 @@ from telegram import Update
 from telegram.ext import CallbackQueryHandler, ContextTypes
 import logging
 from datetime import datetime
-from services import database_service as db
-from db import execute_query
-from services.file_storage import FileStorage
-import config
+from ..services import database_service as db
+from ..db import execute_query
+from ..services.file_storage import FileStorage
+from .. import config
 from pytz import timezone, utc
-from bot_utils import safe_send_message, safe_edit_message_text, safe_callback_reply_text
+from ..bot_utils import safe_send_message, safe_edit_message_text, safe_callback_reply_text
 
 logger = logging.getLogger(__name__)
 ist=timezone("Asia/Kolkata")

@@ -149,6 +149,7 @@ CREATE TABLE IF NOT EXISTS group_members (
     username VARCHAR(255),
     first_name VARCHAR(255),
     last_name VARCHAR(255),
+    unique_user_id VARCHAR(10) UNIQUE,
     is_admin TINYINT(1) DEFAULT 0,
     total_points INT DEFAULT 0,
     knockout_points INT DEFAULT 0,
@@ -165,7 +166,22 @@ CREATE TABLE IF NOT EXISTS group_members (
     FOREIGN KEY (group_id) REFERENCES groups_config (group_id) ON DELETE CASCADE
 );
 
--- MEMBER HISTORY TABLE
+-- KYC DATA TABLE
+CREATE TABLE IF NOT EXISTS kyc_data (
+    kyc_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    group_id BIGINT NOT NULL,
+    unique_user_id VARCHAR(10) NOT NULL,
+    full_name VARCHAR(255) NOT NULL,
+    date_of_birth DATE NOT NULL,
+    phone_number VARCHAR(20) NOT NULL,
+    profile_picture_file_id VARCHAR(255),
+    age INT NOT NULL,
+    gender ENUM('Male', 'Female', 'Other', 'Prefer not to say') NOT NULL,
+    verified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (user_id, group_id),
+    FOREIGN KEY (group_id) REFERENCES groups_config (group_id) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS member_history (
     history_id INT AUTO_INCREMENT PRIMARY KEY,
     group_id BIGINT NOT NULL,

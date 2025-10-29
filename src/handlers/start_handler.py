@@ -2,9 +2,9 @@ from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import CommandHandler, ContextTypes
 import logging
 from datetime import datetime
-from services import database_service as db
-from bot_utils import safe_send_message, safe_reply_text
-import config
+from ..services import database_service as db
+from ..bot_utils import safe_send_message, safe_reply_text
+from .. import config
 from pathlib import Path
 import os
 

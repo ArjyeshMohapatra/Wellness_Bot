@@ -29,6 +29,9 @@ const Dashboard: React.FC = () => {
     const [hasAdminPermissions, setHasAdminPermissions] = useState(false);
     const [licenseKey, setLicenseKey] = useState<string | null>(null);
     const [generatingLicense, setGeneratingLicense] = useState(false);
+    const [generatingUserIds, setGeneratingUserIds] = useState(false);
+    const [generatedUserIds, setGeneratedUserIds] = useState<string[]>([]);
+    const [showUserIdSection, setShowUserIdSection] = useState(false);
     const {
         selectedPlan,
         selectedBilling,
@@ -371,6 +374,56 @@ const Dashboard: React.FC = () => {
             alert('Error generating license key. Please check your connection and try again.');
         } finally {
             setGeneratingLicense(false);
+        }
+    };
+
+    const handleGenerateUserIds = async () => {
+        try {
+            setGeneratingUserIds(true);
+            const adminUserId = localStorage.getItem('userId');
+            if (!adminUserId) {
+                alert('User not logged in. Please login again.');
+                return;
+            }
+
+            // First, get the group ID for this admin (we need it to generate user IDs)
+            const groupResponse = await fetch(`http://localhost:8001/api/admin/get-group-id?admin_user_id=${adminUserId}`);
+            const groupResult = await groupResponse.json();
+
+            if (!groupResult.success || !groupResult.group_id) {
+                alert('No group found for this admin. Please make sure the bot has been added to your group and license key has been activated.');
+                return;
+            }
+
+            const groupId = groupResult.group_id;
+
+            // Generate unique user IDs
+            const response = await fetch('http://localhost:8001/api/admin/generate-unique-user-ids', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    admin_user_id: parseInt(adminUserId),
+                    group_id: groupId,
+                    count: getCurrentMaxMembers()
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                setGeneratedUserIds(result.user_ids);
+                setShowUserIdSection(true);
+                alert(`Successfully generated ${result.user_ids.length} unique user IDs!`);
+            } else {
+                alert(`Failed to generate user IDs: ${result.message}`);
+            }
+        } catch (error) {
+            console.error('Error generating user IDs:', error);
+            alert('Error generating user IDs. Please check your connection and try again.');
+        } finally {
+            setGeneratingUserIds(false);
         }
     };
 
@@ -800,6 +853,83 @@ const Dashboard: React.FC = () => {
 
                                 <Typography variant="body2" sx={{ color: 'success.contrastText' }}>
                                     <strong>Next step:</strong> Copy this license key and paste it in your Telegram group. The bot will automatically detect it and activate your configuration for that group.
+                                </Typography>
+
+                                {/* Unique User ID Generation Section */}
+                                <Box sx={{ mt: 3, p: 2, bgcolor: 'info.light', borderRadius: 1, border: '1px solid', borderColor: 'info.main' }}>
+                                    <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: 'info.contrastText' }}>
+                                        🔐 Generate Unique User IDs
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ mb: 2, color: 'info.contrastText' }}>
+                                        Generate unique user IDs for your group members. Each member will need one of these IDs to join your group after completing KYC verification.
+                                    </Typography>
+                                    <Button
+                                        variant="contained"
+                                        color="primary"
+                                        onClick={handleGenerateUserIds}
+                                        disabled={generatingUserIds}
+                                        sx={{ minWidth: 200 }}
+                                    >
+                                        {generatingUserIds ? 'Generating...' : '🎯 Generate User IDs'}
+                                    </Button>
+                                </Box>
+                            </Box>
+                        )}
+
+                        {/* Generated User IDs Display */}
+                        {showUserIdSection && generatedUserIds.length > 0 && (
+                            <Box sx={{
+                                bgcolor: 'primary.light',
+                                p: 3,
+                                borderRadius: 2,
+                                mt: 3,
+                                border: '2px solid',
+                                borderColor: 'primary.main'
+                            }}>
+                                <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: 'primary.contrastText' }}>
+                                    🎉 Unique User IDs Generated!
+                                </Typography>
+                                <Typography variant="body1" sx={{ mb: 2, color: 'primary.contrastText' }}>
+                                    Here are your generated unique user IDs. Share these with your potential group members along with the bot link:
+                                </Typography>
+
+                                <Box sx={{
+                                    bgcolor: 'grey.100',
+                                    p: 2,
+                                    borderRadius: 1,
+                                    border: '1px solid',
+                                    borderColor: 'grey.300',
+                                    mb: 2,
+                                    maxHeight: '200px',
+                                    overflowY: 'auto'
+                                }}>
+                                    {generatedUserIds.map((userId, index) => (
+                                        <Box key={index} sx={{
+                                            fontFamily: 'monospace',
+                                            fontSize: '1rem',
+                                            fontWeight: 'bold',
+                                            p: 1,
+                                            mb: 1,
+                                            bgcolor: 'white',
+                                            borderRadius: 1,
+                                            border: '1px solid',
+                                            borderColor: 'grey.200',
+                                            textAlign: 'center'
+                                        }}>
+                                            {userId}
+                                        </Box>
+                                    ))}
+                                </Box>
+
+                                <Typography variant="body2" sx={{ color: 'primary.contrastText', fontWeight: 'bold' }}>
+                                    📋 Instructions for members:
+                                </Typography>
+                                <Typography variant="body2" sx={{ color: 'primary.contrastText', mt: 1 }}>
+                                    1. Share the bot link (@{botUsername}) and one unique user ID with each potential member<br />
+                                    2. Members will DM the bot and provide their user ID<br />
+                                    3. Bot will collect their KYC information (name, DOB, phone, profile pic, age, gender)<br />
+                                    4. After verification, bot will provide the group invitation link<br />
+                                    5. Members can then join the group freely
                                 </Typography>
                             </Box>
                         )}
