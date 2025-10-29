@@ -1566,7 +1566,7 @@ def assign_unique_user_id_to_member(group_id, user_id, unique_user_id):
         query = """
             UPDATE group_members
             SET user_id = %s
-            WHERE group_id = %s AND unique_user_id = %s AND user_id = 0
+            WHERE group_id = %s AND unique_user_id = %s AND user_id IS NULL
         """
         result = execute_query(query, (user_id, group_id, unique_user_id))
 
@@ -1591,7 +1591,7 @@ def get_available_unique_user_ids(group_id):
         query = """
             SELECT unique_user_id
             FROM group_members
-            WHERE group_id = %s AND unique_user_id IS NOT NULL AND user_id = 0
+            WHERE group_id = %s AND unique_user_id IS NOT NULL AND user_id IS NULL
             ORDER BY unique_user_id
         """
         result = execute_query(query, (group_id,), fetch=True)

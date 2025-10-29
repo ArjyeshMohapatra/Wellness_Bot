@@ -343,9 +343,14 @@ def api_generate_unique_user_ids():
         if not admin_user_id or not group_id:
             return jsonify({'success': False, 'message': 'Admin user ID and group ID required'}), 400
 
-        # Verify that this admin owns this group
+        # Verify that this admin owns this group (through license assignment)
         group_check = execute_query(
-            "SELECT group_id FROM groups_config WHERE group_id = %s AND admin_user_id = %s",
+            """
+            SELECT gc.group_id 
+            FROM groups_config gc
+            JOIN licenses l ON gc.license_key = l.license_key
+            WHERE gc.group_id = %s AND l.assigned_admin_id = %s AND l.is_active = TRUE
+            """,
             (group_id, admin_user_id),
             fetch=True
         )

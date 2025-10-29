@@ -92,14 +92,15 @@ def execute_query(query, params=None, fetch=False):
             # Don't commit for read operations
             return result
         else:
-            result = cursor.lastrowid or None
+            # For UPDATE/DELETE queries, return the number of affected rows
+            affected_rows = cursor.rowcount
             # Consume any remaining result sets
             while cursor.nextset():
                 pass
             # Only commit for write operations (INSERT, UPDATE, DELETE)
             if query.strip().upper().startswith(('INSERT', 'UPDATE', 'DELETE')):
                 conn.commit()
-            return result
+            return affected_rows
 
     except mysql.connector.Error as e:
         if conn:

@@ -144,7 +144,7 @@ CREATE TABLE IF NOT EXISTS slot_keywords (
 -- GROUP MEMBERS TABLE
 CREATE TABLE IF NOT EXISTS group_members (
     member_id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id BIGINT NOT NULL,
+    user_id BIGINT NULL,
     group_id BIGINT NOT NULL,
     username VARCHAR(255),
     first_name VARCHAR(255),
@@ -162,7 +162,6 @@ CREATE TABLE IF NOT EXISTS group_members (
     restriction_until TIMESTAMP NULL DEFAULT NULL,
     last_active_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (user_id, group_id),
     FOREIGN KEY (group_id) REFERENCES groups_config (group_id) ON DELETE CASCADE
 );
 
