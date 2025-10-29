@@ -285,9 +285,21 @@ const BotSettings: React.FC<BotSettingsProps> = ({
 
                     {/* Banned Words Section */}
                     <Box sx={{ border: '1px solid grey', borderRadius: 3, p: 2, mb: 3, mt: 2 }}>
-                        <Typography variant="h6" sx={{ mb: 2, color: 'text.secondary', fontSize: '1rem' }}>
-                            Add Banned Words
-                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                            <Button
+                                variant="outlined"
+                                size="small"
+                                startIcon={<AddIcon />}
+                                onClick={() => onBannedWordsChange([...bannedWords, ''])}
+                                sx={{
+                                    color: 'red',
+                                    backgroundColor: 'white',
+                                    borderRadius: '15px'
+                                }}
+                            >
+                                Add Banned Word
+                            </Button>
+                        </Box>
                         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                             {bannedWords.map((word, index) => (
                                 <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 200, p: '5px', border: '1px solid grey', borderRadius: 2 }}>
@@ -314,29 +326,8 @@ const BotSettings: React.FC<BotSettingsProps> = ({
                                     >
                                         <DeleteIcon />
                                     </IconButton>
-                                    <IconButton
-                                        size="small"
-                                        onClick={() => {
-                                            const newWords = [...bannedWords];
-                                            newWords.splice(index + 1, 0, '');
-                                            onBannedWordsChange(newWords);
-                                        }}
-                                        color="primary"
-                                    >
-                                        <AddIcon />
-                                    </IconButton>
                                 </Box>
                             ))}
-                            {bannedWords.length === 0 && (
-                                <Button
-                                    variant="outlined"
-                                    startIcon={<AddIcon />}
-                                    onClick={() => onBannedWordsChange([''])}
-                                    sx={{ minWidth: 200 }}
-                                >
-                                    Add First Banned Word
-                                </Button>
-                            )}
                         </Box>
                     </Box>
 
@@ -363,8 +354,9 @@ const BotSettings: React.FC<BotSettingsProps> = ({
                         )}
                     </Box>
                 </>
-            )}
-        </Box>
+            )
+            }
+        </Box >
     );
 };
 
