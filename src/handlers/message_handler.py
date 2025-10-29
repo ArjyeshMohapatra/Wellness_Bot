@@ -527,15 +527,33 @@ async def handle_license_key(message, context, license_key):
         config_query = "UPDATE groups_config SET license_key = %s WHERE group_id = %s"
         execute_query(config_query, (license_key, group_id))
 
+        # Check if bot has admin permissions in this group
+        has_admin_permissions = False
+        try:
+            bot_member = await context.bot.get_chat_member(group_id, context.bot.id)
+            has_admin_permissions = bot_member.status in ["administrator", "creator"]
+            
+            # Update admin permissions status in database
+            admin_update_query = "UPDATE groups_config SET has_admin_permissions = %s WHERE group_id = %s"
+            execute_query(admin_update_query, (has_admin_permissions, group_id))
+            
+            logger.info(f"Bot admin permissions verified for group {group_id}: {has_admin_permissions}")
+        except Exception as e:
+            logger.warning(f"Could not verify bot admin permissions for group {group_id}: {e}")
+            # Don't fail the activation if we can't check permissions
+
         logger.info(f"License key {license_key} assigned to group {group_id}")
 
         # Send success message
+        admin_status_text = "✅ Admin permissions verified!" if has_admin_permissions else "⚠️ Please ensure I have admin permissions for full functionality."
+        
         await safe_send_message(
             context=context,
             chat_id=message.chat.id,
             text=f"🎉 **License Activated Successfully!**\n\n"
-            f"✅ License Key: `{license_key}`\n\n"
-            f"Your wellness bot is now fully activated!\n\n"
+            f"✅ License Key: `{license_key}`\n"
+            f"{admin_status_text}\n\n"
+            f"Your wellness bot is now activated!\n\n"
             f"🚀 **Features Now Available:**\n"
             f"• Automatic point tracking\n"
             f"• Time slot management\n"

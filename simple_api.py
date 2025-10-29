@@ -246,22 +246,45 @@ def api_save_admin_panel():
         if not all([admin_user_id, config_data]):
             return jsonify({'success': False, 'message': 'Missing required fields: admin_user_id, config_data'}), 400
 
+        # Generate a license key for this configuration
+        from generate_license import generate_license_key
+        license_key = generate_license_key()
+
+        # Add license key to config data
+        config_data['license_key'] = license_key
+
         # If group_id is not provided, save as admin template with group_id=None
         if not group_id:
             # Save configuration with NULL group_id using admin_user_id
             success = save_admin_panel_config(admin_user_id, None, config_data)
             if success:
-                return jsonify({'success': True, 'message': 'Configuration template saved successfully'}), 200
+                # Save license key to database
+                execute_query(
+                    "INSERT INTO licenses (license_key, is_active, assigned_group_id, assigned_admin_id, created_at) VALUES (%s, TRUE, %s, %s, NOW())",
+                    (license_key, None, admin_user_id)
+                )
+                return jsonify({
+                    'success': True,
+                    'message': 'Configuration template saved successfully',
+                    'license_key': license_key,
+                    'bot_username': 'WellnessBot'
+                }), 200
             else:
                 return jsonify({'success': False, 'message': 'Failed to save configuration template'}), 500
 
         # Save configuration for specific group
         success = save_admin_panel_config(admin_user_id, int(group_id), config_data)
         if success:
+            # Save license key to database
+            execute_query(
+                "INSERT INTO licenses (license_key, is_active, assigned_group_id, assigned_admin_id, created_at) VALUES (%s, TRUE, %s, %s, NOW())",
+                (license_key, int(group_id), admin_user_id)
+            )
             return jsonify({
-                'success': True, 
+                'success': True,
                 'message': 'Configuration saved successfully',
-                'bot_username': 'WellnessBot'  # TODO: Get this from bot info
+                'license_key': license_key,
+                'bot_username': 'WellnessBot'
             }), 200
         else:
             return jsonify({'success': False, 'message': 'Failed to save configuration'}), 500

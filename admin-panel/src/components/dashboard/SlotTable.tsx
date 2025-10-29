@@ -51,6 +51,7 @@ interface SlotTableProps {
     onSlotTypeChange: (index: number, type: 'media' | 'button') => void;
     onSlotButtonCountChange: (index: number, count: number) => void;
     onSlotButtonIndexChange: (index: number, buttonIndex: number) => void;
+    disabled?: boolean;
 }
 
 const SlotTable: React.FC<SlotTableProps> = ({
@@ -59,7 +60,8 @@ const SlotTable: React.FC<SlotTableProps> = ({
     onSlotChange,
     onSlotTypeChange,
     onSlotButtonCountChange,
-    onSlotButtonIndexChange
+    onSlotButtonIndexChange,
+    disabled = false
 }) => {
     const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
     const theme = useTheme();
@@ -92,6 +94,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                 <IconButton
                                     size="small"
                                     onClick={() => toggleRowExpansion(index)}
+                                    disabled={disabled}
                                 >
                                     {expandedRows.has(index) ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                                 </IconButton>
@@ -102,6 +105,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                     <Select
                                         value={slot.type}
                                         onChange={(e) => onSlotTypeChange(index, e.target.value as 'media' | 'button')}
+                                        disabled={disabled}
                                     >
                                         <MenuItem value="media">📷 Media</MenuItem>
                                         <MenuItem value="button">🔘 Button</MenuItem>
@@ -112,6 +116,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                         checked={slot.compulsory}
                                         onChange={() => onSlotChange(index, 'compulsory', !slot.compulsory)}
                                         size="small"
+                                        disabled={disabled}
                                     />
                                     <Typography variant="caption">Required</Typography>
                                 </Box>
@@ -127,6 +132,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                             onChange={(e) => onSlotChange(index, 'startTime', e.target.value)}
                                             size="small"
                                             sx={{ flex: 1 }}
+                                            disabled={disabled}
                                         />
                                         <TextField
                                             label="End Time"
@@ -135,6 +141,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                             onChange={(e) => onSlotChange(index, 'endTime', e.target.value)}
                                             size="small"
                                             sx={{ flex: 1 }}
+                                            disabled={disabled}
                                         />
                                         <TextField
                                             label="Points"
@@ -144,6 +151,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                             size="small"
                                             sx={{ width: 80 }}
                                             inputProps={{ min: 0, max: 100 }}
+                                            disabled={disabled}
                                         />
                                     </Box>
 
@@ -157,6 +165,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                                 size="small"
                                                 sx={{ width: 120, mb: 1 }}
                                                 inputProps={{ min: 1, max: 10 }}
+                                                disabled={disabled}
                                             />
                                             <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                                                 <TextField
@@ -169,6 +178,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                                     }}
                                                     size="small"
                                                     sx={{ width: 80 }}
+                                                    disabled={disabled}
                                                 />
                                                 <TextField
                                                     label="Value"
@@ -181,6 +191,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                                     }}
                                                     size="small"
                                                     sx={{ width: 80 }}
+                                                    disabled={disabled}
                                                 />
                                                 <IconButton
                                                     size="small"
@@ -190,6 +201,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                                         const nextIndex = currentIndex < maxIndex ? currentIndex + 1 : 0;
                                                         onSlotButtonIndexChange(index, nextIndex);
                                                     }}
+                                                    disabled={disabled}
                                                 >
                                                     →
                                                 </IconButton>
@@ -205,6 +217,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                         fullWidth
                                         sx={{ mb: 1 }}
                                         placeholder="Bot response message"
+                                        disabled={disabled}
                                     />
                                     <TextField
                                         label="Post Response"
@@ -213,6 +226,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                         size="small"
                                         fullWidth
                                         placeholder="Post-response message"
+                                        disabled={disabled}
                                     />
 
                                     {/* Image Upload Section */}
@@ -240,6 +254,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                                     startIcon={<DeleteIcon />}
                                                     onClick={() => onSlotChange(index, 'image', '')}
                                                     sx={{ mt: 1 }}
+                                                    disabled={disabled}
                                                 >
                                                     Remove Image
                                                 </Button>
@@ -252,6 +267,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                             size="small"
                                             startIcon={<PhotoIcon />}
                                             fullWidth
+                                            disabled={disabled}
                                         >
                                             {slot.image ? 'Change Image' : 'Upload Image'}
                                             <input
@@ -311,6 +327,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                             size="small"
                                             placeholder="Enter slot name"
                                             fullWidth
+                                            disabled={disabled}
                                         />
                                     </TableCell>
                                     <TableCell>
@@ -318,6 +335,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                             <Select
                                                 value={slot.type}
                                                 onChange={(e) => onSlotTypeChange(index, e.target.value as 'media' | 'button')}
+                                                disabled={disabled}
                                             >
                                                 <MenuItem value="media">📷 Media</MenuItem>
                                                 <MenuItem value="button">🔘 Button</MenuItem>
@@ -329,6 +347,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                             checked={slot.compulsory}
                                             onChange={() => onSlotChange(index, 'compulsory', !slot.compulsory)}
                                             size="small"
+                                            disabled={disabled}
                                         />
                                     </TableCell>
                                     <TableCell>
@@ -339,6 +358,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                                 onChange={(e) => onSlotChange(index, 'startTime', e.target.value)}
                                                 size="small"
                                                 sx={{ width: 135 }}
+                                                disabled={disabled}
                                             />
                                             <TextField
                                                 type="time"
@@ -346,6 +366,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                                 onChange={(e) => onSlotChange(index, 'endTime', e.target.value)}
                                                 size="small"
                                                 sx={{ width: 135 }}
+                                                disabled={disabled}
                                             />
                                         </Box>
                                     </TableCell>
@@ -357,6 +378,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                             size="small"
                                             sx={{ width: 70 }}
                                             inputProps={{ min: 0, max: 100 }}
+                                            disabled={disabled}
                                         />
                                     </TableCell>
                                     <TableCell>
@@ -369,6 +391,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                                     size="small"
                                                     sx={{ width: 60 }}
                                                     inputProps={{ min: 1, max: 10 }}
+                                                    disabled={disabled}
                                                 />
                                                 <Typography variant="caption">
                                                     {slotButtonIndices[index] !== undefined ? `Btn ${(slotButtonIndices[index] || 0) + 1}` : 'Btn 1'}
@@ -383,6 +406,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                             size="small"
                                             onClick={() => toggleRowExpansion(index)}
                                             color="primary"
+                                            disabled={disabled}
                                         >
                                             {expandedRows.has(index) ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                                         </IconButton>
@@ -408,6 +432,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                                                         }}
                                                                         size="small"
                                                                         sx={{ width: 160 }}
+                                                                        disabled={disabled}
                                                                     />
                                                                     <TextField
                                                                         label="Value"
@@ -421,6 +446,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                                                         size="small"
                                                                         sx={{ width: 80 }}
                                                                         inputProps={{ min: 0 }}
+                                                                        disabled={disabled}
                                                                     />
                                                                 </Box>
                                                             ))}
@@ -435,6 +461,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                                         size="small"
                                                         sx={{ flex: 1 }}
                                                         placeholder="Bot response message"
+                                                        disabled={disabled}
                                                     />
                                                     <TextField
                                                         label="Post Response"
@@ -443,6 +470,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                                         size="small"
                                                         sx={{ flex: 1 }}
                                                         placeholder="Post-response message"
+                                                        disabled={disabled}
                                                     />
                                                 </Box>
                                                 {/* Image Upload Section for Desktop Table */}
@@ -454,6 +482,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                                             component="label"
                                                             size="small"
                                                             sx={{ minWidth: 120 }}
+                                                            disabled={disabled}
                                                         >
                                                             Upload Image
                                                             <input
@@ -485,6 +514,7 @@ const SlotTable: React.FC<SlotTableProps> = ({
                                                                     size="small"
                                                                     onClick={() => onSlotChange(index, 'image', '')}
                                                                     color="error"
+                                                                    disabled={disabled}
                                                                 >
                                                                     <DeleteIcon fontSize="small" />
                                                                 </IconButton>

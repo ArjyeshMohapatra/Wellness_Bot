@@ -22,6 +22,7 @@ interface SlotCardProps {
     onSlotChange: (index: number, field: keyof Slot, value: string | number | boolean | string[] | number[]) => void;
     onCurrentSlotIndexChange: (index: number) => void;
     onCurrentButtonIndexChange: (index: number) => void;
+    disabled?: boolean;
 }
 
 const SlotCard: React.FC<SlotCardProps> = ({
@@ -30,7 +31,8 @@ const SlotCard: React.FC<SlotCardProps> = ({
     currentButtonIndex,
     onSlotChange,
     onCurrentSlotIndexChange,
-    onCurrentButtonIndexChange
+    onCurrentButtonIndexChange,
+    disabled = false
 }) => {
     return (
         <div className="d-md-none mt-3">
@@ -50,6 +52,7 @@ const SlotCard: React.FC<SlotCardProps> = ({
                                 id={`compulsory-${currentSlotIndex}`}
                                 checked={slots[currentSlotIndex]?.compulsory || false}
                                 onChange={(e) => onSlotChange(currentSlotIndex, 'compulsory', e.target.checked)}
+                                disabled={disabled}
                             />
                             <label className="form-check-label" htmlFor={`compulsory-${currentSlotIndex}`}>
                                 Compulsory
@@ -67,6 +70,7 @@ const SlotCard: React.FC<SlotCardProps> = ({
                                     value={slots[currentSlotIndex]?.name || ''}
                                     onChange={(e) => onSlotChange(currentSlotIndex, 'name', e.target.value)}
                                     placeholder="Enter slot name"
+                                    disabled={disabled}
                                 />
                             </div>
 
@@ -78,6 +82,7 @@ const SlotCard: React.FC<SlotCardProps> = ({
                                     id={`type-${currentSlotIndex}`}
                                     value={slots[currentSlotIndex]?.type || 'media'}
                                     onChange={(e) => onSlotChange(currentSlotIndex, 'type', e.target.value)}
+                                    disabled={disabled}
                                 >
                                     <option value="media">Media</option>
                                     <option value="button">Button</option>
@@ -99,6 +104,7 @@ const SlotCard: React.FC<SlotCardProps> = ({
                                         min="1"
                                         max="10"
                                         placeholder="Enter number of buttons"
+                                        disabled={disabled}
                                     />
                                 </div>
 
@@ -113,7 +119,7 @@ const SlotCard: React.FC<SlotCardProps> = ({
                                                 const maxIndex = (slots[currentSlotIndex]?.buttonCount || 2) - 1;
                                                 onCurrentButtonIndexChange(currentButtonIndex > 0 ? currentButtonIndex - 1 : maxIndex);
                                             }}
-                                            disabled={(slots[currentSlotIndex]?.buttonCount || 2) <= 1}
+                                            disabled={(slots[currentSlotIndex]?.buttonCount || 2) <= 1 || disabled}
                                         >
                                             ←
                                         </button>
@@ -128,6 +134,7 @@ const SlotCard: React.FC<SlotCardProps> = ({
                                                     newNames[currentButtonIndex] = e.target.value;
                                                     onSlotChange(currentSlotIndex, 'buttonNames', newNames);
                                                 }}
+                                                disabled={disabled}
                                             />
                                             <input
                                                 type="number"
@@ -140,6 +147,7 @@ const SlotCard: React.FC<SlotCardProps> = ({
                                                     onSlotChange(currentSlotIndex, 'buttonValues', newValues);
                                                 }}
                                                 min="0"
+                                                disabled={disabled}
                                             />
                                         </div>
                                         <button
@@ -149,7 +157,7 @@ const SlotCard: React.FC<SlotCardProps> = ({
                                                 const maxIndex = (slots[currentSlotIndex]?.buttonCount || 2) - 1;
                                                 onCurrentButtonIndexChange(currentButtonIndex < maxIndex ? currentButtonIndex + 1 : 0);
                                             }}
-                                            disabled={(slots[currentSlotIndex]?.buttonCount || 2) <= 1}
+                                            disabled={(slots[currentSlotIndex]?.buttonCount || 2) <= 1 || disabled}
                                         >
                                             →
                                         </button>
@@ -171,6 +179,7 @@ const SlotCard: React.FC<SlotCardProps> = ({
                                     id={`start-${currentSlotIndex}`}
                                     value={slots[currentSlotIndex]?.startTime || ''}
                                     onChange={(e) => onSlotChange(currentSlotIndex, 'startTime', e.target.value)}
+                                    disabled={disabled}
                                 />
                             </div>
                             <div className="col-6">
@@ -181,6 +190,7 @@ const SlotCard: React.FC<SlotCardProps> = ({
                                     id={`end-${currentSlotIndex}`}
                                     value={slots[currentSlotIndex]?.endTime || ''}
                                     onChange={(e) => onSlotChange(currentSlotIndex, 'endTime', e.target.value)}
+                                    disabled={disabled}
                                 />
                             </div>
                         </div>
@@ -194,6 +204,7 @@ const SlotCard: React.FC<SlotCardProps> = ({
                                 onChange={(e) => onSlotChange(currentSlotIndex, 'points', Number(e.target.value))}
                                 min="0"
                                 max="100"
+                                disabled={disabled}
                             />
                         </div>
                         <div className="mt-2">
@@ -205,6 +216,7 @@ const SlotCard: React.FC<SlotCardProps> = ({
                                 value={slots[currentSlotIndex]?.botResponse || ''}
                                 onChange={(e) => onSlotChange(currentSlotIndex, 'botResponse', e.target.value)}
                                 placeholder="Enter bot response message"
+                                disabled={disabled}
                             />
                         </div>
                         <div className="mt-2">
@@ -216,6 +228,7 @@ const SlotCard: React.FC<SlotCardProps> = ({
                                 value={slots[currentSlotIndex]?.postResponse || ''}
                                 onChange={(e) => onSlotChange(currentSlotIndex, 'postResponse', e.target.value)}
                                 placeholder="Enter post response action"
+                                disabled={disabled}
                             />
                         </div>
 
@@ -235,6 +248,7 @@ const SlotCard: React.FC<SlotCardProps> = ({
                                         type="button"
                                         className="btn btn-outline-danger btn-sm mt-2"
                                         onClick={() => onSlotChange(currentSlotIndex, 'image', '')}
+                                        disabled={disabled}
                                     >
                                         <i className="fas fa-trash me-1"></i>
                                         Remove Image
@@ -262,6 +276,7 @@ const SlotCard: React.FC<SlotCardProps> = ({
                                             reader.readAsDataURL(file);
                                         }
                                     }}
+                                    disabled={disabled}
                                 />
                             </div>
                             <small className="text-muted">
@@ -280,6 +295,7 @@ const SlotCard: React.FC<SlotCardProps> = ({
                                     className={`btn ${index === currentSlotIndex ? 'btn-primary' : 'btn-outline-secondary'} d-block w-100`}
                                     onClick={() => onCurrentSlotIndexChange(index)}
                                     style={{ height: '60px', borderRadius: '8px' }}
+                                    disabled={disabled}
                                 >
                                     <div className="text-center">
                                         <div className="h5 mb-1">

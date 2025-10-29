@@ -6,8 +6,6 @@ import {
     Paper,
     CircularProgress,
     IconButton,
-    AppBar,
-    Toolbar,
 } from '@mui/material';
 import {
     ContentCopy as ContentCopyIcon,

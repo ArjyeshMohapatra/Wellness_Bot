@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Subscription from './dashboard/Subscription';
 import PaymentPopup from './dashboard/PaymentPopup';
 import BotSettings from './dashboard/BotSettings';
@@ -29,6 +29,7 @@ import {
     LocalHospital as HospitalIcon,
     ContentCopy as ContentCopyIcon,
     ExpandMore as ExpandMoreIcon,
+    PersonAdd as PersonAddIcon,
 } from '@mui/icons-material';
 
 const Dashboard: React.FC = () => {
@@ -106,57 +107,83 @@ const Dashboard: React.FC = () => {
         handleSlotChange
     } = useSlotConfiguration(loadedSlots);
 
+    // Function to load configuration
+    const loadConfiguration = useCallback(async () => {
+        try {
+            // Load dashboard state from localStorage first
+            const savedDashboardState = localStorage.getItem('dashboardState');
+            if (savedDashboardState) {
+                const state = JSON.parse(savedDashboardState);
+                setBotUsername(state.botUsername || 'WellnessBot');
+                setHasAdminPermissions(state.hasAdminPermissions || false);
+                setLicenseKey(state.licenseKey || null);
+                setLoadedSlots(state.loadedSlots || []);
+            }
+
+            // Load dashboard settings from database
+            const adminUserId = localStorage.getItem('userId');
+            console.log('Loading dashboard for adminUserId:', adminUserId);
+
+            if (!adminUserId) {
+                console.error('No adminUserId found');
+                return;
+            }
+
+            const dashboardResponse = await fetch(`http://localhost:8001/api/admin/dashboard/settings?admin_user_id=${adminUserId}`);
+            const dashboardResult = await dashboardResponse.json();
+            if (dashboardResult.success && dashboardResult.settings) {
+                const dbSettings = dashboardResult.settings;
+                setBotUsername(dbSettings.bot_username || 'WellnessBot');
+                setHasAdminPermissions(dbSettings.has_admin_permissions || false);
+                setLicenseKey(dbSettings.license_key || null);
+                setLoadedSlots(dbSettings.loaded_slots || []);
+
+                // Load event configuration
+                setEventType(dbSettings.event_type || 'normal');
+                setEventName(dbSettings.event_name || '');
+                setEventDays(dbSettings.event_days?.toString() || '');
+                setPassPoints(dbSettings.pass_points?.toString() || '');
+                setSlotsPerDay(dbSettings.slots_per_day?.toString() || '');
+                setWelcomeMessage(dbSettings.welcome_message || '');
+                setKickResponse(dbSettings.kick_response || '');
+                setUndesignatedSlotResponse(dbSettings.undesignated_slot_response || '');
+                setLeaderboardTime(dbSettings.leaderboard_time || '');
+                setBannedWords(dbSettings.banned_words || []);
+            }
+        } catch (error) {
+            console.error('Error loading configuration:', error);
+        }
+    }, [setEventType, setEventName, setEventDays, setPassPoints, setSlotsPerDay, setWelcomeMessage, setKickResponse, setUndesignatedSlotResponse, setLeaderboardTime, setBannedWords]);
+
+    // Function to refresh admin permissions
+    const refreshAdminPermissions = useCallback(async () => {
+        try {
+            const adminUserId = localStorage.getItem('userId');
+            if (!adminUserId) return;
+
+            const dashboardResponse = await fetch(`http://localhost:8001/api/admin/dashboard/settings?admin_user_id=${adminUserId}`);
+            const dashboardResult = await dashboardResponse.json();
+            if (dashboardResult.success && dashboardResult.settings) {
+                const dbSettings = dashboardResult.settings;
+                setHasAdminPermissions(dbSettings.has_admin_permissions || false);
+                setLicenseKey(dbSettings.license_key || null);
+            }
+        } catch (error) {
+            console.error('Error refreshing admin permissions:', error);
+        }
+    }, []);
+
     // Load saved configuration on component mount
     useEffect(() => {
-        const loadConfiguration = async () => {
-            try {
-                // Load dashboard state from localStorage first
-                const savedDashboardState = localStorage.getItem('dashboardState');
-                if (savedDashboardState) {
-                    const state = JSON.parse(savedDashboardState);
-                    setBotUsername(state.botUsername || 'WellnessBot');
-                    setHasAdminPermissions(state.hasAdminPermissions || false);
-                    setLicenseKey(state.licenseKey || null);
-                    setLoadedSlots(state.loadedSlots || []);
-                }
-
-                // Load dashboard settings from database
-                const adminUserId = localStorage.getItem('userId');
-                console.log('Loading dashboard for adminUserId:', adminUserId);
-
-                if (!adminUserId) {
-                    console.error('No adminUserId found');
-                    return;
-                }
-
-                const dashboardResponse = await fetch(`http://localhost:8001/api/admin/dashboard/settings?admin_user_id=${adminUserId}`);
-                const dashboardResult = await dashboardResponse.json();
-                if (dashboardResult.success && dashboardResult.settings) {
-                    const dbSettings = dashboardResult.settings;
-                    setBotUsername(dbSettings.bot_username || 'WellnessBot');
-                    setHasAdminPermissions(dbSettings.has_admin_permissions || false);
-                    setLicenseKey(dbSettings.license_key || null);
-                    setLoadedSlots(dbSettings.loaded_slots || []);
-
-                    // Load event configuration
-                    setEventType(dbSettings.event_type || 'normal');
-                    setEventName(dbSettings.event_name || '');
-                    setEventDays(dbSettings.event_days?.toString() || '');
-                    setPassPoints(dbSettings.pass_points?.toString() || '');
-                    setSlotsPerDay(dbSettings.slots_per_day?.toString() || '');
-                    setWelcomeMessage(dbSettings.welcome_message || '');
-                    setKickResponse(dbSettings.kick_response || '');
-                    setUndesignatedSlotResponse(dbSettings.undesignated_slot_response || '');
-                    setLeaderboardTime(dbSettings.leaderboard_time || '');
-                    setBannedWords(dbSettings.banned_words || []);
-                }
-            } catch (error) {
-                console.error('Error loading configuration:', error);
-            }
-        };
-
         loadConfiguration();
-    }, [setEventType, setEventName, setEventDays, setPassPoints, setSlotsPerDay, setWelcomeMessage, setKickResponse, setUndesignatedSlotResponse, setLeaderboardTime, setBannedWords]);
+
+        // Set up periodic refresh of admin permissions (every 30 seconds)
+        const interval = setInterval(() => {
+            refreshAdminPermissions();
+        }, 30000);
+
+        return () => clearInterval(interval);
+    }, [loadConfiguration, refreshAdminPermissions]);
 
     // Save dashboard state to localStorage whenever it changes
     useEffect(() => {
@@ -284,7 +311,7 @@ const Dashboard: React.FC = () => {
                 setLoadedSlots(slots);
 
                 // Also save dashboard settings to persist across sessions
-                const dashboardSaveSuccess = await saveDashboardSettings();
+                const dashboardSaveSuccess = await saveDashboardSettings(result.license_key);
                 if (!dashboardSaveSuccess) {
                     alert('Configuration saved to bot, but dashboard persistence failed. Settings may not be restored on next login.');
                 }
@@ -292,12 +319,16 @@ const Dashboard: React.FC = () => {
                 // Show configuration dialog instead of setting configurationSaved
                 setConfigurationDialogData({
                     botUsername: result.bot_username || botUsername,
-                    licenseKey: licenseKey
+                    licenseKey: result.license_key || licenseKey
                 });
                 setShowConfigurationDialog(true);
                 // Store bot username for future use
                 if (result.bot_username) {
                     setBotUsername(result.bot_username);
+                }
+                // Update license key if returned by API
+                if (result.license_key) {
+                    setLicenseKey(result.license_key);
                 }
             } else {
                 alert(`Failed to save configuration: ${result.message}`);
@@ -429,21 +460,34 @@ const Dashboard: React.FC = () => {
                     {/* Mobile Layout */}
                     <Box sx={{ display: { xs: 'flex', md: 'none' }, alignItems: 'center', gap: 1 }}>
                         {hasActiveSubscription && (
-                            <IconButton
-                                color="primary"
-                                size="small"
-                                onClick={() => setShowSubscriptionPanel(!showSubscriptionPanel)}
-                                disabled={subscriptionLoading}
-                                sx={{ p: 1 }}
-                            >
-                                {subscriptionLoading ? <CircularProgress size={20} /> : <CreditCardIcon />}
-                            </IconButton>
+                            <>
+                                <IconButton
+                                    color="primary"
+                                    size="small"
+                                    onClick={() => setShowSubscriptionPanel(!showSubscriptionPanel)}
+                                    disabled={subscriptionLoading}
+                                    sx={{ p: 1 }}
+                                    title={subscriptionLoading ? 'Loading...' : (showSubscriptionPanel ? 'Hide Subscription' : 'Manage Subscription')}
+                                >
+                                    {subscriptionLoading ? <CircularProgress size={20} /> : <CreditCardIcon />}
+                                </IconButton>
+                                <IconButton
+                                    color="secondary"
+                                    size="small"
+                                    onClick={() => setCurrentView(currentView === 'dashboard' ? 'user-ids' : 'dashboard')}
+                                    sx={{ p: 1 }}
+                                    title={currentView === 'dashboard' ? 'Generate User IDs' : 'Hide User IDs'}
+                                >
+                                    <PersonAddIcon />
+                                </IconButton>
+                            </>
                         )}
                         <IconButton
                             color="error"
                             size="small"
                             onClick={logout}
                             sx={{ p: 1 }}
+                            title="Logout"
                         >
                             <LogoutIcon />
                         </IconButton>
@@ -682,10 +726,10 @@ const Dashboard: React.FC = () => {
                                     <strong>Grant admin permissions:</strong> Make sure the bot has admin permissions in your group (can delete messages, ban users, etc.).
                                 </li>
                                 <li style={{ marginBottom: '8px' }}>
-                                    <strong>Activate the bot:</strong> Send your license key to the group chat. The bot will automatically detect it and activate your configuration.
+                                    <strong>Activate the license:</strong> Copy the license key below and send it to your group chat. The bot will automatically detect it and confirm admin permissions.
                                 </li>
                                 <li style={{ marginBottom: '8px' }}>
-                                    <strong>Generate user IDs:</strong> Use the "Generate User IDs" option in the navbar to create unique IDs for your group members.
+                                    <strong>Generate user IDs:</strong> Once activated, use the "Generate User IDs" option in the navbar to create unique IDs for your group members.
                                 </li>
                                 <li style={{ marginBottom: '8px' }}>
                                     <strong>Share with members:</strong> Distribute the bot link and unique user IDs to your potential group members.
@@ -697,13 +741,30 @@ const Dashboard: React.FC = () => {
                         </AccordionDetails>
                     </Accordion>
 
-                    {/* Admin Permission Confirmed & License Key */}
+                    {/* Admin Permission Status & License Key */}
                     <Box sx={{ textAlign: 'center' }}>
-                        <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: 'success.main' }}>
-                            ✅ Admin Permission Confirmed
-                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, mb: 2 }}>
+                            <Typography variant="h6" sx={{ fontWeight: 'bold', color: hasAdminPermissions ? 'success.main' : 'warning.main' }}>
+                                {hasAdminPermissions ? '✅ Admin Permission Confirmed' : '⚠️ Admin Permission Required'}
+                            </Typography>
+                            <IconButton
+                                size="small"
+                                onClick={refreshAdminPermissions}
+                                sx={{
+                                    '&:hover': {
+                                        bgcolor: 'rgba(0, 0, 0, 0.1)'
+                                    }
+                                }}
+                                title="Refresh Admin Permission Status"
+                            >
+                                🔄
+                            </IconButton>
+                        </Box>
                         <Typography variant="body1" sx={{ mb: 2 }}>
-                            Your admin permissions have been verified and your bot configuration is ready.
+                            {hasAdminPermissions
+                                ? 'Your admin permissions have been verified and your bot configuration is ready.'
+                                : 'Your license key has been generated. Please complete the setup steps below to activate your bot.'
+                            }
                         </Typography>
 
                         {configurationDialogData?.licenseKey && (
@@ -743,7 +804,7 @@ const Dashboard: React.FC = () => {
                                     </IconButton>
                                 </Box>
                                 <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
-                                    Copy this license key and send it to your group chat to activate the bot.
+                                    Copy this license key and send it to your group chat to activate the bot and verify admin permissions.
                                 </Typography>
                             </Box>
                         )}

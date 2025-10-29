@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useState } from 'react';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import {
     Typography,
     TextField,
@@ -110,8 +110,27 @@ const BotSettings: React.FC<BotSettingsProps> = ({
     onSaveConfiguration,
     isConfigurationValid = false
 }) => {
-    const [isEditing, setIsEditing] = useState(true); // Start in edit mode
+    const [isEditing, setIsEditing] = useState(() => {
+        // Read initial state from localStorage, default to true (edit mode)
+        try {
+            const saved = localStorage.getItem('botSettingsIsEditing');
+            return saved !== null ? JSON.parse(saved) : true;
+        } catch (error) {
+            // If there's an error parsing localStorage, default to true
+            console.warn('Error reading botSettingsIsEditing from localStorage:', error);
+            return true;
+        }
+    });
     const [showEditDialog, setShowEditDialog] = useState(false);
+
+    // Save isEditing state to localStorage whenever it changes
+    useEffect(() => {
+        try {
+            localStorage.setItem('botSettingsIsEditing', JSON.stringify(isEditing));
+        } catch (error) {
+            console.warn('Error saving botSettingsIsEditing to localStorage:', error);
+        }
+    }, [isEditing]);
 
     // Debounced change handlers to improve INP performance
     // Removed debouncing from input fields for immediate responsiveness
@@ -335,6 +354,7 @@ const BotSettings: React.FC<BotSettingsProps> = ({
                                 onSlotButtonIndexChange={onSlotButtonIndexChange}
                                 onCurrentSlotIndexChange={onCurrentSlotIndexChange}
                                 onCurrentButtonIndexChange={onCurrentButtonIndexChange}
+                                disabled={!isEditing}
                             />
                         </Suspense>
 

@@ -28,6 +28,7 @@ interface SlotConfigurationProps {
     onSlotButtonIndexChange: (index: number, buttonIndex: number) => void;
     onCurrentSlotIndexChange: (index: number) => void;
     onCurrentButtonIndexChange: (index: number) => void;
+    disabled?: boolean;
 }
 
 const SlotConfiguration: React.FC<SlotConfigurationProps> = ({
@@ -40,7 +41,8 @@ const SlotConfiguration: React.FC<SlotConfigurationProps> = ({
     onSlotButtonCountChange,
     onSlotButtonIndexChange,
     onCurrentSlotIndexChange,
-    onCurrentButtonIndexChange
+    onCurrentButtonIndexChange,
+    disabled = false
 }) => {
     return (
         <>
@@ -53,6 +55,7 @@ const SlotConfiguration: React.FC<SlotConfigurationProps> = ({
                     onSlotTypeChange={onSlotTypeChange}
                     onSlotButtonCountChange={onSlotButtonCountChange}
                     onSlotButtonIndexChange={onSlotButtonIndexChange}
+                    disabled={disabled}
                 />
             </div>
 
@@ -64,6 +67,7 @@ const SlotConfiguration: React.FC<SlotConfigurationProps> = ({
                 onSlotChange={onSlotChange}
                 onCurrentSlotIndexChange={onCurrentSlotIndexChange}
                 onCurrentButtonIndexChange={onCurrentButtonIndexChange}
+                disabled={disabled}
             />
         </>
     );
