@@ -19,6 +19,7 @@ import {
     Logout as LogoutIcon,
     CreditCard as CreditCardIcon,
     LocalHospital as HospitalIcon,
+    ContentCopy as ContentCopyIcon,
 } from '@mui/icons-material';
 
 const Dashboard: React.FC = () => {
@@ -191,6 +192,24 @@ const Dashboard: React.FC = () => {
         if (slotErrors.totalPoints || slotErrors.overlaps) return false;
 
         return true;
+    };
+
+    // Copy to clipboard function
+    const copyToClipboard = async (text: string, label: string) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            alert(`${label} copied to clipboard!`);
+        } catch (error) {
+            console.error('Failed to copy to clipboard:', error);
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            alert(`${label} copied to clipboard!`);
+        }
     };
 
     // Save configuration handler
@@ -542,7 +561,7 @@ const Dashboard: React.FC = () => {
             )}
 
             {/* Bot Information Display */}
-            {hasActiveSubscription && !showSubscriptionPanel && (
+            {hasActiveSubscription && !showSubscriptionPanel && licenseKey && (
                 <Box sx={{ mt: 2, mb: 2 }}>
                     <Box sx={{
                         bgcolor: 'info.light',
@@ -576,15 +595,29 @@ const Dashboard: React.FC = () => {
                                     <Typography variant="body2" sx={{ color: 'info.contrastText', opacity: 0.9 }}>
                                         License Key
                                     </Typography>
-                                    <Typography variant="body1" sx={{
-                                        color: 'info.contrastText',
-                                        fontWeight: 'bold',
-                                        fontFamily: 'monospace',
-                                        mt: 1,
-                                        wordBreak: 'break-all'
-                                    }}>
-                                        {licenseKey}
-                                    </Typography>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                                        <Typography variant="body1" sx={{
+                                            color: 'info.contrastText',
+                                            fontWeight: 'bold',
+                                            fontFamily: 'monospace',
+                                            wordBreak: 'break-all',
+                                            flex: 1
+                                        }}>
+                                            {licenseKey}
+                                        </Typography>
+                                        <IconButton
+                                            size="small"
+                                            onClick={() => copyToClipboard(licenseKey, 'License Key')}
+                                            sx={{
+                                                color: 'info.contrastText',
+                                                '&:hover': {
+                                                    bgcolor: 'rgba(255, 255, 255, 0.1)'
+                                                }
+                                            }}
+                                        >
+                                            <ContentCopyIcon fontSize="small" />
+                                        </IconButton>
+                                    </Box>
                                 </Box>
                             )}
                         </Box>
@@ -842,13 +875,33 @@ const Dashboard: React.FC = () => {
                                     borderRadius: 1,
                                     border: '1px solid',
                                     borderColor: 'grey.300',
-                                    fontFamily: 'monospace',
-                                    fontSize: '1.2rem',
-                                    fontWeight: 'bold',
-                                    textAlign: 'center',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: 1,
                                     mb: 2
                                 }}>
-                                    {licenseKey}
+                                    <Typography variant="body1" sx={{
+                                        fontFamily: 'monospace',
+                                        fontSize: '1.2rem',
+                                        fontWeight: 'bold',
+                                        flex: 1,
+                                        textAlign: 'center'
+                                    }}>
+                                        {licenseKey}
+                                    </Typography>
+                                    <IconButton
+                                        size="small"
+                                        onClick={() => copyToClipboard(licenseKey, 'License Key')}
+                                        sx={{
+                                            '&:hover': {
+                                                bgcolor: 'rgba(0, 0, 0, 0.1)'
+                                            }
+                                        }}
+                                        title="Copy License Key"
+                                    >
+                                        <ContentCopyIcon />
+                                    </IconButton>
                                 </Box>
 
                                 <Typography variant="body2" sx={{ color: 'success.contrastText' }}>
@@ -899,26 +952,57 @@ const Dashboard: React.FC = () => {
                                     borderRadius: 1,
                                     border: '1px solid',
                                     borderColor: 'grey.300',
-                                    mb: 2,
-                                    maxHeight: '200px',
-                                    overflowY: 'auto'
+                                    mb: 2
                                 }}>
-                                    {generatedUserIds.map((userId, index) => (
-                                        <Box key={index} sx={{
-                                            fontFamily: 'monospace',
-                                            fontSize: '1rem',
-                                            fontWeight: 'bold',
-                                            p: 1,
-                                            mb: 1,
-                                            bgcolor: 'white',
-                                            borderRadius: 1,
-                                            border: '1px solid',
-                                            borderColor: 'grey.200',
-                                            textAlign: 'center'
-                                        }}>
-                                            {userId}
-                                        </Box>
-                                    ))}
+                                    <Typography variant="body2" sx={{ color: 'primary.contrastText', fontWeight: 'bold', mb: 2 }}>
+                                        Generated User IDs ({generatedUserIds.length}):
+                                    </Typography>
+                                    <Box sx={{
+                                        display: 'flex',
+                                        flexWrap: 'wrap',
+                                        gap: 1,
+                                        border: '2px solid',
+                                        borderColor: 'primary.main',
+                                        borderRadius: 1,
+                                        p: 2,
+                                        bgcolor: 'white',
+                                        maxHeight: '200px',
+                                        overflowY: 'auto'
+                                    }}>
+                                        {generatedUserIds.map((userId, index) => (
+                                            <Box key={index} sx={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 0.5,
+                                                fontFamily: 'monospace',
+                                                fontSize: '0.9rem',
+                                                fontWeight: 'bold',
+                                                p: 1,
+                                                bgcolor: 'grey.50',
+                                                borderRadius: 1,
+                                                border: '1px solid',
+                                                borderColor: 'grey.200',
+                                                whiteSpace: 'nowrap'
+                                            }}>
+                                                <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                                                    {userId}
+                                                </Typography>
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={() => copyToClipboard(userId, `User ID ${userId}`)}
+                                                    sx={{
+                                                        p: 0.5,
+                                                        '&:hover': {
+                                                            bgcolor: 'rgba(0, 0, 0, 0.1)'
+                                                        }
+                                                    }}
+                                                    title={`Copy ${userId}`}
+                                                >
+                                                    <ContentCopyIcon fontSize="small" />
+                                                </IconButton>
+                                            </Box>
+                                        ))}
+                                    </Box>
                                 </Box>
 
                                 <Typography variant="body2" sx={{ color: 'primary.contrastText', fontWeight: 'bold' }}>
