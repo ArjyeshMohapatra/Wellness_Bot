@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PaymentPopup from './dashboard/PaymentPopup';
 import BotSettings from './dashboard/BotSettings';
+import Subscription from './dashboard/Subscription';
 import { useAuth } from '../hooks/useAuth';
 import { useSubscription } from '../hooks/useSubscription';
 import { usePayment } from '../hooks/usePayment';
@@ -53,7 +54,9 @@ const Dashboard: React.FC = () => {
         plans,
         setPaymentCompleted,
         setHasActiveSubscription,
-        getCurrentMaxMembers
+        getCurrentMaxMembers,
+        handlePlanSelect,
+        setSelectedBilling
     } = useSubscription();
     const {
         paymentLoading,
@@ -250,9 +253,18 @@ const Dashboard: React.FC = () => {
         try {
             // Get current user info from localStorage (same way as payment system)
             const adminUserId = localStorage.getItem('userId');
+            console.log('handleSaveConfiguration: adminUserId from localStorage:', adminUserId);
 
             if (!adminUserId) {
                 alert('User not logged in. Please login again.');
+                return;
+            }
+
+            const parsedAdminUserId = parseInt(adminUserId);
+            console.log('handleSaveConfiguration: parsed adminUserId:', parsedAdminUserId);
+
+            if (isNaN(parsedAdminUserId)) {
+                alert('Invalid user ID. Please login again.');
                 return;
             }
 
@@ -295,7 +307,7 @@ const Dashboard: React.FC = () => {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    admin_user_id: parseInt(adminUserId),
+                    admin_user_id: parsedAdminUserId,
                     config_data: configData
                 })
             });
@@ -339,8 +351,16 @@ const Dashboard: React.FC = () => {
     const saveDashboardSettings = async (overrideLicenseKey?: string | null): Promise<boolean> => {
         try {
             const adminUserId = localStorage.getItem('userId');
+            console.log('saveDashboardSettings: adminUserId from localStorage:', adminUserId);
             if (!adminUserId) {
                 console.error('No adminUserId found in localStorage');
+                return false;
+            }
+
+            const parsedAdminUserId = parseInt(adminUserId);
+            console.log('saveDashboardSettings: parsed adminUserId:', parsedAdminUserId);
+            if (isNaN(parsedAdminUserId)) {
+                console.error('Invalid adminUserId');
                 return false;
             }
 
@@ -370,7 +390,7 @@ const Dashboard: React.FC = () => {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    admin_user_id: parseInt(adminUserId),
+                    admin_user_id: parsedAdminUserId,
                     settings
                 })
             });
@@ -594,6 +614,18 @@ const Dashboard: React.FC = () => {
 
             {/* Main Content */}
             <>
+                {!hasActiveSubscription && (
+                    <Subscription
+                        plans={plans}
+                        selectedPlan={selectedPlan}
+                        selectedBilling={selectedBilling}
+                        hasActiveSubscription={hasActiveSubscription}
+                        showSubscriptionPanel={true}
+                        onPlanSelect={handlePlanSelect}
+                        onBillingSelect={setSelectedBilling}
+                        onProceedToPayment={() => setShowPaymentPopup(true)}
+                    />
+                )}
                 {/* Bot settings remain on dashboard when subscription is not being managed */}
                 {hasActiveSubscription && (
                     <BotSettings

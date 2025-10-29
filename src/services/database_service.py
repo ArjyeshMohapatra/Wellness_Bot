@@ -1467,6 +1467,15 @@ def save_admin_dashboard_settings(admin_user_id, settings):
         loaded_slots_json = json.dumps(settings.get('loaded_slots', [])) if settings.get('loaded_slots') else None
         banned_words_json = json.dumps(settings.get('banned_words', [])) if settings.get('banned_words') else None
         
+        # Helper function to convert empty strings to None for integer fields
+        def to_int_or_none(value):
+            if value == '' or value is None:
+                return None
+            try:
+                return int(value)
+            except (ValueError, TypeError):
+                return None
+        
         params = (
             admin_user_id,
             settings.get('bot_username', 'WellnessBot'),
@@ -1475,9 +1484,9 @@ def save_admin_dashboard_settings(admin_user_id, settings):
             loaded_slots_json,
             settings.get('event_type', 'normal'),
             settings.get('event_name'),
-            settings.get('event_days'),
-            settings.get('pass_points'),
-            settings.get('slots_per_day'),
+            to_int_or_none(settings.get('event_days')),
+            to_int_or_none(settings.get('pass_points')),
+            to_int_or_none(settings.get('slots_per_day')),
             settings.get('welcome_message'),
             settings.get('kick_response'),
             settings.get('undesignated_slot_response'),
