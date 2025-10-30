@@ -338,11 +338,28 @@ def add_member(group_id, user_id, username=None, first_name=None, last_name=None
     """
     Atomically adds or updates a member using INSERT ... ON DUPLICATE KEY UPDATE.
     Returns the member's data and a boolean indicating if they were newly inserted.
+    Now checks subscription limits for new members.
     """
     try:
         # checks if the member exists to determine if this is a new join
         existing = get_member(group_id, user_id)
         is_new = existing is None
+
+        # For new members, check subscription limits
+        if is_new and not is_admin:
+            # Get admin for this group
+            admin_query = """
+                SELECT l.assigned_admin_id
+                FROM groups_config gc
+                JOIN licenses l ON gc.license_key = l.license_key
+                WHERE gc.group_id = %s
+            """
+            admin_result = execute_query(admin_query, (group_id,), fetch=True)
+            if admin_result:
+                admin_user_id = admin_result[0]['assigned_admin_id']
+                if not can_admin_add_member(admin_user_id):
+                    logger.warning(f"Cannot add member {user_id} to group {group_id}: subscription limit reached for admin {admin_user_id}")
+                    return None, False  # Return None to indicate failure
 
         is_restricted = 0
         restriction_until = None
@@ -1520,6 +1537,135 @@ def get_admin_dashboard_settings(admin_user_id):
     except Exception as e:
         logger.error(f"Error getting admin dashboard settings: {e}", exc_info=True)
         return None
+
+
+def get_admin_bot_settings(admin_user_id):
+    """Get all bot settings for an admin across all groups."""
+    try:
+        query = "SELECT * FROM bot_settings WHERE admin_user_id = %s AND is_active = TRUE ORDER BY created_at DESC"
+        result = execute_query(query, (admin_user_id,), fetch=True)
+        settings_list = []
+        if result:
+            import json
+            for settings in result:
+                if settings.get('loaded_slots'):
+                    settings['loaded_slots'] = json.loads(settings['loaded_slots'])
+                if settings.get('banned_words'):
+                    settings['banned_words'] = json.loads(settings['banned_words'])
+                settings_list.append(settings)
+        return settings_list
+    except Exception as e:
+        logger.error(f"Error getting admin bot settings: {e}")
+        return []
+
+
+def get_bot_settings_for_group(admin_user_id, group_id):
+    """Get bot settings for a specific admin and group."""
+    try:
+        query = "SELECT * FROM bot_settings WHERE admin_user_id = %s AND group_id = %s AND is_active = TRUE"
+        result = execute_query(query, (admin_user_id, group_id), fetch=True)
+        if result:
+            import json
+            settings = result[0]
+            if settings.get('loaded_slots'):
+                settings['loaded_slots'] = json.loads(settings['loaded_slots'])
+            if settings.get('banned_words'):
+                settings['banned_words'] = json.loads(settings['banned_words'])
+            return settings
+        return None
+    except Exception as e:
+        logger.error(f"Error getting bot settings for group: {e}")
+        return None
+
+
+def save_bot_settings_for_group(admin_user_id, group_id, settings):
+    """Save bot settings for a specific admin and group."""
+    try:
+        logger.info(f"DB: Saving bot settings for admin {admin_user_id}, group {group_id}: {settings}")
+        query = """
+        INSERT INTO bot_settings
+        (admin_user_id, group_id, license_key, bot_username, has_admin_permissions,
+         event_type, event_name, event_days, pass_points, slots_per_day,
+         welcome_message, kick_response, undesignated_slot_response, leaderboard_time, banned_words, loaded_slots)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE
+        license_key = VALUES(license_key),
+        bot_username = VALUES(bot_username),
+        has_admin_permissions = VALUES(has_admin_permissions),
+        event_type = VALUES(event_type),
+        event_name = VALUES(event_name),
+        event_days = VALUES(event_days),
+        pass_points = VALUES(pass_points),
+        slots_per_day = VALUES(slots_per_day),
+        welcome_message = VALUES(welcome_message),
+        kick_response = VALUES(kick_response),
+        undesignated_slot_response = VALUES(undesignated_slot_response),
+        leaderboard_time = VALUES(leaderboard_time),
+        banned_words = VALUES(banned_words),
+        loaded_slots = VALUES(loaded_slots),
+        updated_at = CURRENT_TIMESTAMP
+        """
+        import json
+        loaded_slots_json = json.dumps(settings.get('loaded_slots', [])) if settings.get('loaded_slots') else None
+        banned_words_json = json.dumps(settings.get('banned_words', [])) if settings.get('banned_words') else None
+
+        # Helper function to convert empty strings to None for integer fields
+        def to_int_or_none(value):
+            if value == '' or value is None:
+                return None
+            try:
+                return int(value)
+            except (ValueError, TypeError):
+                return None
+
+        params = (
+            admin_user_id,
+            group_id,
+            settings.get('license_key'),
+            settings.get('bot_username', 'WellnessBot'),
+            settings.get('has_admin_permissions', False),
+            settings.get('event_type', 'normal'),
+            settings.get('event_name'),
+            to_int_or_none(settings.get('event_days')),
+            to_int_or_none(settings.get('pass_points')),
+            to_int_or_none(settings.get('slots_per_day')),
+            settings.get('welcome_message'),
+            settings.get('kick_response'),
+            settings.get('undesignated_slot_response'),
+            settings.get('leaderboard_time'),
+            banned_words_json,
+            loaded_slots_json
+        )
+
+        execute_query(query, params)
+        logger.info(f"Successfully saved bot settings for admin {admin_user_id}, group {group_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error saving bot settings: {e}")
+        return False
+
+
+def get_admin_subscription_limits(admin_user_id):
+    """Get subscription limits for an admin."""
+    try:
+        query = "SELECT * FROM admin_subscription_limits WHERE admin_user_id = %s"
+        result = execute_query(query, (admin_user_id,), fetch=True)
+        return result[0] if result else None
+    except Exception as e:
+        logger.error(f"Error getting subscription limits: {e}")
+        return None
+
+
+def can_admin_add_member(admin_user_id):
+    """Check if admin can add more members based on subscription limits."""
+    try:
+        limits = get_admin_subscription_limits(admin_user_id)
+        if not limits:
+            return False
+        return limits['current_total_members'] < limits['max_members']
+    except Exception as e:
+        logger.error(f"Error checking member addition permission: {e}")
+        return False
 
 
 # UNIQUE USER ID FUNCTIONS

@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 def generate_user_ids_for_group(group_id, count):
     """
     Generate unique user IDs for a group and store them in database.
+    Now checks subscription limits across all groups for the admin.
 
     Args:
         group_id: The group ID for which to generate user IDs
@@ -18,11 +19,51 @@ def generate_user_ids_for_group(group_id, count):
         List of generated user IDs
     """
     try:
+        # First, get the admin for this group
+        admin_query = """
+            SELECT l.assigned_admin_id
+            FROM groups_config gc
+            JOIN licenses l ON gc.license_key = l.license_key
+            WHERE gc.group_id = %s
+        """
+        admin_result = execute_query(admin_query, (group_id,), fetch=True)
+        if not admin_result:
+            logger.error(f"No admin found for group {group_id}")
+            return []
+
+        admin_user_id = admin_result[0]['assigned_admin_id']
+
+        # Check current subscription limits
+        from src.services.database_service import get_admin_subscription_limits
+        limits = get_admin_subscription_limits(admin_user_id)
+        if not limits:
+            logger.error(f"No subscription limits found for admin {admin_user_id}")
+            return []
+
+        # Count current total members across all groups for this admin
+        current_total_query = """
+            SELECT COUNT(*) as total
+            FROM group_members gm
+            JOIN groups_config gc ON gm.group_id = gc.group_id
+            JOIN licenses l ON gc.license_key = l.license_key
+            WHERE l.assigned_admin_id = %s AND gm.unique_user_id IS NOT NULL
+        """
+        current_total_result = execute_query(current_total_query, (admin_user_id,), fetch=True)
+        current_total = current_total_result[0]['total'] if current_total_result else 0
+
+        # Check if we can generate the requested count
+        available_slots = limits['max_members'] - current_total
+        if available_slots <= 0:
+            logger.warning(f"Admin {admin_user_id} has reached subscription limit. Current: {current_total}, Max: {limits['max_members']}")
+            return []
+
+        actual_count = min(count, available_slots)
+
         generated_ids = []
         attempts = 0
-        max_attempts = count * 10  # Prevent infinite loops
+        max_attempts = actual_count * 10  # Prevent infinite loops
 
-        while len(generated_ids) < count and attempts < max_attempts:
+        while len(generated_ids) < actual_count and attempts < max_attempts:
             # Generate a 6-digit random number
             user_id = ''.join(random.choices(string.digits, k=6))
 
@@ -42,10 +83,10 @@ def generate_user_ids_for_group(group_id, count):
 
             attempts += 1
 
-        if len(generated_ids) < count:
-            logger.error(f"Could only generate {len(generated_ids)} out of {count} user IDs for group {group_id}")
+        if len(generated_ids) < actual_count:
+            logger.error(f"Could only generate {len(generated_ids)} out of {actual_count} user IDs for group {group_id}")
         else:
-            logger.info(f"Successfully generated {count} unique user IDs for group {group_id}")
+            logger.info(f"Successfully generated {actual_count} unique user IDs for group {group_id}")
 
         return generated_ids
 

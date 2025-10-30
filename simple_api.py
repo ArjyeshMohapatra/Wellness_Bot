@@ -486,22 +486,29 @@ def api_get_available_user_ids():
 
 @app.route('/api/admin/dashboard/settings', methods=['GET'])
 def api_get_admin_dashboard_settings():
-    """Get admin dashboard settings"""
+    """Get admin dashboard settings - now returns all settings for all groups"""
     try:
         admin_user_id = request.args.get('admin_user_id')
-        print(f"API: Getting dashboard settings for admin_user_id: {admin_user_id}")
+        group_id = request.args.get('group_id')  # Optional: get settings for specific group
+        print(f"API: Getting dashboard settings for admin_user_id: {admin_user_id}, group_id: {group_id}")
 
         if not admin_user_id:
             return jsonify({'success': False, 'message': 'Admin user ID required'}), 400
 
-        from src.services.database_service import get_admin_dashboard_settings
+        from src.services.database_service import get_admin_bot_settings, get_bot_settings_for_group
 
-        settings = get_admin_dashboard_settings(int(admin_user_id))
-        print(f"API: Retrieved settings: {settings}")
-        if settings:
-            return jsonify({'success': True, 'settings': settings}), 200
+        if group_id:
+            # Get settings for specific group
+            settings = get_bot_settings_for_group(int(admin_user_id), int(group_id))
+            if settings:
+                return jsonify({'success': True, 'settings': settings}), 200
+            else:
+                return jsonify({'success': True, 'settings': None}), 200  # No settings for this group yet
         else:
-            return jsonify({'success': True, 'settings': None}), 200  # No settings yet
+            # Get all settings for admin
+            settings_list = get_admin_bot_settings(int(admin_user_id))
+            print(f"API: Retrieved {len(settings_list)} settings")
+            return jsonify({'success': True, 'settings': settings_list}), 200
 
     except Exception as e:
         print(f"API Error in get admin dashboard settings: {e}")
@@ -511,20 +518,21 @@ def api_get_admin_dashboard_settings():
 
 @app.route('/api/admin/dashboard/settings', methods=['POST'])
 def api_save_admin_dashboard_settings():
-    """Save admin dashboard settings"""
+    """Save admin dashboard settings for a specific group"""
     try:
         data = request.get_json()
         print(f"API: Saving dashboard settings for data: {data}")
         admin_user_id = data.get('admin_user_id')
+        group_id = data.get('group_id', 0)  # Default to 0 if not provided (for backward compatibility)
         settings = data.get('settings', {})
 
         if not admin_user_id:
             print("API: No admin_user_id provided")
             return jsonify({'success': False, 'message': 'Admin user ID required'}), 400
 
-        from src.services.database_service import save_admin_dashboard_settings
+        from src.services.database_service import save_bot_settings_for_group
 
-        success = save_admin_dashboard_settings(int(admin_user_id), settings)
+        success = save_bot_settings_for_group(int(admin_user_id), int(group_id), settings)
         print(f"API: Save result: {success}")
         if success:
             return jsonify({'success': True, 'message': 'Settings saved successfully'}), 200

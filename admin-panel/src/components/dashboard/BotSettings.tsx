@@ -40,6 +40,7 @@ interface Slot {
 }
 
 interface BotSettingsProps {
+    groupId: number;
     eventType: 'normal' | 'time-limited';
     eventName: string;
     eventDays: string;
@@ -76,6 +77,7 @@ interface BotSettingsProps {
 }
 
 const BotSettings: React.FC<BotSettingsProps> = ({
+    groupId,
     eventType,
     eventName,
     eventDays,
@@ -113,7 +115,7 @@ const BotSettings: React.FC<BotSettingsProps> = ({
     const [isEditing, setIsEditing] = useState(() => {
         // Read initial state from localStorage, default to true (edit mode)
         try {
-            const saved = localStorage.getItem('botSettingsIsEditing');
+            const saved = localStorage.getItem(`botSettingsIsEditing_${groupId}`);
             return saved !== null ? JSON.parse(saved) : true;
         } catch (error) {
             // If there's an error parsing localStorage, default to true
@@ -126,11 +128,11 @@ const BotSettings: React.FC<BotSettingsProps> = ({
     // Save isEditing state to localStorage whenever it changes
     useEffect(() => {
         try {
-            localStorage.setItem('botSettingsIsEditing', JSON.stringify(isEditing));
+            localStorage.setItem(`botSettingsIsEditing_${groupId}`, JSON.stringify(isEditing));
         } catch (error) {
             console.warn('Error saving botSettingsIsEditing to localStorage:', error);
         }
-    }, [isEditing]);
+    }, [isEditing, groupId]);
 
     // Debounced change handlers to improve INP performance
     // Removed debouncing from input fields for immediate responsiveness

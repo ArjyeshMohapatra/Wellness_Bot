@@ -22,6 +22,11 @@ import {
     Accordion,
     AccordionSummary,
     AccordionDetails,
+    Select,
+    MenuItem,
+    FormControl,
+    InputLabel,
+    TextField,
 } from '@mui/material';
 import {
     Logout as LogoutIcon,
@@ -44,6 +49,12 @@ const Dashboard: React.FC = () => {
         licenseKey: string | null;
     } | null>(null);
     const navigate = useNavigate();
+
+    // New state for multiple groups
+    const [botSettings, setBotSettings] = useState<any[]>([]);
+    const [selectedGroupId, setSelectedGroupId] = useState<number>(0);
+    const [showCreateGroupDialog, setShowCreateGroupDialog] = useState(false);
+    const [newGroupName, setNewGroupName] = useState('');
 
     const {
         selectedPlan,
@@ -106,6 +117,26 @@ const Dashboard: React.FC = () => {
         handleSlotChange
     } = useSlotConfiguration(loadedSlots);
 
+    // Function to load settings for a specific group
+    const loadSettingsForGroup = useCallback((settings: any) => {
+        setBotUsername(settings.bot_username || 'BeHumanAgainBot');
+        setHasAdminPermissions(settings.has_admin_permissions || false);
+        setLicenseKey(settings.license_key || null);
+        setLoadedSlots(settings.loaded_slots || []);
+
+        // Load event configuration
+        setEventType(settings.event_type || 'normal');
+        setEventName(settings.event_name || '');
+        setEventDays(settings.event_days?.toString() || '');
+        setPassPoints(settings.pass_points?.toString() || '');
+        setSlotsPerDay(settings.slots_per_day?.toString() || '');
+        setWelcomeMessage(settings.welcome_message || '');
+        setKickResponse(settings.kick_response || '');
+        setUndesignatedSlotResponse(settings.undesignated_slot_response || '');
+        setLeaderboardTime(settings.leaderboard_time || '');
+        setBannedWords(settings.banned_words || []);
+    }, [setEventType, setEventName, setEventDays, setPassPoints, setSlotsPerDay, setWelcomeMessage, setKickResponse, setUndesignatedSlotResponse, setLeaderboardTime, setBannedWords]);
+
     // Function to load configuration
     const loadConfiguration = useCallback(async () => {
         try {
@@ -119,7 +150,7 @@ const Dashboard: React.FC = () => {
                 setLoadedSlots(state.loadedSlots || []);
             }
 
-            // Load dashboard settings from database
+            // Load all bot settings from database
             const adminUserId = localStorage.getItem('userId');
             console.log('Loading dashboard for adminUserId:', adminUserId);
 
@@ -131,28 +162,118 @@ const Dashboard: React.FC = () => {
             const dashboardResponse = await fetch(`http://localhost:8001/api/admin/dashboard/settings?admin_user_id=${adminUserId}`);
             const dashboardResult = await dashboardResponse.json();
             if (dashboardResult.success && dashboardResult.settings) {
-                const dbSettings = dashboardResult.settings;
-                setBotUsername(dbSettings.bot_username || 'BeHumanAgainBot');
-                setHasAdminPermissions(dbSettings.has_admin_permissions || false);
-                setLicenseKey(dbSettings.license_key || null);
-                setLoadedSlots(dbSettings.loaded_slots || []);
+                const settingsList = Array.isArray(dashboardResult.settings) ? dashboardResult.settings : [dashboardResult.settings];
+                setBotSettings(settingsList);
 
-                // Load event configuration
-                setEventType(dbSettings.event_type || 'normal');
-                setEventName(dbSettings.event_name || '');
-                setEventDays(dbSettings.event_days?.toString() || '');
-                setPassPoints(dbSettings.pass_points?.toString() || '');
-                setSlotsPerDay(dbSettings.slots_per_day?.toString() || '');
-                setWelcomeMessage(dbSettings.welcome_message || '');
-                setKickResponse(dbSettings.kick_response || '');
-                setUndesignatedSlotResponse(dbSettings.undesignated_slot_response || '');
-                setLeaderboardTime(dbSettings.leaderboard_time || '');
-                setBannedWords(dbSettings.banned_words || []);
+                // If no settings exist yet, initialize with default
+                if (settingsList.length === 0) {
+                    setBotSettings([{
+                        setting_id: 0,
+                        admin_user_id: parseInt(adminUserId),
+                        group_id: 0,
+                        license_key: null,
+                        bot_username: 'BeHumanAgainBot',
+                        has_admin_permissions: false,
+                        event_type: 'normal',
+                        event_name: '',
+                        event_days: 7,
+                        pass_points: 250,
+                        slots_per_day: 2,
+                        welcome_message: '',
+                        kick_response: '',
+                        undesignated_slot_response: '',
+                        leaderboard_time: '11:00',
+                        banned_words: [],
+                        loaded_slots: [],
+                        is_active: true
+                    }]);
+                    setSelectedGroupId(0);
+                } else {
+                    // Load the first group's settings
+                    const firstSettings = settingsList[0];
+                    setSelectedGroupId(firstSettings.group_id);
+                    loadSettingsForGroup(firstSettings);
+                }
             }
         } catch (error) {
             console.error('Error loading configuration:', error);
         }
-    }, [setEventType, setEventName, setEventDays, setPassPoints, setSlotsPerDay, setWelcomeMessage, setKickResponse, setUndesignatedSlotResponse, setLeaderboardTime, setBannedWords]);
+    }, [loadSettingsForGroup]);
+
+    // Function to handle group selection
+    const handleGroupSelect = (groupId: number) => {
+        setSelectedGroupId(groupId);
+        const settings = botSettings.find(s => s.group_id === groupId);
+        if (settings) {
+            loadSettingsForGroup(settings);
+        }
+    };
+
+    // Function to create new group settings
+    const handleCreateGroup = async () => {
+        if (!newGroupName.trim()) {
+            alert('Please enter a group name');
+            return;
+        }
+
+        try {
+            const adminUserId = localStorage.getItem('userId');
+            if (!adminUserId) {
+                alert('User not logged in');
+                return;
+            }
+
+            // Create new group settings with default values
+            const newSettings = {
+                admin_user_id: parseInt(adminUserId),
+                group_id: Date.now(), // Use timestamp as temporary group_id until bot joins
+                group_name: newGroupName.trim(),
+                license_key: null,
+                bot_username: 'BeHumanAgainBot',
+                has_admin_permissions: false,
+                event_type: 'normal',
+                event_name: '',
+                event_days: 7,
+                pass_points: 250,
+                slots_per_day: 2,
+                welcome_message: '',
+                kick_response: '',
+                undesignated_slot_response: '',
+                leaderboard_time: '11:00',
+                banned_words: [],
+                loaded_slots: [],
+                is_active: true
+            };
+
+            const response = await fetch('http://localhost:8001/api/admin/dashboard/settings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    admin_user_id: parseInt(adminUserId),
+                    group_id: newSettings.group_id,
+                    settings: newSettings
+                })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                // Add to local state
+                setBotSettings(prev => [...prev, newSettings]);
+                setSelectedGroupId(newSettings.group_id);
+                loadSettingsForGroup(newSettings);
+                setShowCreateGroupDialog(false);
+                setNewGroupName('');
+                alert('New group created successfully! Add the bot to your Telegram group and it will automatically detect the group ID.');
+            } else {
+                alert(`Failed to create group: ${result.message}`);
+            }
+        } catch (error) {
+            console.error('Error creating group:', error);
+            alert('Error creating group. Please try again.');
+        }
+    };
 
     // Function to refresh admin permissions
     const refreshAdminPermissions = useCallback(async () => {
@@ -308,6 +429,7 @@ const Dashboard: React.FC = () => {
                 },
                 body: JSON.stringify({
                     admin_user_id: parsedAdminUserId,
+                    group_id: selectedGroupId,
                     config_data: configData
                 })
             });
@@ -327,7 +449,7 @@ const Dashboard: React.FC = () => {
                 // Show configuration dialog instead of setting configurationSaved
                 setConfigurationDialogData({
                     botUsername: result.bot_username || botUsername,
-                    licenseKey: result.license_key || licenseKey
+                    licenseKey: result.license_key
                 });
                 setShowConfigurationDialog(true);
                 // Store bot username for future use
@@ -391,6 +513,7 @@ const Dashboard: React.FC = () => {
                 },
                 body: JSON.stringify({
                     admin_user_id: parsedAdminUserId,
+                    group_id: selectedGroupId,
                     settings
                 })
             });
@@ -628,41 +751,90 @@ const Dashboard: React.FC = () => {
                 )}
                 {/* Bot settings remain on dashboard when subscription is not being managed */}
                 {hasActiveSubscription && (
-                    <BotSettings
-                        eventType={eventType}
-                        eventName={eventName}
-                        eventDays={eventDays}
-                        passPoints={passPoints}
-                        slotsPerDay={slotsPerDay}
-                        welcomeMessage={welcomeMessage}
-                        kickResponse={kickResponse}
-                        undesignatedSlotResponse={undesignatedSlotResponse}
-                        leaderboardTime={leaderboardTime}
-                        bannedWords={bannedWords}
-                        slots={slots}
-                        slotErrors={slotErrors}
-                        currentSlotIndex={currentSlotIndex}
-                        currentButtonIndex={currentButtonIndex}
-                        slotButtonIndices={slotButtonIndices}
-                        onEventTypeChange={setEventType}
-                        onEventNameChange={setEventName}
-                        onEventDaysChange={setEventDays}
-                        onPassPointsChange={setPassPoints}
-                        onSlotsPerDayChange={setSlotsPerDay}
-                        onWelcomeMessageChange={setWelcomeMessage}
-                        onKickResponseChange={setKickResponse}
-                        onUndesignatedSlotResponseChange={setUndesignatedSlotResponse}
-                        onLeaderboardTimeChange={setLeaderboardTime}
-                        onBannedWordsChange={setBannedWords}
-                        onSlotChange={handleSlotChange}
-                        onCurrentSlotIndexChange={setCurrentSlotIndex}
-                        onCurrentButtonIndexChange={setCurrentButtonIndex}
-                        onSlotTypeChange={handleSlotTypeChange}
-                        onSlotButtonCountChange={handleSlotButtonCountChange}
-                        onSlotButtonIndexChange={handleSlotButtonIndexChange}
-                        onSaveConfiguration={handleSaveConfiguration}
-                        isConfigurationValid={isConfigurationValid()}
-                    />
+                    <>
+                        {/* Group Selector */}
+                        <Box sx={{ mt: 3, mb: 2 }}>
+                            <Box sx={{
+                                bgcolor: 'background.paper',
+                                p: 3,
+                                borderRadius: 2,
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                                border: '1px solid',
+                                borderColor: 'divider'
+                            }}>
+                                <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: 'primary.main' }}>
+                                    📋 Group Configuration
+                                </Typography>
+
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                                    <FormControl sx={{ minWidth: 200 }}>
+                                        <InputLabel>Select Group</InputLabel>
+                                        <Select
+                                            value={selectedGroupId}
+                                            label="Select Group"
+                                            onChange={(e) => handleGroupSelect(Number(e.target.value))}
+                                        >
+                                            {botSettings.map((setting) => (
+                                                <MenuItem key={setting.group_id} value={setting.group_id}>
+                                                    {setting.group_name || `Group ${setting.group_id}`}
+                                                </MenuItem>
+                                            ))}
+                                        </Select>
+                                    </FormControl>
+
+                                    <Button
+                                        variant="outlined"
+                                        color="primary"
+                                        onClick={() => setShowCreateGroupDialog(true)}
+                                        startIcon={<PersonAddIcon />}
+                                    >
+                                        Add New Group
+                                    </Button>
+                                </Box>
+
+                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                    Configure different bot settings for each Telegram group. Add the bot to your groups and it will automatically detect them.
+                                </Typography>
+                            </Box>
+                        </Box>
+
+                        <BotSettings
+                            groupId={selectedGroupId}
+                            eventType={eventType}
+                            eventName={eventName}
+                            eventDays={eventDays}
+                            passPoints={passPoints}
+                            slotsPerDay={slotsPerDay}
+                            welcomeMessage={welcomeMessage}
+                            kickResponse={kickResponse}
+                            undesignatedSlotResponse={undesignatedSlotResponse}
+                            leaderboardTime={leaderboardTime}
+                            bannedWords={bannedWords}
+                            slots={slots}
+                            slotErrors={slotErrors}
+                            currentSlotIndex={currentSlotIndex}
+                            currentButtonIndex={currentButtonIndex}
+                            slotButtonIndices={slotButtonIndices}
+                            onEventTypeChange={setEventType}
+                            onEventNameChange={setEventName}
+                            onEventDaysChange={setEventDays}
+                            onPassPointsChange={setPassPoints}
+                            onSlotsPerDayChange={setSlotsPerDay}
+                            onWelcomeMessageChange={setWelcomeMessage}
+                            onKickResponseChange={setKickResponse}
+                            onUndesignatedSlotResponseChange={setUndesignatedSlotResponse}
+                            onLeaderboardTimeChange={setLeaderboardTime}
+                            onBannedWordsChange={setBannedWords}
+                            onSlotChange={handleSlotChange}
+                            onCurrentSlotIndexChange={setCurrentSlotIndex}
+                            onCurrentButtonIndexChange={setCurrentButtonIndex}
+                            onSlotTypeChange={handleSlotTypeChange}
+                            onSlotButtonCountChange={handleSlotButtonCountChange}
+                            onSlotButtonIndexChange={handleSlotButtonIndexChange}
+                            onSaveConfiguration={handleSaveConfiguration}
+                            isConfigurationValid={isConfigurationValid()}
+                        />
+                    </>
                 )}
             </>
 
@@ -831,6 +1003,57 @@ const Dashboard: React.FC = () => {
                         sx={{ minWidth: 150 }}
                     >
                         Proceed
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Create Group Dialog */}
+            <Dialog
+                open={showCreateGroupDialog}
+                onClose={() => setShowCreateGroupDialog(false)}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle sx={{ textAlign: 'center', bgcolor: 'primary.light', color: 'primary.contrastText' }}>
+                    <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+                        ➕ Create New Group Configuration
+                    </Typography>
+                </DialogTitle>
+                <DialogContent sx={{ p: 3 }}>
+                    <Typography variant="body1" sx={{ mb: 2, color: 'text.secondary' }}>
+                        Create a new configuration for a different Telegram group. You can customize bot settings for each group independently.
+                    </Typography>
+                    <TextField
+                        autoFocus
+                        margin="dense"
+                        label="Group Name"
+                        fullWidth
+                        variant="outlined"
+                        value={newGroupName}
+                        onChange={(e) => setNewGroupName(e.target.value)}
+                        placeholder="e.g., Wellness Group, Fitness Club"
+                        helperText="Choose a descriptive name for this group configuration"
+                    />
+                </DialogContent>
+                <DialogActions sx={{ p: 3, justifyContent: 'center', gap: 2 }}>
+                    <Button
+                        variant="outlined"
+                        onClick={() => {
+                            setShowCreateGroupDialog(false);
+                            setNewGroupName('');
+                        }}
+                        sx={{ minWidth: 100 }}
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={handleCreateGroup}
+                        disabled={!newGroupName.trim()}
+                        sx={{ minWidth: 100 }}
+                    >
+                        Create Group
                     </Button>
                 </DialogActions>
             </Dialog>

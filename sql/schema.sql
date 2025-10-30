@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS licenses (
     license_id INT AUTO_INCREMENT PRIMARY KEY,
     license_key VARCHAR(50) NOT NULL UNIQUE,
     is_active BOOLEAN DEFAULT TRUE,
-    assigned_group_id BIGINT UNIQUE,
+    assigned_group_id BIGINT,  -- Removed UNIQUE constraint
     assigned_admin_id BIGINT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -80,20 +80,94 @@ CREATE TABLE IF NOT EXISTS payment_transactions (
     FOREIGN KEY (user_id) REFERENCES users (id)
 );
 
+-- BOT SETTINGS TABLE (for multiple groups per admin)
+CREATE TABLE IF NOT EXISTS bot_settings (
+    setting_id INT AUTO_INCREMENT PRIMARY KEY,
+    admin_user_id INT NOT NULL,
+    group_id BIGINT NOT NULL DEFAULT 0,
+    license_key VARCHAR(50) COLLATE utf8mb4_unicode_520_ci,
+    bot_username VARCHAR(255) COLLATE utf8mb4_unicode_520_ci DEFAULT 'WellnessBot',
+    has_admin_permissions BOOLEAN DEFAULT FALSE,
+    event_type ENUM('normal', 'time-limited') DEFAULT 'normal',
+    event_name VARCHAR(255) COLLATE utf8mb4_unicode_520_ci,
+    event_days INT DEFAULT 7,
+    pass_points INT DEFAULT 250,
+    slots_per_day INT DEFAULT 2,
+    welcome_message TEXT COLLATE utf8mb4_unicode_520_ci,
+    kick_response TEXT COLLATE utf8mb4_unicode_520_ci,
+    undesignated_slot_response TEXT COLLATE utf8mb4_unicode_520_ci,
+    leaderboard_time VARCHAR(10) COLLATE utf8mb4_unicode_520_ci DEFAULT '11:00',
+    banned_words JSON,
+    loaded_slots JSON,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (admin_user_id) REFERENCES users (id) ON DELETE CASCADE,
+    UNIQUE KEY unique_admin_group_setting (admin_user_id, group_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
+
+-- ADMIN SUBSCRIPTION LIMITS TABLE
+CREATE TABLE IF NOT EXISTS admin_subscription_limits (
+    admin_user_id INT PRIMARY KEY,
+    max_members INT NOT NULL DEFAULT 0,
+    current_total_members INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (admin_user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
+
 -- GROUPS CONFIG TABLE
 CREATE TABLE IF NOT EXISTS groups_config (
     config_id INT AUTO_INCREMENT PRIMARY KEY,
     group_id BIGINT NULL UNIQUE,
-    license_key VARCHAR(50) NULL UNIQUE,
+    license_key VARCHAR(50) NULL,  -- Removed UNIQUE constraint
     admin_user_id BIGINT NOT NULL,
+    setting_id INT NULL,
     max_members INT DEFAULT 0,
     welcome_message TEXT,
     kick_message TEXT,
     undesignated_slot_response TEXT,
     leaderboard_time TIME,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    -- FOREIGN KEY (setting_id) REFERENCES bot_settings (setting_id) ON DELETE SET NULL
     -- FOREIGN KEY (license_key) REFERENCES licenses(license_key) ON DELETE CASCADE  -- Temporarily removed
 );
+
+-- BOT SETTINGS TABLE (for multiple groups per admin)
+CREATE TABLE IF NOT EXISTS bot_settings (
+    setting_id INT AUTO_INCREMENT PRIMARY KEY,
+    admin_user_id INT NOT NULL,
+    group_id BIGINT NOT NULL DEFAULT 0,
+    license_key VARCHAR(50) COLLATE utf8mb4_unicode_520_ci,
+    bot_username VARCHAR(255) COLLATE utf8mb4_unicode_520_ci DEFAULT 'WellnessBot',
+    has_admin_permissions BOOLEAN DEFAULT FALSE,
+    event_type ENUM('normal', 'time-limited') DEFAULT 'normal',
+    event_name VARCHAR(255) COLLATE utf8mb4_unicode_520_ci,
+    event_days INT DEFAULT 7,
+    pass_points INT DEFAULT 250,
+    slots_per_day INT DEFAULT 2,
+    welcome_message TEXT COLLATE utf8mb4_unicode_520_ci,
+    kick_response TEXT COLLATE utf8mb4_unicode_520_ci,
+    undesignated_slot_response TEXT COLLATE utf8mb4_unicode_520_ci,
+    leaderboard_time VARCHAR(10) COLLATE utf8mb4_unicode_520_ci DEFAULT '11:00',
+    banned_words JSON,
+    loaded_slots JSON,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (admin_user_id) REFERENCES users (id) ON DELETE CASCADE,
+    UNIQUE KEY unique_admin_group_setting (admin_user_id, group_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
+
+-- ADMIN SUBSCRIPTION LIMITS TABLE
+CREATE TABLE IF NOT EXISTS admin_subscription_limits (
+    admin_user_id INT PRIMARY KEY,
+    max_members INT NOT NULL DEFAULT 0,
+    current_total_members INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (admin_user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
 
 -- EVENTS TABLE
 CREATE TABLE IF NOT EXISTS events (
@@ -751,3 +825,48 @@ VALUES
 (NULL, 'your mother'),
 (NULL, 'yo mama'),
 (NULL, 'yo momma');
+
+-- TRIGGERS FOR AUTOMATIC MEMBER COUNT UPDATES
+DELIMITER //
+
+CREATE TRIGGER update_member_count_on_insert
+AFTER INSERT ON group_members
+FOR EACH ROW
+BEGIN
+    UPDATE admin_subscription_limits
+    SET current_total_members = current_total_members + 1,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE admin_user_id = (
+        SELECT admin_user_id FROM groups_config WHERE group_id = NEW.group_id
+    );
+END//
+
+CREATE TRIGGER update_member_count_on_delete
+AFTER DELETE ON group_members
+FOR EACH ROW
+BEGIN
+    UPDATE admin_subscription_limits
+    SET current_total_members = GREATEST(current_total_members - 1, 0),
+        updated_at = CURRENT_TIMESTAMP
+    WHERE admin_user_id = (
+        SELECT admin_user_id FROM groups_config WHERE group_id = OLD.group_id
+    );
+END//
+
+DELIMITER ;
+
+-- Initialize admin_subscription_limits for existing admins
+INSERT IGNORE INTO admin_subscription_limits (admin_user_id, max_members, current_total_members)
+SELECT
+    u.id,
+    CASE
+        WHEN MAX(pt.plan_name) = 'Basic Plan' THEN 25
+        WHEN MAX(pt.plan_name) = 'Pro Plan' THEN 50
+        WHEN MAX(pt.plan_name) = 'Premium Plan' THEN 100
+        ELSE 0
+    END as max_members,
+    0 as current_total_members
+FROM users u
+LEFT JOIN payment_transactions pt ON pt.user_id = u.id AND pt.status = 'completed'
+WHERE u.role = 'admin' AND u.is_active = TRUE
+GROUP BY u.id;
