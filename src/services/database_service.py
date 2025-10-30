@@ -1123,8 +1123,8 @@ def save_or_update_event(cursor, group_id, config_data):
 
     event_name = config_data.get('event_name', 'Wellness Challenge')
     event_type = config_data.get('event_type', 'normal')
-    event_days = int(config_data.get('event_days', 0)) if config_data.get('event_days') else 0
-    pass_points = int(config_data.get('pass_points', 250)) if config_data.get('pass_points') else 250
+    event_days = int(config_data.get('event_days') or 7)
+    pass_points = int(config_data.get('pass_points') or 250)
 
     # Calculate start and end dates
     start_date = datetime.now(ist).date()
@@ -1452,7 +1452,15 @@ def create_group_config(group_id, admin_user_id):
         logger.error(f"Error in create_group_config: {e}")
         return False
 
-
+# Helper function to convert empty strings to None for integer fields
+def to_int_or_none(value):
+    if value == '' or value is None:
+        return None
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return None
+            
 def save_admin_dashboard_settings(admin_user_id, settings):
     """Save admin dashboard settings to database."""
     try:
@@ -1484,15 +1492,6 @@ def save_admin_dashboard_settings(admin_user_id, settings):
         loaded_slots_json = json.dumps(settings.get('loaded_slots', [])) if settings.get('loaded_slots') else None
         banned_words_json = json.dumps(settings.get('banned_words', [])) if settings.get('banned_words') else None
         
-        # Helper function to convert empty strings to None for integer fields
-        def to_int_or_none(value):
-            if value == '' or value is None:
-                return None
-            try:
-                return int(value)
-            except (ValueError, TypeError):
-                return None
-        
         params = (
             admin_user_id,
             settings.get('bot_username', 'WellnessBot'),
@@ -1507,7 +1506,7 @@ def save_admin_dashboard_settings(admin_user_id, settings):
             settings.get('welcome_message'),
             settings.get('kick_response'),
             settings.get('undesignated_slot_response'),
-            settings.get('leaderboard_time'),
+            to_str_or_none(settings.get('leaderboard_time')),
             banned_words_json
         )
         print(f"DB: Executing query with params: {params}")
@@ -1519,6 +1518,10 @@ def save_admin_dashboard_settings(admin_user_id, settings):
         logger.error(f"Error saving admin dashboard settings: {e}", exc_info=True)
         return False
 
+def to_str_or_none(value):
+    if value=="" or value is None:
+        return None
+    return str(value)
 
 def get_admin_dashboard_settings(admin_user_id):
     """Get admin dashboard settings from database."""
@@ -1654,13 +1657,13 @@ def save_bot_settings_for_group(admin_user_id, group_id, settings):
                 has_admin_permissions = settings.get('has_admin_permissions', False)
                 event_type = settings.get('event_type', 'normal')
                 event_name = settings.get('event_name', '')
-                event_days = settings.get('event_days', 7)
-                pass_points = settings.get('pass_points', 250)
-                slots_per_day = settings.get('slots_per_day', 2)
+                event_days = to_int_or_none(settings.get('event_days'))
+                pass_points = to_int_or_none(settings.get('pass_points'))
+                slots_per_day = to_int_or_none(settings.get('slots_per_day'))
                 welcome_message = settings.get('welcome_message', '')
                 kick_response = settings.get('kick_response', '')
                 undesignated_slot_response = settings.get('undesignated_slot_response', '')
-                leaderboard_time = settings.get('leaderboard_time', '11:00')
+                leaderboard_time = to_str_or_none(settings.get('leaderboard_time'))
                 banned_words = json.dumps(settings.get('banned_words', []))
                 loaded_slots = json.dumps(settings.get('loaded_slots', []))
 
@@ -1962,13 +1965,13 @@ def save_bot_settings_for_group(admin_user_id, group_id, settings):
                 has_admin_permissions = settings.get('has_admin_permissions', False)
                 event_type = settings.get('event_type', 'normal')
                 event_name = settings.get('event_name', '')
-                event_days = settings.get('event_days', 7)
-                pass_points = settings.get('pass_points', 250)
-                slots_per_day = settings.get('slots_per_day', 2)
+                event_days = to_int_or_none(settings.get('event_days'))
+                pass_points = to_int_or_none(settings.get('pass_points'))
+                slots_per_day = to_int_or_none(settings.get('slots_per_day'))
                 welcome_message = settings.get('welcome_message', '')
                 kick_response = settings.get('kick_response', '')
                 undesignated_slot_response = settings.get('undesignated_slot_response', '')
-                leaderboard_time = settings.get('leaderboard_time', '11:00')
+                leaderboard_time = to_str_or_none(settings.get('leaderboard_time'))
                 banned_words = json.dumps(settings.get('banned_words', []))
                 loaded_slots = json.dumps(settings.get('loaded_slots', []))
 
