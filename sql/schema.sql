@@ -4,9 +4,48 @@ CREATE DATABASE IF NOT EXISTS telegram_bot_manager CHARACTER SET utf8mb4 COLLATE
 
 USE telegram_bot_manager;
 
+-- Function to calculate max members based on highest plan purchased
+DELIMITER //
+
+CREATE FUNCTION get_max_members_for_admin(admin_user_id INT) RETURNS INT
+DETERMINISTIC
+BEGIN
+    DECLARE max_members INT DEFAULT 50; -- Default for development/testing
+    DECLARE plan_count INT DEFAULT 0;
+
+    -- Check if user has any completed transactions
+    SELECT COUNT(*) INTO plan_count
+    FROM payment_transactions pt
+    WHERE pt.user_id = admin_user_id AND pt.status = 'completed';
+
+    -- If no transactions, return default
+    IF plan_count = 0 THEN
+        RETURN max_members;
+    END IF;
+
+    -- Check for Premium Plan first (highest priority)
+    IF EXISTS (SELECT 1 FROM payment_transactions WHERE user_id = admin_user_id AND plan_name = 'Premium Plan' AND status = 'completed') THEN
+        RETURN 100;
+    END IF;
+
+    -- Check for Pro Plan
+    IF EXISTS (SELECT 1 FROM payment_transactions WHERE user_id = admin_user_id AND plan_name = 'Pro Plan' AND status = 'completed') THEN
+        RETURN 50;
+    END IF;
+
+    -- Check for Basic Plan
+    IF EXISTS (SELECT 1 FROM payment_transactions WHERE user_id = admin_user_id AND plan_name = 'Basic Plan' AND status = 'completed') THEN
+        RETURN 25;
+    END IF;
+
+    -- Fallback (should not reach here if transactions exist)
+    RETURN 50;
+END //
+
+DELIMITER ;
+
 -- LICENSES TABLE
 CREATE TABLE IF NOT EXISTS licenses (
-    license_id INT AUTO_INCREMENT PRIMARY KEY,
     license_key VARCHAR(50) NOT NULL UNIQUE,
     is_active BOOLEAN DEFAULT TRUE,
     assigned_group_id BIGINT,  -- Removed UNIQUE constraint
@@ -859,14 +898,16 @@ DELIMITER ;
 INSERT IGNORE INTO admin_subscription_limits (admin_user_id, max_members, current_total_members)
 SELECT
     u.id,
-    CASE
-        WHEN MAX(pt.plan_name) = 'Basic Plan' THEN 25
-        WHEN MAX(pt.plan_name) = 'Pro Plan' THEN 50
-        WHEN MAX(pt.plan_name) = 'Premium Plan' THEN 100
-        ELSE 0
-    END as max_members,
+    get_max_members_for_admin(u.id) as max_members,
     0 as current_total_members
 FROM users u
-LEFT JOIN payment_transactions pt ON pt.user_id = u.id AND pt.status = 'completed'
-WHERE u.role = 'admin' AND u.is_active = TRUE
-GROUP BY u.id;
+WHERE u.role = 'admin' AND u.is_active = TRUE;
+
+-- Ensure all admins have at least default subscription limits (safety net)
+INSERT IGNORE INTO admin_subscription_limits (admin_user_id, max_members, current_total_members)
+SELECT
+    u.id,
+    50 as max_members,  -- Default 50 members for development/testing
+    0 as current_total_members
+FROM users u
+WHERE u.role = 'admin' AND u.is_active = TRUE;

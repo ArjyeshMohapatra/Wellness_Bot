@@ -170,6 +170,18 @@ def api_save_transaction():
         
         execute_query(query, params)
         print(f"Payment saved successfully for user {user_id}")
+
+        # Update subscription limits based on the new payment
+        update_limits_query = """
+            INSERT INTO admin_subscription_limits (admin_user_id, max_members, current_total_members)
+            VALUES (%s, get_max_members_for_admin(%s), 0)
+            ON DUPLICATE KEY UPDATE
+                max_members = get_max_members_for_admin(%s),
+                updated_at = CURRENT_TIMESTAMP
+        """
+        execute_query(update_limits_query, (user_id, user_id, user_id))
+        print(f"Subscription limits updated for user {user_id}")
+
         return jsonify({'success': True, 'message': 'Transaction saved successfully'}), 201
 
     except Exception as e:
