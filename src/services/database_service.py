@@ -1229,7 +1229,7 @@ def create_slot(cursor, slot_config):
             group_id, admin_user_id, event_id, slot_name, start_time, end_time, initial_message,
             response_positive, response_clarify, image_file_path, slot_points, is_mandatory, slot_type,
             button_count, button_names, button_values
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
     params = (
         slot_config['group_id'], slot_config['admin_user_id'], slot_config['event_id'], slot_config['slot_name'],
@@ -1561,7 +1561,7 @@ def get_admin_bot_settings(admin_user_id):
                 'setting_id': row['setting_id'],
                 'admin_user_id': row['admin_user_id'],
                 'group_id': row['group_id'],
-                'group_name': f"Group {row['group_id']}",  # Default name, can be customized later
+                'group_name': row['group_name'] if row['group_name'] else f"Group {row['group_id']}",  # Default name, can be customized later
                 'license_key': row['license_key'],
                 'bot_username': row['bot_username'],
                 'has_admin_permissions': row['has_admin_permissions'],
@@ -1609,7 +1609,7 @@ def get_bot_settings_for_group(admin_user_id, group_id):
             'setting_id': row['setting_id'],
             'admin_user_id': row['admin_user_id'],
             'group_id': row['group_id'],
-            'group_name': f"Group {row['group_id']}",
+            'group_name': row['group_name'] if row['group_name'] else f"Group {row['group_id']}",
             'license_key': row['license_key'],
             'bot_username': row['bot_username'],
             'has_admin_permissions': row['has_admin_permissions'],
@@ -1648,6 +1648,7 @@ def save_bot_settings_for_group(admin_user_id, group_id, settings):
                 conn.start_transaction()
 
                 # Prepare the data
+                group_name = settings.get('group_name')
                 license_key = settings.get('license_key')
                 bot_username = settings.get('bot_username', 'BeHumanAgainBot')
                 has_admin_permissions = settings.get('has_admin_permissions', False)
@@ -1666,12 +1667,13 @@ def save_bot_settings_for_group(admin_user_id, group_id, settings):
                 # Insert or update bot settings
                 query = """
                     INSERT INTO bot_settings
-                    (admin_user_id, group_id, license_key, bot_username, has_admin_permissions,
+                    (admin_user_id, group_id, group_name, license_key, bot_username, has_admin_permissions,
                      event_type, event_name, event_days, pass_points, slots_per_day,
                      welcome_message, kick_response, undesignated_slot_response, leaderboard_time,
                      banned_words, loaded_slots, is_active)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
                     ON DUPLICATE KEY UPDATE
+                        group_name = VALUES(group_name),
                         license_key = VALUES(license_key),
                         bot_username = VALUES(bot_username),
                         has_admin_permissions = VALUES(has_admin_permissions),
@@ -1692,7 +1694,7 @@ def save_bot_settings_for_group(admin_user_id, group_id, settings):
 
 
                 params = (
-                    admin_user_id, group_id, license_key, bot_username, has_admin_permissions,
+                    admin_user_id, group_id, group_name, license_key, bot_username, has_admin_permissions,
                     event_type, event_name, event_days, pass_points, slots_per_day,
                     welcome_message, kick_response, undesignated_slot_response, leaderboard_time,
                     banned_words, loaded_slots
@@ -1867,7 +1869,7 @@ def get_admin_bot_settings(admin_user_id):
                 'setting_id': row['setting_id'],
                 'admin_user_id': row['admin_user_id'],
                 'group_id': row['group_id'],
-                'group_name': f"Group {row['group_id']}",  # Default name, can be customized later
+                'group_name': row['group_name'] if row['group_name'] else f"Group {row['group_id']}",  # Default name, can be customized later
                 'license_key': row['license_key'],
                 'bot_username': row['bot_username'],
                 'has_admin_permissions': row['has_admin_permissions'],
@@ -1915,7 +1917,7 @@ def get_bot_settings_for_group(admin_user_id, group_id):
             'setting_id': row['setting_id'],
             'admin_user_id': row['admin_user_id'],
             'group_id': row['group_id'],
-            'group_name': f"Group {row['group_id']}",
+            'group_name': row['group_name'] if row['group_name'] else f"Group {row['group_id']}",
             'license_key': row['license_key'],
             'bot_username': row['bot_username'],
             'has_admin_permissions': row['has_admin_permissions'],
@@ -1954,6 +1956,7 @@ def save_bot_settings_for_group(admin_user_id, group_id, settings):
                 conn.start_transaction()
 
                 # Prepare the data
+                group_name = settings.get('group_name')
                 license_key = settings.get('license_key')
                 bot_username = settings.get('bot_username', 'BeHumanAgainBot')
                 has_admin_permissions = settings.get('has_admin_permissions', False)
@@ -1972,12 +1975,13 @@ def save_bot_settings_for_group(admin_user_id, group_id, settings):
                 # Insert or update bot settings
                 query = """
                     INSERT INTO bot_settings
-                    (admin_user_id, group_id, license_key, bot_username, has_admin_permissions,
+                    (admin_user_id, group_id, group_name, license_key, bot_username, has_admin_permissions,
                      event_type, event_name, event_days, pass_points, slots_per_day,
                      welcome_message, kick_response, undesignated_slot_response, leaderboard_time,
                      banned_words, loaded_slots, is_active)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
                     ON DUPLICATE KEY UPDATE
+                        group_name = VALUES(group_name),
                         license_key = VALUES(license_key),
                         bot_username = VALUES(bot_username),
                         has_admin_permissions = VALUES(has_admin_permissions),
@@ -1995,8 +1999,10 @@ def save_bot_settings_for_group(admin_user_id, group_id, settings):
                         updated_at = CURRENT_TIMESTAMP
                 """
 
+
+
                 params = (
-                    admin_user_id, group_id, license_key, bot_username, has_admin_permissions,
+                    admin_user_id, group_id, group_name, license_key, bot_username, has_admin_permissions,
                     event_type, event_name, event_days, pass_points, slots_per_day,
                     welcome_message, kick_response, undesignated_slot_response, leaderboard_time,
                     banned_words, loaded_slots

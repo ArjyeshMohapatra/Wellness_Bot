@@ -189,10 +189,15 @@ const Dashboard: React.FC = () => {
                     }]);
                     setSelectedGroupId(0);
                 } else {
-                    // Load the first group's settings
-                    const firstSettings = settingsList[0];
-                    setSelectedGroupId(firstSettings.group_id);
-                    loadSettingsForGroup(firstSettings);
+                    // Load the selected group's settings, defaulting to the first group
+                    const savedGroupId = localStorage.getItem('selectedGroupId');
+                    let selectedSettings = settingsList[0];
+                    if (savedGroupId) {
+                        const saved = settingsList.find(s => s.group_id === parseInt(savedGroupId));
+                        if (saved) selectedSettings = saved;
+                    }
+                    setSelectedGroupId(selectedSettings.group_id);
+                    loadSettingsForGroup(selectedSettings);
                 }
             }
         } catch (error) {
@@ -284,9 +289,9 @@ const Dashboard: React.FC = () => {
             const dashboardResponse = await fetch(`http://localhost:8001/api/admin/dashboard/settings?admin_user_id=${adminUserId}`);
             const dashboardResult = await dashboardResponse.json();
             if (dashboardResult.success && dashboardResult.settings) {
-                const dbSettings = dashboardResult.settings;
-                setHasAdminPermissions(dbSettings.has_admin_permissions || false);
-                setLicenseKey(dbSettings.license_key || null);
+                // Note: dbSettings is an array, so we can't directly access has_admin_permissions
+                // For now, we'll skip updating permissions from here since it's not correctly implemented
+                // The permissions should be loaded in loadConfiguration
             }
         } catch (error) {
             console.error('Error refreshing admin permissions:', error);
@@ -315,6 +320,11 @@ const Dashboard: React.FC = () => {
         };
         localStorage.setItem('dashboardState', JSON.stringify(dashboardState));
     }, [botUsername, hasAdminPermissions, licenseKey, slots]);
+
+    // Save selectedGroupId to localStorage whenever it changes
+    useEffect(() => {
+        localStorage.setItem('selectedGroupId', selectedGroupId.toString());
+    }, [selectedGroupId]);
 
     // Validation logic for save button
     const isConfigurationValid = () => {

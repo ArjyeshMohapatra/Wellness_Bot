@@ -113,14 +113,14 @@ const BotSettings: React.FC<BotSettingsProps> = ({
     isConfigurationValid = false
 }) => {
     const [isEditing, setIsEditing] = useState(() => {
-        // Read initial state from localStorage, default to true (edit mode)
+        // Read initial state from localStorage, default to false (read-only mode)
         try {
             const saved = localStorage.getItem(`botSettingsIsEditing_${groupId}`);
-            return saved !== null ? JSON.parse(saved) : true;
+            return saved !== null ? JSON.parse(saved) : false;
         } catch (error) {
-            // If there's an error parsing localStorage, default to true
+            // If there's an error parsing localStorage, default to false
             console.warn('Error reading botSettingsIsEditing from localStorage:', error);
-            return true;
+            return false;
         }
     });
     const [showEditDialog, setShowEditDialog] = useState(false);
