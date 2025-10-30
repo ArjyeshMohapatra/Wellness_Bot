@@ -261,11 +261,33 @@ def api_save_admin_panel():
             print(f"API: Missing fields - admin_user_id: {admin_user_id}, config_data: {config_data}")
             return jsonify({'success': False, 'message': 'Missing required fields: admin_user_id, config_data'}), 400
 
-        # Generate a license key for this configuration
-        from generate_license import generate_license_key
-        license_key = generate_license_key()
+        # Check for an existing license key before generating a new one
+        existing_license = None
+        current_group_id = int(group_id) if group_id is not None and group_id != '' else None
 
-        # Add license key to config data
+        if current_group_id is not None:
+            query = "SELECT license_key FROM licenses WHERE assigned_admin_id = %s AND assigned_group_id = %s LIMIT 1"
+            params = (admin_user_id, current_group_id)
+        else:
+            # This handles the template case (group_id is None)
+            query = "SELECT license_key FROM licenses WHERE assigned_admin_id = %s AND assigned_group_id IS NULL LIMIT 1"
+            params = (admin_user_id,)
+        
+        result = execute_query(query, params, fetch=True)
+        if result:
+            existing_license = result[0]['license_key']
+
+        new_key_generated = False
+        if existing_license:
+            # If a key exists, use it
+            license_key = existing_license
+        else:
+            # If no key exists, generate a new one
+            from generate_license import generate_license_key
+            license_key = generate_license_key()
+            new_key_generated = True
+
+        # Add the (either new or existing) license key to config data
         config_data['license_key'] = license_key
 
         # If group_id is not provided or is None, save as admin template with group_id=None
@@ -273,11 +295,12 @@ def api_save_admin_panel():
             # Save configuration with NULL group_id using admin_user_id
             success = save_admin_panel_config(admin_user_id, None, config_data)
             if success:
-                # Save license key to database
-                execute_query(
-                    "INSERT INTO licenses (license_key, is_active, assigned_group_id, assigned_admin_id, created_at) VALUES (%s, TRUE, %s, %s, NOW())",
-                    (license_key, None, admin_user_id)
-                )
+                # Only insert the license key into the database if it's a NEWLY generated one
+                if new_key_generated:
+                    execute_query(
+                        "INSERT INTO licenses (license_key, is_active, assigned_group_id, assigned_admin_id, created_at) VALUES (%s, TRUE, %s, %s, NOW())",
+                        (license_key, None, admin_user_id)
+                    )
                 return jsonify({
                     'success': True,
                     'message': 'Configuration template saved successfully',
@@ -290,11 +313,12 @@ def api_save_admin_panel():
         # Save configuration for specific group (including group_id=0)
         success = save_admin_panel_config(admin_user_id, int(group_id), config_data)
         if success:
-            # Save license key to database
-            execute_query(
-                "INSERT INTO licenses (license_key, is_active, assigned_group_id, assigned_admin_id, created_at) VALUES (%s, TRUE, %s, %s, NOW())",
-                (license_key, int(group_id), admin_user_id)
-            )
+            # Only insert the license key into the database if it's a NEWLY generated one
+            if new_key_generated:
+                execute_query(
+                    "INSERT INTO licenses (license_key, is_active, assigned_group_id, assigned_admin_id, created_at) VALUES (%s, TRUE, %s, %s, NOW())",
+                    (license_key, int(group_id), admin_user_id)
+                )
             return jsonify({
                 'success': True,
                 'message': 'Configuration saved successfully',

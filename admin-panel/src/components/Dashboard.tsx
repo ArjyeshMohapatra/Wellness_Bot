@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { Box } from '@mui/material';
+import React, { useEffect, useState } from 'react';
+import { Box, Snackbar, Alert } from '@mui/material';
 import PaymentPopup from './dashboard/PaymentPopup';
 import BotSettings from './dashboard/BotSettings';
 import Subscription from './dashboard/Subscription';
@@ -17,6 +17,7 @@ import { useDashboardState } from '../hooks/useDashboard';
 
 const Dashboard: React.FC = () => {
     const { logout } = useAuth();
+    const [showSaveNotification, setShowSaveNotification] = useState(false);
 
     // Use the extracted dashboard state hook
     const {
@@ -119,6 +120,45 @@ const Dashboard: React.FC = () => {
         localStorage.setItem('selectedGroupId', selectedGroupId.toString());
     }, [selectedGroupId]);
 
+    // This effect syncs the settings from the database (fetched by useDashboardState)
+    // with the state held by useSlotConfiguration.
+    useEffect(() => {
+        if (botSettings.length > 0) {
+            const selectedSettings = botSettings.find(s => s.group_id === selectedGroupId);
+
+            if (selectedSettings) {
+                setEventType(selectedSettings.event_type || 'normal');
+                setEventName(selectedSettings.event_name || '');
+                setEventDays(String(selectedSettings.event_days || ''));
+                setPassPoints(String(selectedSettings.pass_points || ''));
+                setSlotsPerDay(String(selectedSettings.slots_per_day || '')); // <-- This is the key fix
+                setWelcomeMessage(selectedSettings.welcome_message || '');
+                setKickResponse(selectedSettings.kick_response || '');
+                setUndesignatedSlotResponse(selectedSettings.undesignated_slot_response || '');
+                setLeaderboardTime(selectedSettings.leaderboard_time || '');
+                setBannedWords(selectedSettings.banned_words || []);
+
+                // This will be picked up by useSlotConfiguration via its initialSlots prop
+                setLoadedSlots(selectedSettings.loaded_slots || []);
+            }
+        }
+    }, [
+        botSettings,
+        selectedGroupId,
+        // Add all the setters from useSlotConfiguration here
+        setEventType,
+        setEventName,
+        setEventDays,
+        setPassPoints,
+        setSlotsPerDay,
+        setWelcomeMessage,
+        setKickResponse,
+        setUndesignatedSlotResponse,
+        setLeaderboardTime,
+        setBannedWords,
+        setLoadedSlots // This setter is from useDashboardState
+    ]);
+
     // Validation logic for save button
     const isConfigurationValid = () => {
         // Basic required fields
@@ -175,6 +215,8 @@ const Dashboard: React.FC = () => {
     // Save configuration handler
     const handleSaveConfiguration = async () => {
         try {
+            // Check if this is the first save (no license key loaded from DB)
+            const isFirstSave = !licenseKey;
             // Get current user info from localStorage (same way as payment system)
             const adminUserId = localStorage.getItem('userId');
             console.log('handleSaveConfiguration: adminUserId from localStorage:', adminUserId);
@@ -249,12 +291,18 @@ const Dashboard: React.FC = () => {
                     alert('Configuration saved to bot, but dashboard persistence failed. Settings may not be restored on next login.');
                 }
 
-                // Show configuration dialog instead of setting configurationSaved
-                setConfigurationDialogData({
-                    botUsername: result.bot_username || botUsername,
-                    licenseKey: result.license_key
-                });
-                setShowConfigurationDialog(true);
+                if (isFirstSave) {
+                    // FIRST SAVE: Show the big dialog with license key
+                    setConfigurationDialogData({
+                        botUsername: result.bot_username || botUsername,
+                        licenseKey: result.license_key
+                    });
+                    setShowConfigurationDialog(true);
+                } else {
+                    // SUBSEQUENT SAVES: Show the simple "Saved!" notification
+                    setShowSaveNotification(true);
+                }
+
                 // Store bot username for future use
                 if (result.bot_username) {
                     setBotUsername(result.bot_username);
@@ -451,6 +499,22 @@ const Dashboard: React.FC = () => {
                 onNewGroupNameChange={setNewGroupName}
                 onCreateGroup={handleCreateGroup}
             />
+
+            <Snackbar
+                open={showSaveNotification}
+                autoHideDuration={4000}
+                onClose={() => setShowSaveNotification(false)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+            >
+                <Alert
+                    onClose={() => setShowSaveNotification(false)}
+                    severity="success"
+                    variant="filled"
+                    sx={{ width: '100%' }}
+                >
+                    Settings saved successfully!
+                </Alert>
+            </Snackbar>
         </Box>
     );
 };
