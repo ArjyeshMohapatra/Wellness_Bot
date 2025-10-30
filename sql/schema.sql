@@ -10,7 +10,7 @@ DELIMITER //
 CREATE FUNCTION get_max_members_for_admin(admin_user_id INT) RETURNS INT
 DETERMINISTIC
 BEGIN
-    DECLARE max_members INT DEFAULT 50; -- Default for development/testing
+    DECLARE max_members INT DEFAULT 0; -- Default for development/testing
     DECLARE plan_count INT DEFAULT 0;
 
     -- Check if user has any completed transactions
@@ -124,6 +124,7 @@ CREATE TABLE IF NOT EXISTS bot_settings (
     setting_id INT AUTO_INCREMENT PRIMARY KEY,
     admin_user_id INT NOT NULL,
     group_id BIGINT NOT NULL DEFAULT 0,
+    group_name VARCHAR(255),
     license_key VARCHAR(50) COLLATE utf8mb4_unicode_520_ci,
     bot_username VARCHAR(255) COLLATE utf8mb4_unicode_520_ci DEFAULT 'WellnessBot',
     has_admin_permissions BOOLEAN DEFAULT FALSE,
