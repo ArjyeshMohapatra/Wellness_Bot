@@ -37,6 +37,28 @@ import {
     PersonAdd as PersonAddIcon,
 } from '@mui/icons-material';
 
+interface BotSettings {
+    setting_id?: number;
+    admin_user_id: number;
+    group_id: number;
+    group_name?: string;
+    license_key: string | null;
+    bot_username: string;
+    has_admin_permissions: boolean;
+    event_type: 'normal' | 'time-limited';
+    event_name: string;
+    event_days: number;
+    pass_points: number;
+    slots_per_day: number;
+    welcome_message: string;
+    kick_response: string;
+    undesignated_slot_response: string;
+    leaderboard_time: string;
+    banned_words: string[];
+    loaded_slots: Slot[];
+    is_active: boolean;
+}
+
 const Dashboard: React.FC = () => {
     const { logout } = useAuth();
     const [loadedSlots, setLoadedSlots] = useState<Slot[]>([]);
@@ -51,7 +73,7 @@ const Dashboard: React.FC = () => {
     const navigate = useNavigate();
 
     // New state for multiple groups
-    const [botSettings, setBotSettings] = useState<any[]>([]);
+    const [botSettings, setBotSettings] = useState<BotSettings[]>([]);
     const [selectedGroupId, setSelectedGroupId] = useState<number>(0);
     const [showCreateGroupDialog, setShowCreateGroupDialog] = useState(false);
     const [newGroupName, setNewGroupName] = useState('');
@@ -118,7 +140,7 @@ const Dashboard: React.FC = () => {
     } = useSlotConfiguration(loadedSlots);
 
     // Function to load settings for a specific group
-    const loadSettingsForGroup = useCallback((settings: any) => {
+    const loadSettingsForGroup = useCallback((settings: BotSettings) => {
         setBotUsername(settings.bot_username || 'BeHumanAgainBot');
         setHasAdminPermissions(settings.has_admin_permissions || false);
         setLicenseKey(settings.license_key || null);
@@ -193,7 +215,7 @@ const Dashboard: React.FC = () => {
                     const savedGroupId = localStorage.getItem('selectedGroupId');
                     let selectedSettings = settingsList[0];
                     if (savedGroupId) {
-                        const saved = settingsList.find(s => s.group_id === parseInt(savedGroupId));
+                        const saved = settingsList.find((s: BotSettings) => s.group_id === parseInt(savedGroupId));
                         if (saved) selectedSettings = saved;
                     }
                     setSelectedGroupId(selectedSettings.group_id);
@@ -236,7 +258,7 @@ const Dashboard: React.FC = () => {
                 license_key: null,
                 bot_username: 'BeHumanAgainBot',
                 has_admin_permissions: false,
-                event_type: 'normal',
+                event_type: 'normal' as const,
                 event_name: '',
                 event_days: 7,
                 pass_points: 250,
