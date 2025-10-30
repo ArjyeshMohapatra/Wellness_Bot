@@ -172,32 +172,6 @@ CREATE TABLE IF NOT EXISTS groups_config (
     -- FOREIGN KEY (license_key) REFERENCES licenses(license_key) ON DELETE CASCADE  -- Temporarily removed
 );
 
--- BOT SETTINGS TABLE (for multiple groups per admin)
-CREATE TABLE IF NOT EXISTS bot_settings (
-    setting_id INT AUTO_INCREMENT PRIMARY KEY,
-    admin_user_id INT NOT NULL,
-    group_id BIGINT NOT NULL DEFAULT 0,
-    license_key VARCHAR(50) COLLATE utf8mb4_unicode_520_ci,
-    bot_username VARCHAR(255) COLLATE utf8mb4_unicode_520_ci DEFAULT 'WellnessBot',
-    has_admin_permissions BOOLEAN DEFAULT FALSE,
-    event_type ENUM('normal', 'time-limited') DEFAULT 'normal',
-    event_name VARCHAR(255) COLLATE utf8mb4_unicode_520_ci,
-    event_days INT DEFAULT 7,
-    pass_points INT DEFAULT 250,
-    slots_per_day INT DEFAULT 2,
-    welcome_message TEXT COLLATE utf8mb4_unicode_520_ci,
-    kick_response TEXT COLLATE utf8mb4_unicode_520_ci,
-    undesignated_slot_response TEXT COLLATE utf8mb4_unicode_520_ci,
-    leaderboard_time VARCHAR(10) COLLATE utf8mb4_unicode_520_ci DEFAULT '11:00',
-    banned_words JSON,
-    loaded_slots JSON,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (admin_user_id) REFERENCES users (id) ON DELETE CASCADE,
-    UNIQUE KEY unique_admin_group_setting (admin_user_id, group_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
-
 -- ADMIN SUBSCRIPTION LIMITS TABLE
 CREATE TABLE IF NOT EXISTS admin_subscription_limits (
     admin_user_id INT PRIMARY KEY,
