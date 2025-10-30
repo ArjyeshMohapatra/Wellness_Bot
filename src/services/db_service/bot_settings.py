@@ -160,7 +160,11 @@ def save_bot_settings_for_group(admin_user_id, group_id, settings):
                     banned_words, loaded_slots
                 )
 
-                cursor.execute(query, params)
+                try:
+                    cursor.execute(query, params)
+                except Exception as e:
+                    logger.error(f"Failed executing save_bot_settings. Query: {query} | Params: {params} | Error: {e}", exc_info=True)
+                    raise
 
                 # Commit transaction
                 conn.commit()

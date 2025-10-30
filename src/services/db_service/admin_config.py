@@ -67,14 +67,26 @@ def update_admin_config(cursor, admin_user_id, config_data):
         config_data.get('leaderboard_time', None),
         config_data.get('max_members', 25)
     )
-    cursor.execute(query, params)
+    try:
+        cursor.execute(query, params)
+    except Exception as e:
+        logger.error(f"Failed executing save_or_update_admin_config. Query: {query} | Params: {params} | Error: {e}", exc_info=True)
+        raise
 
 
 def save_or_update_admin_slots(cursor, admin_user_id, slots_data):
     """Save or update admin slots"""
     # First, delete existing slots for this admin
-    cursor.execute("DELETE FROM admin_slot_keywords WHERE slot_id IN (SELECT slot_id FROM admin_slots WHERE admin_user_id = %s)", (admin_user_id,))
-    cursor.execute("DELETE FROM admin_slots WHERE admin_user_id = %s", (admin_user_id,))
+    try:
+        cursor.execute("DELETE FROM admin_slot_keywords WHERE slot_id IN (SELECT slot_id FROM admin_slots WHERE admin_user_id = %s)", (admin_user_id,))
+    except Exception as e:
+        logger.error(f"Failed executing save_or_update_admin_slots (delete keywords). Query: DELETE FROM admin_slot_keywords WHERE slot_id IN (SELECT slot_id FROM admin_slots WHERE admin_user_id = %s) | Params: {(admin_user_id,)} | Error: {e}", exc_info=True)
+        raise
+    try:
+        cursor.execute("DELETE FROM admin_slots WHERE admin_user_id = %s", (admin_user_id,))
+    except Exception as e:
+        logger.error(f"Failed executing save_or_update_admin_slots (delete slots). Query: DELETE FROM admin_slots WHERE admin_user_id = %s | Params: {(admin_user_id,)} | Error: {e}", exc_info=True)
+        raise
 
     # Insert new slots
     for slot_data in slots_data:
@@ -99,7 +111,11 @@ def save_or_update_admin_slots(cursor, admin_user_id, slots_data):
             json.dumps(slot_data.get('buttonNames', [])),
             json.dumps(slot_data.get('buttonValues', []))
         )
-        cursor.execute(query, params)
+        try:
+            cursor.execute(query, params)
+        except Exception as e:
+            logger.error(f"Failed executing save_or_update_admin_slots (insert slot). Query: {query} | Params: {params} | Error: {e}", exc_info=True)
+            raise
 
 
 def get_admin_config(admin_user_id):

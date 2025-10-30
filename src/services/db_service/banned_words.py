@@ -16,10 +16,14 @@ def save_banned_words(cursor, group_id, banned_words):
 
             # Insert each word with group_id = NULL
             for word in words:
-                cursor.execute(
-                    "INSERT INTO banned_words (group_id, word) VALUES (NULL, %s)",
-                    (word,)
-                )
+                try:
+                    cursor.execute(
+                        "INSERT INTO banned_words (group_id, word) VALUES (NULL, %s)",
+                        (word,)
+                    )
+                except Exception as e:
+                    logger.error(f"Failed executing save_banned_words. Query: INSERT INTO banned_words (group_id, word) VALUES (NULL, %s) | Params: {(word,)} | Error: {e}", exc_info=True)
+                    raise
 
         logger.info(f"Saved {len(words) if 'words' in locals() else 0} global banned words")
 

@@ -265,9 +265,33 @@ def create_default_event_and_slots(group_id):
 
 def update_group_config(cursor, group_id, admin_user_id, config_data):
     """Update group configuration in groups_config table"""
+    # Coerce and sanitize incoming config data to avoid passing unexpected types to SQL params
+    try:
+        welcome_message = str(config_data.get('welcome_message', '') or '')
+    except Exception:
+        welcome_message = ''
+    try:
+        kick_message = str(config_data.get('kick_response', '') or '')
+    except Exception:
+        kick_message = ''
+    try:
+        max_members = int(config_data.get('max_members')) if config_data.get('max_members') not in (None, '') else 0
+    except Exception:
+        max_members = 0
+    try:
+        undesignated_slot_response = str(config_data.get('undesignated_slot_response', '') or '')
+    except Exception:
+        undesignated_slot_response = ''
+    leaderboard_time_val = config_data.get('leaderboard_time', None)
+    leaderboard_time = leaderboard_time_val if leaderboard_time_val not in ('', None) else None
+
     if group_id is None:
         # For admin templates, check if config already exists for this admin
-        cursor.execute("SELECT config_id FROM groups_config WHERE group_id IS NULL AND admin_user_id = %s", (admin_user_id,))
+        try:
+            cursor.execute("SELECT config_id FROM groups_config WHERE group_id IS NULL AND admin_user_id = %s", (admin_user_id,))
+        except Exception as e:
+            logger.error(f"Failed executing update_group_config (select admin template). Query: SELECT config_id FROM groups_config WHERE group_id IS NULL AND admin_user_id = %s | Params: {(admin_user_id,)} | Error: {e}", exc_info=True)
+            raise
         existing = cursor.fetchone()
 
         if existing:
@@ -280,13 +304,18 @@ def update_group_config(cursor, group_id, admin_user_id, config_data):
             """
             params = (
                 None,  # license_key
-                config_data.get('welcome_message', ''),
-                config_data.get('kick_response', ''),  # kick_response maps to kick_message
-                config_data.get('max_members', 100),
-                config_data.get('undesignated_slot_response', ''),
-                config_data.get('leaderboard_time', None),
+                welcome_message,
+                kick_message,
+                max_members,
+                undesignated_slot_response,
+                leaderboard_time,
                 existing[0]  # config_id
             )
+            try:
+                cursor.execute(query, params)
+            except Exception as e:
+                logger.error(f"Failed executing update_group_config (admin template update). Query: {query} | Params: {params} | Error: {e}", exc_info=True)
+                raise
         else:
             # Insert new admin template
             query = """
@@ -297,12 +326,17 @@ def update_group_config(cursor, group_id, admin_user_id, config_data):
                 None,  # group_id
                 None,  # license_key
                 admin_user_id,
-                config_data.get('welcome_message', ''),
-                config_data.get('kick_response', ''),  # kick_response maps to kick_message
-                config_data.get('max_members', 100),
-                config_data.get('undesignated_slot_response', ''),
-                config_data.get('leaderboard_time', None)
+                welcome_message,
+                kick_message,
+                max_members,
+                undesignated_slot_response,
+                leaderboard_time
             )
+            try:
+                cursor.execute(query, params)
+            except Exception as e:
+                logger.error(f"Failed executing update_group_config (admin template insert). Query: {query} | Params: {params} | Error: {e}", exc_info=True)
+                raise
     else:
         # Update existing config with group_id
         query = """
@@ -323,13 +357,17 @@ def update_group_config(cursor, group_id, admin_user_id, config_data):
             group_id,
             license_key,
             admin_user_id,
-            config_data.get('welcome_message', ''),
-            config_data.get('kick_response', ''),  # kick_response maps to kick_message
-            config_data.get('max_members', 100),
-            config_data.get('undesignated_slot_response', ''),
-            config_data.get('leaderboard_time', None)
+            welcome_message,
+            kick_message,
+            max_members,
+            undesignated_slot_response,
+            leaderboard_time
         )
-    cursor.execute(query, params)
+        try:
+            cursor.execute(query, params)
+        except Exception as e:
+            logger.error(f"Failed executing update_group_config (group insert/update). Query: {query} | Params: {params} | Error: {e}", exc_info=True)
+            raise
 
 
 def get_admin_panel_config(group_id):

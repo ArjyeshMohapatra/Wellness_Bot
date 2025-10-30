@@ -57,7 +57,11 @@ def mark_slot_completed(group_id, event_id, slot_id, user_id, status="completed"
 
     with get_db_connection() as conn:
         with conn.cursor(dictionary=True) as cursor:
-            cursor.execute(query, (event_id, slot_id, user_id, username, first_name, last_name, status, points))
+            try:
+                cursor.execute(query, (event_id, slot_id, user_id, username, first_name, last_name, status, points))
+            except Exception as e:
+                logger.error(f"Failed executing mark_slot_completed. Query: {query} | Params: {(event_id, slot_id, user_id, username, first_name, last_name, status, points)} | Error: {e}", exc_info=True)
+                raise
             return cursor.rowcount == 1
 
 

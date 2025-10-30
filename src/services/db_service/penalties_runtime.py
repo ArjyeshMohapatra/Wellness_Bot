@@ -68,13 +68,21 @@ def update_admin_status(group_id, admin_user_ids):
                 query_1 = """
                 UPDATE group_members SET is_admin = 0 WHERE group_id = %s
                 """
-                cursor.execute(query_1, (group_id,))
+                try:
+                    cursor.execute(query_1, (group_id,))
+                except Exception as e:
+                    logger.error(f"Failed executing update_admin_status (reset admins). Query: {query_1} | Params: {(group_id,)} | Error: {e}", exc_info=True)
+                    raise
 
                 if admin_user_ids:
                     placeholders = ', '.join(['%s'] * len(admin_user_ids))
                     query_2 = f"UPDATE group_members SET is_admin = 1 WHERE group_id = %s AND user_id IN ({placeholders})"
                     params = (group_id,) + tuple(admin_user_ids)
-                    cursor.execute(query_2, params)
+                    try:
+                        cursor.execute(query_2, params)
+                    except Exception as e:
+                        logger.error(f"Failed executing update_admin_status (set admins). Query: {query_2} | Params: {params} | Error: {e}", exc_info=True)
+                        raise
                 conn.commit()
         logger.info(f"Successfully synchronized admin status for group {group_id}.")
         return True

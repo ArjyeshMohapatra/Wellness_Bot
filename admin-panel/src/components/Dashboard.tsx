@@ -1,82 +1,46 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Box } from '@mui/material';
 import PaymentPopup from './dashboard/PaymentPopup';
 import BotSettings from './dashboard/BotSettings';
 import Subscription from './dashboard/Subscription';
+import Header from './dashboard/Header';
+import SubscriptionStatus from './dashboard/SubscriptionStatus';
+import BotInfo from './dashboard/BotInfo';
+import GroupSelector from './dashboard/GroupSelector';
+import ConfigurationSuccessDialog from './dashboard/ConfigurationSuccessDialog';
+import CreateGroupDialog from './dashboard/CreateGroupDialog';
 import { useAuth } from '../hooks/useAuth';
 import { useSubscription } from '../hooks/useSubscription';
 import { usePayment } from '../hooks/usePayment';
-import { useSlotConfiguration, type Slot } from '../hooks/useSlotConfiguration';
-import {
-    AppBar,
-    Toolbar,
-    Typography,
-    Button,
-    Box,
-    IconButton,
-    CircularProgress,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Accordion,
-    AccordionSummary,
-    AccordionDetails,
-    Select,
-    MenuItem,
-    FormControl,
-    InputLabel,
-    TextField,
-} from '@mui/material';
-import {
-    Logout as LogoutIcon,
-    CreditCard as CreditCardIcon,
-    LocalHospital as HospitalIcon,
-    ContentCopy as ContentCopyIcon,
-    ExpandMore as ExpandMoreIcon,
-    PersonAdd as PersonAddIcon,
-} from '@mui/icons-material';
-
-interface BotSettings {
-    setting_id?: number;
-    admin_user_id: number;
-    group_id: number;
-    group_name?: string;
-    license_key: string | null;
-    bot_username: string;
-    has_admin_permissions: boolean;
-    event_type: 'normal' | 'time-limited';
-    event_name: string;
-    event_days: number;
-    pass_points: number;
-    slots_per_day: number;
-    welcome_message: string;
-    kick_response: string;
-    undesignated_slot_response: string;
-    leaderboard_time: string;
-    banned_words: string[];
-    loaded_slots: Slot[];
-    is_active: boolean;
-}
+import { useSlotConfiguration } from '../hooks/useSlotConfiguration';
+import { useDashboardState } from '../hooks/useDashboard';
 
 const Dashboard: React.FC = () => {
     const { logout } = useAuth();
-    const [loadedSlots, setLoadedSlots] = useState<Slot[]>([]);
-    const [botUsername, setBotUsername] = useState('BeHumanAgainBot');
-    const [hasAdminPermissions, setHasAdminPermissions] = useState(false);
-    const [licenseKey, setLicenseKey] = useState<string | null>(null);
-    const [showConfigurationDialog, setShowConfigurationDialog] = useState(false);
-    const [configurationDialogData, setConfigurationDialogData] = useState<{
-        botUsername: string;
-        licenseKey: string | null;
-    } | null>(null);
-    const navigate = useNavigate();
 
-    // New state for multiple groups
-    const [botSettings, setBotSettings] = useState<BotSettings[]>([]);
-    const [selectedGroupId, setSelectedGroupId] = useState<number>(0);
-    const [showCreateGroupDialog, setShowCreateGroupDialog] = useState(false);
-    const [newGroupName, setNewGroupName] = useState('');
+    // Use the extracted dashboard state hook
+    const {
+        botSettings,
+        selectedGroupId,
+        showCreateGroupDialog,
+        newGroupName,
+        showConfigurationDialog,
+        configurationDialogData,
+        loadedSlots,
+        botUsername,
+        hasAdminPermissions,
+        licenseKey,
+        setShowCreateGroupDialog,
+        setNewGroupName,
+        setShowConfigurationDialog,
+        setConfigurationDialogData,
+        setLoadedSlots,
+        setBotUsername,
+        setLicenseKey,
+        handleGroupSelect,
+        handleCreateGroup,
+        refreshAdminPermissions,
+    } = useDashboardState();
 
     const {
         selectedPlan,
@@ -138,199 +102,6 @@ const Dashboard: React.FC = () => {
         handleSlotButtonIndexChange,
         handleSlotChange
     } = useSlotConfiguration(loadedSlots);
-
-    // Function to load settings for a specific group
-    const loadSettingsForGroup = useCallback((settings: BotSettings) => {
-        setBotUsername(settings.bot_username || 'BeHumanAgainBot');
-        setHasAdminPermissions(settings.has_admin_permissions || false);
-        setLicenseKey(settings.license_key || null);
-        setLoadedSlots(settings.loaded_slots || []);
-
-        // Load event configuration
-        setEventType(settings.event_type || 'normal');
-        setEventName(settings.event_name || '');
-        setEventDays(settings.event_days?.toString() || '');
-        setPassPoints(settings.pass_points?.toString() || '');
-        setSlotsPerDay(settings.slots_per_day?.toString() || '');
-        setWelcomeMessage(settings.welcome_message || '');
-        setKickResponse(settings.kick_response || '');
-        setUndesignatedSlotResponse(settings.undesignated_slot_response || '');
-        setLeaderboardTime(settings.leaderboard_time || '');
-        setBannedWords(settings.banned_words || []);
-    }, [setEventType, setEventName, setEventDays, setPassPoints, setSlotsPerDay, setWelcomeMessage, setKickResponse, setUndesignatedSlotResponse, setLeaderboardTime, setBannedWords]);
-
-    // Function to load configuration
-    const loadConfiguration = useCallback(async () => {
-        try {
-            // Load dashboard state from localStorage first
-            const savedDashboardState = localStorage.getItem('dashboardState');
-            if (savedDashboardState) {
-                const state = JSON.parse(savedDashboardState);
-                setBotUsername(state.botUsername || 'BeHumanAgainBot');
-                setHasAdminPermissions(state.hasAdminPermissions || false);
-                setLicenseKey(state.licenseKey || null);
-                setLoadedSlots(state.loadedSlots || []);
-            }
-
-            // Load all bot settings from database
-            const adminUserId = localStorage.getItem('userId');
-            console.log('Loading dashboard for adminUserId:', adminUserId);
-
-            if (!adminUserId) {
-                console.error('No adminUserId found');
-                return;
-            }
-
-            const dashboardResponse = await fetch(`http://localhost:8001/api/admin/dashboard/settings?admin_user_id=${adminUserId}`);
-            const dashboardResult = await dashboardResponse.json();
-            if (dashboardResult.success && dashboardResult.settings) {
-                const settingsList = Array.isArray(dashboardResult.settings) ? dashboardResult.settings : [dashboardResult.settings];
-                setBotSettings(settingsList);
-
-                // If no settings exist yet, initialize with default
-                if (settingsList.length === 0) {
-                    setBotSettings([{
-                        setting_id: 0,
-                        admin_user_id: parseInt(adminUserId),
-                        group_id: 0,
-                        license_key: null,
-                        bot_username: 'BeHumanAgainBot',
-                        has_admin_permissions: false,
-                        event_type: 'normal',
-                        event_name: '',
-                        event_days: 7,
-                        pass_points: 250,
-                        slots_per_day: 2,
-                        welcome_message: '',
-                        kick_response: '',
-                        undesignated_slot_response: '',
-                        leaderboard_time: '11:00',
-                        banned_words: [],
-                        loaded_slots: [],
-                        is_active: true
-                    }]);
-                    setSelectedGroupId(0);
-                } else {
-                    // Load the selected group's settings, defaulting to the first group
-                    const savedGroupId = localStorage.getItem('selectedGroupId');
-                    let selectedSettings = settingsList[0];
-                    if (savedGroupId) {
-                        const saved = settingsList.find((s: BotSettings) => s.group_id === parseInt(savedGroupId));
-                        if (saved) selectedSettings = saved;
-                    }
-                    setSelectedGroupId(selectedSettings.group_id);
-                    loadSettingsForGroup(selectedSettings);
-                }
-            }
-        } catch (error) {
-            console.error('Error loading configuration:', error);
-        }
-    }, [loadSettingsForGroup]);
-
-    // Function to handle group selection
-    const handleGroupSelect = (groupId: number) => {
-        setSelectedGroupId(groupId);
-        const settings = botSettings.find(s => s.group_id === groupId);
-        if (settings) {
-            loadSettingsForGroup(settings);
-        }
-    };
-
-    // Function to create new group settings
-    const handleCreateGroup = async () => {
-        if (!newGroupName.trim()) {
-            alert('Please enter a group name');
-            return;
-        }
-
-        try {
-            const adminUserId = localStorage.getItem('userId');
-            if (!adminUserId) {
-                alert('User not logged in');
-                return;
-            }
-
-            // Create new group settings with default values
-            const newSettings = {
-                admin_user_id: parseInt(adminUserId),
-                group_id: Date.now(), // Use timestamp as temporary group_id until bot joins
-                group_name: newGroupName.trim(),
-                license_key: null,
-                bot_username: 'BeHumanAgainBot',
-                has_admin_permissions: false,
-                event_type: 'normal' as const,
-                event_name: '',
-                event_days: 7,
-                pass_points: 250,
-                slots_per_day: 2,
-                welcome_message: '',
-                kick_response: '',
-                undesignated_slot_response: '',
-                leaderboard_time: '11:00',
-                banned_words: [],
-                loaded_slots: [],
-                is_active: true
-            };
-
-            const response = await fetch('http://localhost:8001/api/admin/dashboard/settings', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    admin_user_id: parseInt(adminUserId),
-                    group_id: newSettings.group_id,
-                    settings: newSettings
-                })
-            });
-
-            const result = await response.json();
-            if (result.success) {
-                // Add to local state
-                setBotSettings(prev => [...prev, newSettings]);
-                setSelectedGroupId(newSettings.group_id);
-                loadSettingsForGroup(newSettings);
-                setShowCreateGroupDialog(false);
-                setNewGroupName('');
-                alert('New group created successfully! Add the bot to your Telegram group and it will automatically detect the group ID.');
-            } else {
-                alert(`Failed to create group: ${result.message}`);
-            }
-        } catch (error) {
-            console.error('Error creating group:', error);
-            alert('Error creating group. Please try again.');
-        }
-    };
-
-    // Function to refresh admin permissions
-    const refreshAdminPermissions = useCallback(async () => {
-        try {
-            const adminUserId = localStorage.getItem('userId');
-            if (!adminUserId) return;
-
-            const dashboardResponse = await fetch(`http://localhost:8001/api/admin/dashboard/settings?admin_user_id=${adminUserId}`);
-            const dashboardResult = await dashboardResponse.json();
-            if (dashboardResult.success && dashboardResult.settings) {
-                // Note: dbSettings is an array, so we can't directly access has_admin_permissions
-                // For now, we'll skip updating permissions from here since it's not correctly implemented
-                // The permissions should be loaded in loadConfiguration
-            }
-        } catch (error) {
-            console.error('Error refreshing admin permissions:', error);
-        }
-    }, []);
-
-    // Load saved configuration on component mount
-    useEffect(() => {
-        loadConfiguration();
-
-        // Set up periodic refresh of admin permissions (every 30 seconds)
-        const interval = setInterval(() => {
-            refreshAdminPermissions();
-        }, 30000);
-
-        return () => clearInterval(interval);
-    }, [loadConfiguration, refreshAdminPermissions]);
 
     // Save dashboard state to localStorage whenever it changes
     useEffect(() => {
@@ -566,206 +337,32 @@ const Dashboard: React.FC = () => {
 
     return (
         <Box sx={{ minHeight: '100vh', background: 'linear-gradient(135deg, #f8fafc 0%, #e0f2fe 25%, #e8eaf6 100%)' }}>
-            {/* Header */}
-            <AppBar position="static" sx={{ backgroundColor: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-                <Toolbar>
-                    <HospitalIcon sx={{ mr: { xs: 1, sm: 2 }, color: 'primary.main' }} />
-                    <Typography
-                        variant="h6"
-                        component="div"
-                        sx={{
-                            flexGrow: 1,
-                            color: 'primary.main',
-                            fontWeight: 'bold',
-                            fontSize: { xs: '1rem', sm: '1.25rem' }
-                        }}
-                    >
-                        <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
-                            Wellness Bot Admin
-                        </Box>
-                        <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
-                            Wellness Admin
-                        </Box>
-                    </Typography>
+            <Header
+                hasActiveSubscription={hasActiveSubscription}
+                subscriptionLoading={subscriptionLoading}
+                onLogout={logout}
+            />
 
-                    {/* Desktop Layout */}
-                    <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center' }}>
-                        <Typography variant="body1" sx={{ mr: 2, color: 'text.secondary' }}>
-                            Welcome, Admin
-                        </Typography>
-                        {hasActiveSubscription && (
-                            <>
-                                <Button
-                                    variant="outlined"
-                                    color="primary"
-                                    size="small"
-                                    onClick={() => navigate('/dashboard/subscription')}
-                                    disabled={subscriptionLoading}
-                                    startIcon={subscriptionLoading ? <CircularProgress size={16} /> : <CreditCardIcon />}
-                                    sx={{ mr: 1, whiteSpace: 'nowrap' }}
-                                >
-                                    {subscriptionLoading ? 'Loading...' : 'Manage Subscription'}
-                                </Button>
-                                <Button
-                                    variant="outlined"
-                                    color="secondary"
-                                    size="small"
-                                    onClick={() => navigate('/dashboard/generateid')}
-                                    sx={{ mr: 1, whiteSpace: 'nowrap' }}
-                                >
-                                    Generate User IDs
-                                </Button>
-                            </>
-                        )}
-                        <Button
-                            variant="outlined"
-                            color="error"
-                            size="small"
-                            onClick={logout}
-                            startIcon={<LogoutIcon />}
-                        >
-                            Logout
-                        </Button>
-                    </Box>
+            <SubscriptionStatus
+                paymentCompleted={paymentCompleted}
+                subscriptionLoading={subscriptionLoading}
+                selectedPlan={selectedPlan}
+                selectedBilling={selectedBilling}
+                plans={plans}
+            />
 
-                    {/* Mobile Layout */}
-                    <Box sx={{ display: { xs: 'flex', md: 'none' }, alignItems: 'center', gap: 1 }}>
-                        {hasActiveSubscription && (
-                            <>
-                                <IconButton
-                                    color="primary"
-                                    size="small"
-                                    onClick={() => navigate('/dashboard/subscription')}
-                                    disabled={subscriptionLoading}
-                                    sx={{ p: 1 }}
-                                    title={subscriptionLoading ? 'Loading...' : 'Manage Subscription'}
-                                >
-                                    {subscriptionLoading ? <CircularProgress size={20} /> : <CreditCardIcon />}
-                                </IconButton>
-                                <IconButton
-                                    color="secondary"
-                                    size="small"
-                                    onClick={() => navigate('/dashboard/generateid')}
-                                    sx={{ p: 1 }}
-                                    title={'Generate User IDs'}
-                                >
-                                    <PersonAddIcon />
-                                </IconButton>
-                            </>
-                        )}
-                        <IconButton
-                            color="error"
-                            size="small"
-                            onClick={logout}
-                            sx={{ p: 1 }}
-                            title="Logout"
-                        >
-                            <LogoutIcon />
-                        </IconButton>
-                    </Box>
-                </Toolbar>
-            </AppBar>
+            <BotInfo
+                hasActiveSubscription={hasActiveSubscription}
+                licenseKey={licenseKey}
+                onCopyToClipboard={copyToClipboard}
+            />
 
-            {/* Selected Plan Display */}
-            {paymentCompleted && (
-                <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 shadow-lg">
-                    <div className="container">
-                        <div className="row align-items-center">
-                            <div className="col-md-8">
-                                <div className="d-flex align-items-center">
-                                    <div className="bg-white bg-opacity-20 rounded-full p-2 me-3">
-                                        <i className="bi bi-check-circle-fill fs-4"></i>
-                                    </div>
-                                    <div>
-                                        <h5 className="mb-1 fw-bold">
-                                            Active Plan: {subscriptionLoading ? 'Checking...' : (selectedPlan || 'No Plan')}
-                                        </h5>
-                                        <p className="mb-0 opacity-90">
-                                            {(() => {
-                                                const duration = plans.find(p => p.name === selectedPlan)?.billingOptions.find(opt => opt.type === selectedBilling)?.duration;
-                                                if (duration === 1) return 'Monthly Subscription';
-                                                if (duration === 6) return 'Half yearly Subscription';
-                                                if (duration === 12) return 'Annual Subscription';
-                                                return `${duration}`;
-                                            })()}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="col-md-4 text-md-end">
-                                <span className="badge bg-white text-success fs-6 px-3 py-2 shadow-sm fw-bold">
-                                    {plans.find(p => p.name === selectedPlan)?.billingOptions.find(opt => opt.type === selectedBilling)?.price}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Bot Information Display */}
-            {hasActiveSubscription && licenseKey && (
-                <Box sx={{ mt: 2, mb: 2 }}>
-                    <Box sx={{
-                        bgcolor: 'info.light',
-                        p: 3,
-                        borderRadius: 2,
-                        border: '2px solid',
-                        borderColor: 'info.main'
-                    }}>
-                        <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: 'info.contrastText' }}>
-                            🤖 Bot Information
-                        </Typography>
-                        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
-                            <Box sx={{ flex: 1 }}>
-                                <Typography variant="body2" sx={{ color: 'info.contrastText', opacity: 0.9 }}>
-                                    Bot Link
-                                </Typography>
-                                <Button
-                                    variant="contained"
-                                    color="primary"
-                                    size="small"
-                                    href={`https://t.me/BeHumanAgainBot`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    sx={{ mt: 1 }}
-                                >
-                                    @{"BeHumanAgainBot"}
-                                </Button>
-                            </Box>
-                            {licenseKey && (
-                                <Box sx={{ flex: 1 }}>
-                                    <Typography variant="body2" sx={{ color: 'info.contrastText', opacity: 0.9 }}>
-                                        License Key
-                                    </Typography>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
-                                        <Typography variant="body1" sx={{
-                                            color: 'info.contrastText',
-                                            fontWeight: 'bold',
-                                            fontFamily: 'monospace',
-                                            wordBreak: 'break-all',
-                                            flex: 1
-                                        }}>
-                                            {licenseKey}
-                                        </Typography>
-                                        <IconButton
-                                            size="small"
-                                            onClick={() => copyToClipboard(licenseKey, 'License Key')}
-                                            sx={{
-                                                color: 'info.contrastText',
-                                                '&:hover': {
-                                                    bgcolor: 'rgba(255, 255, 255, 0.1)'
-                                                }
-                                            }}
-                                        >
-                                            <ContentCopyIcon fontSize="small" />
-                                        </IconButton>
-                                    </Box>
-                                </Box>
-                            )}
-                        </Box>
-                    </Box>
-                </Box>
-            )}
+            <GroupSelector
+                botSettings={botSettings}
+                selectedGroupId={selectedGroupId}
+                onGroupSelect={handleGroupSelect}
+                onCreateGroup={() => setShowCreateGroupDialog(true)}
+            />
 
             {/* Main Content */}
             <>
@@ -783,90 +380,42 @@ const Dashboard: React.FC = () => {
                 )}
                 {/* Bot settings remain on dashboard when subscription is not being managed */}
                 {hasActiveSubscription && (
-                    <>
-                        {/* Group Selector */}
-                        <Box sx={{ mt: 3, mb: 2 }}>
-                            <Box sx={{
-                                bgcolor: 'background.paper',
-                                p: 3,
-                                borderRadius: 2,
-                                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                                border: '1px solid',
-                                borderColor: 'divider'
-                            }}>
-                                <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: 'primary.main' }}>
-                                    📋 Group Configuration
-                                </Typography>
-
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                                    <FormControl sx={{ minWidth: 200 }}>
-                                        <InputLabel>Select Group</InputLabel>
-                                        <Select
-                                            value={selectedGroupId}
-                                            label="Select Group"
-                                            onChange={(e) => handleGroupSelect(Number(e.target.value))}
-                                        >
-                                            {botSettings.map((setting) => (
-                                                <MenuItem key={setting.group_id} value={setting.group_id}>
-                                                    {setting.group_name || `Group ${setting.group_id}`}
-                                                </MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-
-                                    <Button
-                                        variant="outlined"
-                                        color="primary"
-                                        onClick={() => setShowCreateGroupDialog(true)}
-                                        startIcon={<PersonAddIcon />}
-                                    >
-                                        Add New Group
-                                    </Button>
-                                </Box>
-
-                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                    Configure different bot settings for each Telegram group. Add the bot to your groups and it will automatically detect them.
-                                </Typography>
-                            </Box>
-                        </Box>
-
-                        <BotSettings
-                            groupId={selectedGroupId}
-                            eventType={eventType}
-                            eventName={eventName}
-                            eventDays={eventDays}
-                            passPoints={passPoints}
-                            slotsPerDay={slotsPerDay}
-                            welcomeMessage={welcomeMessage}
-                            kickResponse={kickResponse}
-                            undesignatedSlotResponse={undesignatedSlotResponse}
-                            leaderboardTime={leaderboardTime}
-                            bannedWords={bannedWords}
-                            slots={slots}
-                            slotErrors={slotErrors}
-                            currentSlotIndex={currentSlotIndex}
-                            currentButtonIndex={currentButtonIndex}
-                            slotButtonIndices={slotButtonIndices}
-                            onEventTypeChange={setEventType}
-                            onEventNameChange={setEventName}
-                            onEventDaysChange={setEventDays}
-                            onPassPointsChange={setPassPoints}
-                            onSlotsPerDayChange={setSlotsPerDay}
-                            onWelcomeMessageChange={setWelcomeMessage}
-                            onKickResponseChange={setKickResponse}
-                            onUndesignatedSlotResponseChange={setUndesignatedSlotResponse}
-                            onLeaderboardTimeChange={setLeaderboardTime}
-                            onBannedWordsChange={setBannedWords}
-                            onSlotChange={handleSlotChange}
-                            onCurrentSlotIndexChange={setCurrentSlotIndex}
-                            onCurrentButtonIndexChange={setCurrentButtonIndex}
-                            onSlotTypeChange={handleSlotTypeChange}
-                            onSlotButtonCountChange={handleSlotButtonCountChange}
-                            onSlotButtonIndexChange={handleSlotButtonIndexChange}
-                            onSaveConfiguration={handleSaveConfiguration}
-                            isConfigurationValid={isConfigurationValid()}
-                        />
-                    </>
+                    <BotSettings
+                        groupId={selectedGroupId}
+                        eventType={eventType}
+                        eventName={eventName}
+                        eventDays={eventDays}
+                        passPoints={passPoints}
+                        slotsPerDay={slotsPerDay}
+                        welcomeMessage={welcomeMessage}
+                        kickResponse={kickResponse}
+                        undesignatedSlotResponse={undesignatedSlotResponse}
+                        leaderboardTime={leaderboardTime}
+                        bannedWords={bannedWords}
+                        slots={slots}
+                        slotErrors={slotErrors}
+                        currentSlotIndex={currentSlotIndex}
+                        currentButtonIndex={currentButtonIndex}
+                        slotButtonIndices={slotButtonIndices}
+                        onEventTypeChange={setEventType}
+                        onEventNameChange={setEventName}
+                        onEventDaysChange={setEventDays}
+                        onPassPointsChange={setPassPoints}
+                        onSlotsPerDayChange={setSlotsPerDay}
+                        onWelcomeMessageChange={setWelcomeMessage}
+                        onKickResponseChange={setKickResponse}
+                        onUndesignatedSlotResponseChange={setUndesignatedSlotResponse}
+                        onLeaderboardTimeChange={setLeaderboardTime}
+                        onBannedWordsChange={setBannedWords}
+                        onSlotChange={handleSlotChange}
+                        onCurrentSlotIndexChange={setCurrentSlotIndex}
+                        onCurrentButtonIndexChange={setCurrentButtonIndex}
+                        onSlotTypeChange={handleSlotTypeChange}
+                        onSlotButtonCountChange={handleSlotButtonCountChange}
+                        onSlotButtonIndexChange={handleSlotButtonIndexChange}
+                        onSaveConfiguration={handleSaveConfiguration}
+                        isConfigurationValid={isConfigurationValid()}
+                    />
                 )}
             </>
 
@@ -886,209 +435,22 @@ const Dashboard: React.FC = () => {
             />
 
             {/* Configuration Success Dialog */}
-            <Dialog
+            <ConfigurationSuccessDialog
                 open={showConfigurationDialog}
                 onClose={() => setShowConfigurationDialog(false)}
-                maxWidth="md"
-                fullWidth
-            >
-                <DialogTitle sx={{ textAlign: 'center', bgcolor: 'success.light', color: 'success.contrastText' }}>
-                    <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                        🎉 Congratulations!
-                    </Typography>
-                    <Typography variant="h6">
-                        Bot's settings saved successfully
-                    </Typography>
-                </DialogTitle>
-                <DialogContent sx={{ p: 3 }}>
-                    {/* Bot Link */}
-                    <Box sx={{ mb: 3, textAlign: 'center' }}>
-                        <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
-                            🤖 Bot Link
-                        </Typography>
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            size="large"
-                            href={`https://t.me/${configurationDialogData?.botUsername || 'BeHumanAgainBot'}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            sx={{ minWidth: 200 }}
-                        >
-                            @{configurationDialogData?.botUsername || 'BeHumanAgainBot'}
-                        </Button>
-                    </Box>
+                configurationDialogData={configurationDialogData}
+                hasAdminPermissions={hasAdminPermissions}
+                onRefreshAdminPermissions={refreshAdminPermissions}
+                onCopyToClipboard={copyToClipboard}
+            />
 
-                    {/* Collapsible Bot Setup Instructions */}
-                    <Accordion defaultExpanded={false} sx={{ mb: 3 }}>
-                        <AccordionSummary
-                            expandIcon={<ExpandMoreIcon />}
-                            aria-controls="setup-instructions-content"
-                            id="setup-instructions-header"
-                        >
-                            <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                                📋 Bot Setup Instructions (Step-by-Step Guide)
-                            </Typography>
-                        </AccordionSummary>
-                        <AccordionDetails>
-                            <Typography variant="body1" sx={{ mb: 2 }}>
-                                Follow these steps to set up your bot in your Telegram group:
-                            </Typography>
-                            <Box component="ol" sx={{ pl: 2 }}>
-                                <li style={{ marginBottom: '8px' }}>
-                                    <strong>Add the bot to your group:</strong> Click the bot link above and add @{configurationDialogData?.botUsername || 'BeHumanAgainBot'} to your Telegram group as an administrator.
-                                </li>
-                                <li style={{ marginBottom: '8px' }}>
-                                    <strong>Grant admin permissions:</strong> Make sure the bot has admin permissions in your group (can delete messages, ban users, etc.).
-                                </li>
-                                <li style={{ marginBottom: '8px' }}>
-                                    <strong>Activate the license:</strong> Copy the license key below and send it to your group chat. The bot will automatically detect it and confirm admin permissions.
-                                </li>
-                                <li style={{ marginBottom: '8px' }}>
-                                    <strong>Generate user IDs:</strong> Once activated, use the "Generate User IDs" option in the navbar to create unique IDs for your group members.
-                                </li>
-                                <li style={{ marginBottom: '8px' }}>
-                                    <strong>Share with members:</strong> Distribute the bot link and unique user IDs to your potential group members.
-                                </li>
-                                <li style={{ marginBottom: '8px' }}>
-                                    <strong>Monitor activity:</strong> The bot will now manage your wellness program according to your configured settings.
-                                </li>
-                            </Box>
-                        </AccordionDetails>
-                    </Accordion>
-
-                    {/* Admin Permission Status & License Key */}
-                    <Box sx={{ textAlign: 'center' }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, mb: 2 }}>
-                            <Typography variant="h6" sx={{ fontWeight: 'bold', color: hasAdminPermissions ? 'success.main' : 'warning.main' }}>
-                                {hasAdminPermissions ? '✅ Admin Permission Confirmed' : '⚠️ Admin Permission Required'}
-                            </Typography>
-                            <IconButton
-                                size="small"
-                                onClick={refreshAdminPermissions}
-                                sx={{
-                                    '&:hover': {
-                                        bgcolor: 'rgba(0, 0, 0, 0.1)'
-                                    }
-                                }}
-                                title="Refresh Admin Permission Status"
-                            >
-                                🔄
-                            </IconButton>
-                        </Box>
-                        <Typography variant="body1" sx={{ mb: 2 }}>
-                            {hasAdminPermissions
-                                ? 'Your admin permissions have been verified and your bot configuration is ready.'
-                                : 'Your license key has been generated. Please complete the setup steps below to activate your bot.'
-                            }
-                        </Typography>
-
-                        {configurationDialogData?.licenseKey && (
-                            <Box sx={{ mt: 3 }}>
-                                <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
-                                    🔑 License Key
-                                </Typography>
-                                <Box sx={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: 1,
-                                    bgcolor: 'grey.100',
-                                    p: 2,
-                                    borderRadius: 1,
-                                    border: '1px solid',
-                                    borderColor: 'grey.300'
-                                }}>
-                                    <Typography variant="body1" sx={{
-                                        fontFamily: 'monospace',
-                                        fontSize: '1.1rem',
-                                        fontWeight: 'bold'
-                                    }}>
-                                        {configurationDialogData.licenseKey}
-                                    </Typography>
-                                    <IconButton
-                                        size="small"
-                                        onClick={() => copyToClipboard(configurationDialogData.licenseKey!, 'License Key')}
-                                        sx={{
-                                            '&:hover': {
-                                                bgcolor: 'rgba(0, 0, 0, 0.1)'
-                                            }
-                                        }}
-                                        title="Copy License Key"
-                                    >
-                                        <ContentCopyIcon />
-                                    </IconButton>
-                                </Box>
-                                <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
-                                    Copy this license key and send it to your group chat to activate the bot and verify admin permissions.
-                                </Typography>
-                            </Box>
-                        )}
-                    </Box>
-                </DialogContent>
-                <DialogActions sx={{ p: 3, justifyContent: 'center' }}>
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        size="large"
-                        onClick={() => setShowConfigurationDialog(false)}
-                        sx={{ minWidth: 150 }}
-                    >
-                        Proceed
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* Create Group Dialog */}
-            <Dialog
+            <CreateGroupDialog
                 open={showCreateGroupDialog}
                 onClose={() => setShowCreateGroupDialog(false)}
-                maxWidth="sm"
-                fullWidth
-            >
-                <DialogTitle sx={{ textAlign: 'center', bgcolor: 'primary.light', color: 'primary.contrastText' }}>
-                    <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-                        ➕ Create New Group Configuration
-                    </Typography>
-                </DialogTitle>
-                <DialogContent sx={{ p: 3 }}>
-                    <Typography variant="body1" sx={{ mb: 2, color: 'text.secondary' }}>
-                        Create a new configuration for a different Telegram group. You can customize bot settings for each group independently.
-                    </Typography>
-                    <TextField
-                        autoFocus
-                        margin="dense"
-                        label="Group Name"
-                        fullWidth
-                        variant="outlined"
-                        value={newGroupName}
-                        onChange={(e) => setNewGroupName(e.target.value)}
-                        placeholder="e.g., Wellness Group, Fitness Club"
-                        helperText="Choose a descriptive name for this group configuration"
-                    />
-                </DialogContent>
-                <DialogActions sx={{ p: 3, justifyContent: 'center', gap: 2 }}>
-                    <Button
-                        variant="outlined"
-                        onClick={() => {
-                            setShowCreateGroupDialog(false);
-                            setNewGroupName('');
-                        }}
-                        sx={{ minWidth: 100 }}
-                    >
-                        Cancel
-                    </Button>
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        onClick={handleCreateGroup}
-                        disabled={!newGroupName.trim()}
-                        sx={{ minWidth: 100 }}
-                    >
-                        Create Group
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                newGroupName={newGroupName}
+                onNewGroupNameChange={setNewGroupName}
+                onCreateGroup={handleCreateGroup}
+            />
         </Box>
     );
 };

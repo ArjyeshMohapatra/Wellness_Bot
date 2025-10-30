@@ -1,5 +1,7 @@
 from .utils import execute_query, get_db_connection, logger, ist, datetime, timedelta, NEW_MEMBER_RESTRICTION_MINUTES
 from .group_config import get_restriction_until_time
+from .subscription_limits import can_admin_add_member
+import mysql.connector
 
 
 # gets info regarding members who joins back group
@@ -145,19 +147,27 @@ def add_member(group_id, user_id, username=None, first_name=None, last_name=None
         with get_db_connection() as conn:
             with conn.cursor(dictionary=True) as cursor:
                 # handles both INSERT for new members and UPDATE for existing ones
-                cursor.execute(query_1, (
-                    user_id, group_id, username, first_name, last_name, 1 if is_admin else 0,
-                    is_restricted, restriction_until, cycle_start_date, cycle_end_date,
-                    total_points, knockout_points, general_warnings, banned_word_count, user_day_number
-                ))
+                try:
+                    cursor.execute(query_1, (
+                        user_id, group_id, username, first_name, last_name, 1 if is_admin else 0,
+                        is_restricted, restriction_until, cycle_start_date, cycle_end_date,
+                        total_points, knockout_points, general_warnings, banned_word_count, user_day_number
+                    ))
+                except Exception as e:
+                    logger.error(f"Failed executing add_member (insert/update). Query: {query_1} | Params: {(user_id, group_id, username, first_name, last_name, 1 if is_admin else 0, is_restricted, restriction_until, cycle_start_date, cycle_end_date, total_points, knockout_points, general_warnings, banned_word_count, user_day_number)} | Error: {e}", exc_info=True)
+                    raise
 
                 # If member is new, also log to member_history table
                 if is_new:
-                    cursor.execute(query_2, (
-                        group_id, user_id, username, first_name, last_name,
-                        total_points, knockout_points, general_warnings, banned_word_count,
-                        user_day_number, cycle_start_date, cycle_end_date
-                    ))
+                    try:
+                        cursor.execute(query_2, (
+                            group_id, user_id, username, first_name, last_name,
+                            total_points, knockout_points, general_warnings, banned_word_count,
+                            user_day_number, cycle_start_date, cycle_end_date
+                        ))
+                    except Exception as e:
+                        logger.error(f"Failed executing add_member (history insert). Query: {query_2} | Params: {(group_id, user_id, username, first_name, last_name, total_points, knockout_points, general_warnings, banned_word_count, user_day_number, cycle_start_date, cycle_end_date)} | Error: {e}", exc_info=True)
+                        raise
                     logger.debug(f"[DEBUG] Complete 'joined' record created for new user {user_id}")
         member_data = get_member(group_id, user_id)
         return member_data, is_new
@@ -261,15 +271,23 @@ def remove_member(group_id, user_id, action="kicked"):
                     last_active_timestamp, action
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
-                cursor.execute(archive_query, (
-                member['group_id'], member['user_id'], member.get('username'), member.get('first_name'), member.get('last_name'),
-                member.get('total_points'), member.get('knockout_points'), member.get('general_warnings'), member.get('banned_word_count'),
-                member.get('user_day_number'), member.get('cycle_start_date'), member.get('cycle_end_date'), member.get('is_restricted', 0),
-                member.get('joined_at'), member.get('last_active_timestamp'), action
-                ))
+                try:
+                    cursor.execute(archive_query, (
+                    member['group_id'], member['user_id'], member.get('username'), member.get('first_name'), member.get('last_name'),
+                    member.get('total_points'), member.get('knockout_points'), member.get('general_warnings'), member.get('banned_word_count'),
+                    member.get('user_day_number'), member.get('cycle_start_date'), member.get('cycle_end_date'), member.get('is_restricted', 0),
+                    member.get('joined_at'), member.get('last_active_timestamp'), action
+                    ))
+                except Exception as e:
+                    logger.error(f"Failed executing remove_member (archive). Query: {archive_query} | Params: {(member['group_id'], member['user_id'], member.get('username'), member.get('first_name'), member.get('last_name'), member.get('total_points'), member.get('knockout_points'), member.get('general_warnings'), member.get('banned_word_count'), member.get('user_day_number'), member.get('cycle_start_date'), member.get('cycle_end_date'), member.get('is_restricted', 0), member.get('joined_at'), member.get('last_active_timestamp'), action)} | Error: {e}", exc_info=True)
+                    raise
 
                 # Finally, delete the member from the main table
-                cursor.execute("DELETE FROM group_members WHERE group_id = %s AND user_id = %s", (group_id, user_id))
+                try:
+                    cursor.execute("DELETE FROM group_members WHERE group_id = %s AND user_id = %s", (group_id, user_id))
+                except Exception as e:
+                    logger.error(f"Failed executing remove_member (delete). Query: DELETE FROM group_members WHERE group_id = %s AND user_id = %s | Params: {(group_id, user_id)} | Error: {e}", exc_info=True)
+                    raise
                 conn.commit()  # Ensure both operations are committed together
         logger.info(f"Archived and removed member {user_id} from group {group_id}.")
         return True

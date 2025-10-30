@@ -268,8 +268,8 @@ def api_save_admin_panel():
         # Add license key to config data
         config_data['license_key'] = license_key
 
-        # If group_id is not provided, save as admin template with group_id=None
-        if not group_id:
+        # If group_id is not provided or is None, save as admin template with group_id=None
+        if group_id is None or group_id == '':
             # Save configuration with NULL group_id using admin_user_id
             success = save_admin_panel_config(admin_user_id, None, config_data)
             if success:
@@ -287,7 +287,7 @@ def api_save_admin_panel():
             else:
                 return jsonify({'success': False, 'message': 'Failed to save configuration template'}), 500
 
-        # Save configuration for specific group
+        # Save configuration for specific group (including group_id=0)
         success = save_admin_panel_config(admin_user_id, int(group_id), config_data)
         if success:
             # Save license key to database

@@ -74,7 +74,11 @@ def log_missed_slots(group_id, event_id, slot_id):
             """
             with get_db_connection() as conn:
                 with conn.cursor() as cursor:
-                    cursor.executemany(insert_query, missed_members_data)
+                    try:
+                        cursor.executemany(insert_query, missed_members_data)
+                    except Exception as e:
+                        logger.error(f"Failed executing log_missed_slots executemany. Query: {insert_query} | Params: {missed_members_data} | Error: {e}", exc_info=True)
+                        raise
 
             logger.info(f"Logged {len(missed_members_data)} 'missed' entries for slot {slot_id} in group {group_id}", exc_info=True)
     except Exception as e:
@@ -99,7 +103,11 @@ def save_or_update_event(cursor, group_id, config_data):
         is_active = True
 
     # Check if event already exists
-    cursor.execute("SELECT event_id FROM events WHERE group_id = %s", (group_id,))
+    try:
+        cursor.execute("SELECT event_id FROM events WHERE group_id = %s", (group_id,))
+    except Exception as e:
+        logger.error(f"Failed executing save_or_update_event (select existing). Query: SELECT event_id FROM events WHERE group_id = %s | Params: {(group_id,)} | Error: {e}", exc_info=True)
+        raise
     existing_event = cursor.fetchone()
 
     if existing_event:
@@ -112,7 +120,11 @@ def save_or_update_event(cursor, group_id, config_data):
         """
         params = (event_name, event_type, event_days, config_data.get('slots_per_day', 0),
                  start_date, end_date, pass_points, is_active, group_id)
-        cursor.execute(query, params)
+        try:
+            cursor.execute(query, params)
+        except Exception as e:
+            logger.error(f"Failed executing save_or_update_event (update existing). Query: {query} | Params: {params} | Error: {e}", exc_info=True)
+            raise
         return existing_event[0]
     else:
         # Create new event
@@ -123,7 +135,11 @@ def save_or_update_event(cursor, group_id, config_data):
         """
         params = (group_id, event_name, event_type, event_days, config_data.get('slots_per_day', 0),
                  start_date, end_date, pass_points, is_active)
-        cursor.execute(query, params)
+        try:
+            cursor.execute(query, params)
+        except Exception as e:
+            logger.error(f"Failed executing save_or_update_event (insert new). Query: {query} | Params: {params} | Error: {e}", exc_info=True)
+            raise
         return cursor.lastrowid
 
 
@@ -131,9 +147,17 @@ def save_or_update_slots(cursor, group_id, admin_user_id, event_id, slots_data):
     """Save or update slot configurations"""
     # First, get existing slots for this group or admin
     if group_id is not None:
-        cursor.execute("SELECT slot_id, slot_name FROM group_slots WHERE group_id = %s", (group_id,))
+        try:
+            cursor.execute("SELECT slot_id, slot_name FROM group_slots WHERE group_id = %s", (group_id,))
+        except Exception as e:
+            logger.error(f"Failed executing save_or_update_slots (select group slots). Query: SELECT slot_id, slot_name FROM group_slots WHERE group_id = %s | Params: {(group_id,)} | Error: {e}", exc_info=True)
+            raise
     else:
-        cursor.execute("SELECT slot_id, slot_name FROM group_slots WHERE group_id IS NULL AND admin_user_id = %s", (admin_user_id,))
+        try:
+            cursor.execute("SELECT slot_id, slot_name FROM group_slots WHERE group_id IS NULL AND admin_user_id = %s", (admin_user_id,))
+        except Exception as e:
+            logger.error(f"Failed executing save_or_update_slots (select admin slots). Query: SELECT slot_id, slot_name FROM group_slots WHERE group_id IS NULL AND admin_user_id = %s | Params: {(admin_user_id,)} | Error: {e}", exc_info=True)
+            raise
     existing_slots = {row[1]: row[0] for row in cursor.fetchall()}  # slot_name -> slot_id
 
     # Track which slots we've processed
@@ -181,7 +205,11 @@ def save_or_update_slots(cursor, group_id, admin_user_id, event_id, slots_data):
     # Remove slots that are no longer in the configuration
     slots_to_remove = set(existing_slots.keys()) - processed_slot_names
     for slot_name in slots_to_remove:
-        cursor.execute("DELETE FROM group_slots WHERE slot_id = %s", (existing_slots[slot_name],))
+        try:
+            cursor.execute("DELETE FROM group_slots WHERE slot_id = %s", (existing_slots[slot_name],))
+        except Exception as e:
+            logger.error(f"Failed executing save_or_update_slots (delete slot). Query: DELETE FROM group_slots WHERE slot_id = %s | Params: {(existing_slots[slot_name],)} | Error: {e}", exc_info=True)
+            raise
 
 
 def create_slot(cursor, slot_config):
@@ -191,7 +219,7 @@ def create_slot(cursor, slot_config):
             group_id, admin_user_id, event_id, slot_name, start_time, end_time, initial_message,
             response_positive, response_clarify, image_file_path, slot_points, is_mandatory, slot_type,
             button_count, button_names, button_values
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
     params = (
         slot_config['group_id'], slot_config['admin_user_id'], slot_config['event_id'], slot_config['slot_name'],
@@ -200,7 +228,11 @@ def create_slot(cursor, slot_config):
         slot_config['image_file_path'], slot_config['slot_points'], slot_config['is_mandatory'],
         slot_config['slot_type'], slot_config['button_count'], slot_config['button_names'], slot_config['button_values']
     )
-    cursor.execute(query, params)
+    try:
+        cursor.execute(query, params)
+    except Exception as e:
+        logger.error(f"Failed executing create_slot. Query: {query} | Params: {params} | Error: {e}", exc_info=True)
+        raise
 
 
 def update_slot(cursor, slot_id, slot_config):
@@ -220,4 +252,8 @@ def update_slot(cursor, slot_id, slot_config):
         slot_config['slot_type'], slot_config['button_count'], slot_config['button_names'],
         slot_config['button_values'], slot_id
     )
-    cursor.execute(query, params)
+    try:
+        cursor.execute(query, params)
+    except Exception as e:
+        logger.error(f"Failed executing update_slot. Query: {query} | Params: {params} | Error: {e}", exc_info=True)
+        raise
