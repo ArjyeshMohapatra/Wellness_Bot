@@ -484,7 +484,7 @@ async def handle_license_key(message, context, license_key):
     """Handle license key activation"""
     try:
         # Check if license key exists and is available
-        license_query = "SELECT license_id, assigned_group_id, is_active FROM licenses WHERE license_key = %s"
+        license_query = "SELECT license_key, assigned_group_id, is_active FROM licenses WHERE license_key = %s"
         license_result = execute_query(license_query, (license_key,), fetch=True)
 
         if not license_result:
