@@ -43,12 +43,12 @@ const BotInfo: React.FC<BotInfoProps> = ({
                             variant="contained"
                             color="primary"
                             size="small"
-                            href={`https://t.me/BeHumanAgainBot`}
+                            href={`https://t.me/trackmyhealthbot`}
                             target="_blank"
                             rel="noopener noreferrer"
                             sx={{ mt: 1 }}
                         >
-                            @{"BeHumanAgainBot"}
+                            @{"trackmyhealthbot"}
                         </Button>
                     </Box>
                     {licenseKey && (

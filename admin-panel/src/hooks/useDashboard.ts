@@ -24,13 +24,8 @@ interface BotSettings {
 }
 
 export const useDashboardState = () => {
-    // Bot settings state
-    const [botSettings, setBotSettings] = useState<BotSettings[]>([]);
-    const [selectedGroupId, setSelectedGroupId] = useState<number>(0);
-    const [showCreateGroupDialog, setShowCreateGroupDialog] = useState(false);
-    const [newGroupName, setNewGroupName] = useState('');
-
-    // Configuration dialog state
+    // Bot settings state - simplified to single group
+    const [botSettings, setBotSettings] = useState<BotSettings | null>(null);
     const [showConfigurationDialog, setShowConfigurationDialog] = useState(false);
     const [configurationDialogData, setConfigurationDialogData] = useState<{
         botUsername: string;
@@ -51,7 +46,7 @@ export const useDashboardState = () => {
         setLoadedSlots(settings.loaded_slots || []);
     }, []);
 
-    // Function to load configuration
+    // Function to load configuration - simplified for single group
     const loadConfiguration = useCallback(async () => {
         try {
             // Load dashboard state from localStorage first
@@ -64,7 +59,7 @@ export const useDashboardState = () => {
                 setLoadedSlots(state.loadedSlots || []);
             }
 
-            // Load all bot settings from database
+            // Load bot settings from database for group 0
             const adminUserId = localStorage.getItem('userId');
             console.log('Loading dashboard for adminUserId:', adminUserId);
 
@@ -73,126 +68,45 @@ export const useDashboardState = () => {
                 return;
             }
 
-            const dashboardResponse = await fetch(`http://localhost:8001/api/admin/dashboard/settings?admin_user_id=${adminUserId}`);
+            const dashboardResponse = await fetch(`http://localhost:8001/api/admin/dashboard/settings?admin_user_id=${adminUserId}&group_id=0`);
             const dashboardResult = await dashboardResponse.json();
             if (dashboardResult.success && dashboardResult.settings) {
-                const settingsList = Array.isArray(dashboardResult.settings) ? dashboardResult.settings : [dashboardResult.settings];
-                setBotSettings(settingsList);
-
-                // If no settings exist yet, initialize with default
-                if (settingsList.length === 0) {
-                    setBotSettings([{
-                        setting_id: 0,
-                        admin_user_id: parseInt(adminUserId),
-                        group_id: 0,
-                        license_key: null,
-                        bot_username: 'BeHumanAgainBot',
-                        has_admin_permissions: false,
-                        event_type: 'normal',
-                        event_name: '',
-                        event_days: 7,
-                        pass_points: 250,
-                        slots_per_day: 2,
-                        welcome_message: '',
-                        kick_response: '',
-                        undesignated_slot_response: '',
-                        leaderboard_time: '11:00',
-                        banned_words: [],
-                        loaded_slots: [],
-                        is_active: true
-                    }]);
-                    setSelectedGroupId(0);
-                } else {
-                    // Load the selected group's settings, defaulting to the first group
-                    const savedGroupId = localStorage.getItem('selectedGroupId');
-                    let selectedSettings = settingsList[0];
-                    if (savedGroupId) {
-                        const saved = settingsList.find((s: BotSettings) => s.group_id === parseInt(savedGroupId));
-                        if (saved) selectedSettings = saved;
-                    }
-                    setSelectedGroupId(selectedSettings.group_id);
-                    loadSettingsForGroup(selectedSettings);
-                }
+                // For single group, we expect a single settings object, not an array
+                const settings = dashboardResult.settings;
+                setBotSettings(settings);
+                loadSettingsForGroup(settings);
+            } else {
+                // If no settings exist, initialize with defaults for group 0
+                const defaultSettings: BotSettings = {
+                    setting_id: 0,
+                    admin_user_id: parseInt(adminUserId),
+                    group_id: 0,
+                    license_key: null,
+                    bot_username: 'BeHumanAgainBot',
+                    has_admin_permissions: false,
+                    event_type: 'normal',
+                    event_name: '',
+                    event_days: 7,
+                    pass_points: 250,
+                    slots_per_day: 2,
+                    welcome_message: '',
+                    kick_response: '',
+                    undesignated_slot_response: '',
+                    leaderboard_time: '11:00',
+                    banned_words: [],
+                    loaded_slots: [],
+                    is_active: true
+                };
+                setBotSettings(defaultSettings);
+                loadSettingsForGroup(defaultSettings);
             }
         } catch (error) {
             console.error('Error loading configuration:', error);
         }
     }, [loadSettingsForGroup]);
 
-    // Function to handle group selection
-    const handleGroupSelect = (groupId: number) => {
-        setSelectedGroupId(groupId);
-        const settings = botSettings.find(s => s.group_id === groupId);
-        if (settings) {
-            loadSettingsForGroup(settings);
-        }
-    };
-
-    // Function to create new group settings
-    const handleCreateGroup = async () => {
-        if (!newGroupName.trim()) {
-            alert('Please enter a group name');
-            return;
-        }
-
-        try {
-            const adminUserId = localStorage.getItem('userId');
-            if (!adminUserId) {
-                alert('User not logged in');
-                return;
-            }
-
-            // Create new group settings with default values
-            const newSettings: BotSettings = {
-                admin_user_id: parseInt(adminUserId),
-                group_id: Date.now(), // Use timestamp as temporary group_id until bot joins
-                group_name: newGroupName.trim(),
-                license_key: null,
-                bot_username: 'BeHumanAgainBot',
-                has_admin_permissions: false,
-                event_type: 'normal',
-                event_name: '',
-                event_days: 7,
-                pass_points: 250,
-                slots_per_day: 2,
-                welcome_message: '',
-                kick_response: '',
-                undesignated_slot_response: '',
-                leaderboard_time: '11:00',
-                banned_words: [],
-                loaded_slots: [],
-                is_active: true
-            };
-
-            const response = await fetch('http://localhost:8001/api/admin/dashboard/settings', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    admin_user_id: parseInt(adminUserId),
-                    group_id: newSettings.group_id,
-                    settings: newSettings
-                })
-            });
-
-            const result = await response.json();
-            if (result.success) {
-                // Add to local state
-                setBotSettings(prev => [...prev, newSettings]);
-                setSelectedGroupId(newSettings.group_id);
-                loadSettingsForGroup(newSettings);
-                setShowCreateGroupDialog(false);
-                setNewGroupName('');
-                alert('New group created successfully! Add the bot to your Telegram group and it will automatically detect the group ID.');
-            } else {
-                alert(`Failed to create group: ${result.message}`);
-            }
-        } catch (error) {
-            console.error('Error creating group:', error);
-            alert('Error creating group. Please try again.');
-        }
-    };
+    // Function to handle group selection - removed for single group
+    // Function to create new group settings - removed for single group
 
     // Function to refresh admin permissions
     const refreshAdminPermissions = useCallback(async () => {
@@ -200,12 +114,11 @@ export const useDashboardState = () => {
             const adminUserId = localStorage.getItem('userId');
             if (!adminUserId) return;
 
-            const dashboardResponse = await fetch(`http://localhost:8001/api/admin/dashboard/settings?admin_user_id=${adminUserId}`);
+            const dashboardResponse = await fetch(`http://localhost:8001/api/admin/dashboard/settings?admin_user_id=${adminUserId}&group_id=0`);
             const dashboardResult = await dashboardResponse.json();
             if (dashboardResult.success && dashboardResult.settings) {
-                // Note: dbSettings is an array, so we can't directly access has_admin_permissions
-                // For now, we'll skip updating permissions from here since it's not correctly implemented
-                // The permissions should be loaded in loadConfiguration
+                const settings = dashboardResult.settings;
+                setHasAdminPermissions(settings.has_admin_permissions || false);
             }
         } catch (error) {
             console.error('Error refreshing admin permissions:', error);
@@ -224,17 +137,11 @@ export const useDashboardState = () => {
         return () => clearInterval(interval);
     }, [loadConfiguration, refreshAdminPermissions]);
 
-    // Save selectedGroupId to localStorage whenever it changes
-    useEffect(() => {
-        localStorage.setItem('selectedGroupId', selectedGroupId.toString());
-    }, [selectedGroupId]);
+    // Save selectedGroupId to localStorage whenever it changes - removed for single group
 
     return {
         // State
         botSettings,
-        selectedGroupId,
-        showCreateGroupDialog,
-        newGroupName,
         showConfigurationDialog,
         configurationDialogData,
         loadedSlots,
@@ -244,9 +151,6 @@ export const useDashboardState = () => {
 
         // Setters
         setBotSettings,
-        setSelectedGroupId,
-        setShowCreateGroupDialog,
-        setNewGroupName,
         setShowConfigurationDialog,
         setConfigurationDialogData,
         setLoadedSlots,
@@ -257,8 +161,6 @@ export const useDashboardState = () => {
         // Functions
         loadSettingsForGroup,
         loadConfiguration,
-        handleGroupSelect,
-        handleCreateGroup,
         refreshAdminPermissions,
     };
 };

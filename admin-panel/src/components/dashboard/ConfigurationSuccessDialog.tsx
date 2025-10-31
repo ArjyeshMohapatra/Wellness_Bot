@@ -62,12 +62,12 @@ const ConfigurationSuccessDialog: React.FC<ConfigurationSuccessDialogProps> = ({
                         variant="contained"
                         color="primary"
                         size="large"
-                        href={`https://t.me/${configurationDialogData?.botUsername || 'BeHumanAgainBot'}`}
+                        href={`https://t.me/${configurationDialogData?.botUsername || 'trackmyhealthbot'}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         sx={{ minWidth: 200 }}
                     >
-                        @{configurationDialogData?.botUsername || 'BeHumanAgainBot'}
+                        @{configurationDialogData?.botUsername || 'trackmyhealthbot'}
                     </Button>
                 </Box>
 

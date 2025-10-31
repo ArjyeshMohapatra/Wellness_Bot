@@ -454,6 +454,16 @@ async def complete_kyc_process(update: Update, context: ContextTypes.DEFAULT_TYP
 async def handle_license_key(message, context, license_key):
     """Handle license key activation"""
     try:
+        # Check if license is being sent in a group/supergroup
+        if message.chat.type not in ["group", "supergroup"]:
+            await safe_send_message(
+                context=context,
+                chat_id=message.chat.id,
+                text="❌ **Invalid Chat Type**\n\nLicense keys must be sent in the group chat where the bot is installed, not in private messages.\n\nPlease send the license key in your group chat.",
+                parse_mode="Markdown"
+            )
+            return
+
         # Check if license key exists and is available
         license_query = "SELECT license_key, assigned_group_id, is_active FROM licenses WHERE license_key = %s"
         license_result = execute_query(license_query, (license_key,), fetch=True)
@@ -469,7 +479,7 @@ async def handle_license_key(message, context, license_key):
 
         license_data = license_result[0]
 
-        if license_data['assigned_group_id'] is not None:
+        if license_data['assigned_group_id'] is not None and license_data['assigned_group_id'] != 0:
             await safe_send_message(
                 context=context,
                 chat_id=message.chat.id,
@@ -488,32 +498,38 @@ async def handle_license_key(message, context, license_key):
             return
 
         # License is valid, assign it to the current group
-        group_id = message.chat.id
+        actual_group_id = message.chat.id  # Actual Telegram group ID for API calls
+        db_group_id = actual_group_id  # Use the actual group ID for database operations
 
-        # Update the license with group assignment
-        update_query = "UPDATE licenses SET assigned_group_id = %s WHERE license_key = %s"
-        execute_query(update_query, (group_id, license_key))
+        # Get admin_user_id from groups_config
+        admin_query = "SELECT admin_user_id FROM groups_config WHERE group_id = %s"
+        admin_result = execute_query(admin_query, (db_group_id,), fetch=True)
+        admin_user_id = admin_result[0]['admin_user_id'] if admin_result else None
+
+        # Update the license with group and admin assignment
+        update_query = "UPDATE licenses SET assigned_group_id = %s, assigned_admin_id = %s WHERE license_key = %s"
+        execute_query(update_query, (db_group_id, admin_user_id, license_key))
 
         # Update group config with license key
         config_query = "UPDATE groups_config SET license_key = %s WHERE group_id = %s"
-        execute_query(config_query, (license_key, group_id))
+        execute_query(config_query, (license_key, db_group_id))
 
         # Check if bot has admin permissions in this group
         has_admin_permissions = False
         try:
-            bot_member = await context.bot.get_chat_member(group_id, context.bot.id)
+            bot_member = await context.bot.get_chat_member(actual_group_id, context.bot.id)
             has_admin_permissions = bot_member.status in ["administrator", "creator"]
 
             # Update admin permissions status in database
             admin_update_query = "UPDATE groups_config SET has_admin_permissions = %s WHERE group_id = %s"
-            execute_query(admin_update_query, (has_admin_permissions, group_id))
+            execute_query(admin_update_query, (has_admin_permissions, db_group_id))
 
-            logger.info(f"Bot admin permissions verified for group {group_id}: {has_admin_permissions}")
+            logger.info(f"Bot admin permissions verified for group {actual_group_id}: {has_admin_permissions}")
         except Exception as e:
-            logger.warning(f"Could not verify bot admin permissions for group {group_id}: {e}")
+            logger.warning(f"Could not verify bot admin permissions for group {actual_group_id}: {e}")
             # Don't fail the activation if we can't check permissions
 
-        logger.info(f"License key {license_key} assigned to group {group_id}")
+        logger.info(f"License key {license_key} assigned to group {db_group_id} (Telegram ID: {actual_group_id})")
 
         # Send success message
         admin_status_text = "✅ Admin permissions verified!" if has_admin_permissions else "⚠️ Please ensure I have admin permissions for full functionality."

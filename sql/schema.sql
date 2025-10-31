@@ -61,6 +61,7 @@ CREATE TABLE users (
     password_hash VARCHAR(255) NOT NULL,
     date_of_birth DATE,
     phone_number VARCHAR(20),
+    telegram_id BIGINT UNIQUE,
     role ENUM('admin', 'developer') DEFAULT 'admin',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_login TIMESTAMP NULL,

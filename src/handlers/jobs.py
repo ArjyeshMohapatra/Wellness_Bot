@@ -2,6 +2,7 @@ from telegram.ext import ContextTypes
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions, ReplyKeyboardMarkup
 import logging
 import os
+import json
 from datetime import datetime, time, timedelta
 from pytz import timezone
 from ..services import database_service as db
@@ -14,7 +15,7 @@ ist = timezone("Asia/Kolkata")
 async def check_and_announce_slots(context: ContextTypes.DEFAULT_TYPE):
     """Check for active slots and announce them to the user at regular intervals"""
     try:
-        query = "SELECT group_id FROM groups_config"
+        query = "SELECT group_id FROM groups_config WHERE group_id != 0"
         groups = execute_query(query, fetch=True)
 
         for group in groups:
@@ -48,13 +49,37 @@ async def check_and_announce_slots(context: ContextTypes.DEFAULT_TYPE):
 
                     slot_msg = None # Initialize slot_msg to None
                     if slot_type == "button":
-                        keyboard = [
-                            [InlineKeyboardButton("1L 💧", callback_data=f"water_1_{slot_id}"),
-                             InlineKeyboardButton("2L 💧💧", callback_data=f"water_2_{slot_id}"),
-                             InlineKeyboardButton("3L 💧💧💧", callback_data=f"water_3_{slot_id}")],
-                            [InlineKeyboardButton("4L 💧💧💧💧", callback_data=f"water_4_{slot_id}"),
-                             InlineKeyboardButton("5L 💧💧💧💧💧", callback_data=f"water_5_{slot_id}")]
-                        ]
+                        # Use configured buttons from database
+                        button_count = active_slot.get("button_count", 0)
+                        button_names = json.loads(active_slot.get("button_names", "[]"))
+                        button_values = json.loads(active_slot.get("button_values", "[]"))
+                        
+                        if button_count > 0 and button_names and button_values:
+                            # Create keyboard with configured buttons
+                            keyboard = []
+                            buttons_per_row = 3  # Max 3 buttons per row
+                            for i in range(0, len(button_names), buttons_per_row):
+                                row = []
+                                for j in range(buttons_per_row):
+                                    if i + j < len(button_names):
+                                        button_text = button_names[i + j]
+                                        button_value = button_values[i + j] if i + j < len(button_values) else 0
+                                        row.append(InlineKeyboardButton(
+                                            button_text, 
+                                            callback_data=f"button_{button_value}_{slot_id}"
+                                        ))
+                                if row:
+                                    keyboard.append(row)
+                        else:
+                            # Fallback to default water buttons if no configuration
+                            keyboard = [
+                                [InlineKeyboardButton("1L 💧", callback_data=f"water_1_{slot_id}"),
+                                 InlineKeyboardButton("2L 💧💧", callback_data=f"water_2_{slot_id}"),
+                                 InlineKeyboardButton("3L 💧💧💧", callback_data=f"water_3_{slot_id}")],
+                                [InlineKeyboardButton("4L 💧💧💧💧", callback_data=f"water_4_{slot_id}"),
+                                 InlineKeyboardButton("5L 💧💧💧💧💧", callback_data=f"water_5_{slot_id}")]
+                            ]
+                        
                         reply_markup = InlineKeyboardMarkup(keyboard)
                         slot_msg = await safe_send_message(context=context ,chat_id=group_id, text=message, reply_markup=reply_markup)
                     else:
@@ -123,7 +148,7 @@ async def check_inactive_users(context: ContextTypes.DEFAULT_TYPE):
     logger.info("Checking for inactive users...")
     groups = []
     try:
-        query = "SELECT group_id FROM groups_config"
+        query = "SELECT group_id FROM groups_config WHERE group_id != 0"
         groups = execute_query(query, fetch=True)
     except Exception as e:
         logger.error(f"CRITICAL: Failed to fetch groups for inactivity check: {e}", exc_info=True)
@@ -256,7 +281,7 @@ async def check_low_points(context: ContextTypes.DEFAULT_TYPE):
 async def check_mid_slot_warnings(context: ContextTypes.DEFAULT_TYPE):
     """Post warning messages at last 10 mins of slot duration."""
     try:
-        query = "SELECT group_id FROM groups_config"
+        query = "SELECT group_id FROM groups_config WHERE group_id != 0"
         groups = execute_query(query, fetch=True)
 
         for group in groups:
@@ -378,14 +403,32 @@ async def check_user_day_cycles(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def post_daily_leaderboard(context: ContextTypes.DEFAULT_TYPE):
-    """Post leaderboard automatically at end of all the slots for the day."""
+    """Post leaderboard automatically at configured leaderboard time for each group."""
     try:
-        # Get all group configs
-        query = "SELECT group_id FROM groups_config"
+        # Get all group configs (excluding group_id 0)
+        query = "SELECT group_id FROM groups_config WHERE group_id != 0"
         groups=execute_query(query, fetch=True)
 
         for group in groups:
             group_id = group["group_id"]
+            
+            # Get group config to check leaderboard_time
+            group_config = db.get_group_config(group_id)
+            if not group_config:
+                continue
+                
+            leaderboard_time = group_config.get('leaderboard_time')
+            if not leaderboard_time:
+                # Default to 22:00 if not set
+                leaderboard_time = '22:00'
+            
+            # Check if current time matches the configured leaderboard time
+            now = datetime.now(ist)
+            current_time = now.strftime('%H:%M')
+            
+            if current_time != leaderboard_time:
+                logger.debug(f"Skipping leaderboard for group {group_id}: current time {current_time} != configured time {leaderboard_time}")
+                continue
 
             # Get active event
             event = db.get_active_event(group_id)
@@ -447,8 +490,8 @@ async def sync_admin_status(context: ContextTypes.DEFAULT_TYPE):
     """Periodically fetches the list of admins for each group and updates the database."""
     logger.info("Running hourly job to synchronize admin statuses...")
     try:
-        # Only sync groups that have a valid group_id (not NULL)
-        query = "SELECT group_id FROM groups_config WHERE group_id IS NOT NULL"
+        # Only sync groups that have a valid group_id (not NULL and not 0)
+        query = "SELECT group_id FROM groups_config WHERE group_id IS NOT NULL AND group_id != 0"
         groups = execute_query(query, fetch=True)
 
         for group in groups:
@@ -528,8 +571,8 @@ def setup_jobs(application):
     # Check low-point users daily at END OF DAY (23:00 - 11 PM)
     scheduler.add_job(check_low_points, trigger='cron', hour=12, minute=15, timezone=ist, args=[application])
 
-    # Post daily leaderboard at 22:00 (10:00 PM)
-    scheduler.add_job(post_daily_leaderboard, trigger='cron', hour=12, minute=10, timezone=ist, args=[application])
+    # Post daily leaderboard at configured time (check every minute)
+    job_queue.run_repeating(post_daily_leaderboard, interval=60, first=60)
 
     # Checks daily for zero activity users after leaderboard gets posted
     scheduler.add_job(check_daily_participation, trigger='cron', hour=12, minute=25, timezone=ist, args=[application])

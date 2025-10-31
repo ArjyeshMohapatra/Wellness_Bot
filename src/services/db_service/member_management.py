@@ -25,9 +25,11 @@ def add_member(group_id, user_id, username=None, first_name=None, last_name=None
     Now checks subscription limits for new members.
     """
     try:
+        logger.info(f"add_member called: group_id={group_id}, user_id={user_id}, is_admin={is_admin}, restrict_new={restrict_new}")
         # checks if the member exists to determine if this is a new join
         existing = get_member(group_id, user_id)
         is_new = existing is None
+        logger.info(f"add_member: existing={existing is not None}, is_new={is_new}")
 
         # For new members, check subscription limits
         if is_new and not is_admin:
@@ -39,8 +41,10 @@ def add_member(group_id, user_id, username=None, first_name=None, last_name=None
                 WHERE gc.group_id = %s
             """
             admin_result = execute_query(admin_query, (group_id,), fetch=True)
+            logger.info(f"add_member: admin_query result for group_id={group_id}: {admin_result}")
             if admin_result:
                 admin_user_id = admin_result[0]['assigned_admin_id']
+                logger.info(f"add_member: admin_user_id={admin_user_id}")
                 if not can_admin_add_member(admin_user_id):
                     logger.warning(f"Cannot add member {user_id} to group {group_id}: subscription limit reached for admin {admin_user_id}")
                     return None, False  # Return None to indicate failure
@@ -148,11 +152,13 @@ def add_member(group_id, user_id, username=None, first_name=None, last_name=None
             with conn.cursor(dictionary=True) as cursor:
                 # handles both INSERT for new members and UPDATE for existing ones
                 try:
-                    cursor.execute(query_1, (
+                    params = (
                         user_id, group_id, username, first_name, last_name, 1 if is_admin else 0,
                         is_restricted, restriction_until, cycle_start_date, cycle_end_date,
                         total_points, knockout_points, general_warnings, banned_word_count, user_day_number
-                    ))
+                    )
+                    logger.info(f"Executing INSERT with params: {params}")
+                    cursor.execute(query_1, params)
                 except Exception as e:
                     logger.error(f"Failed executing add_member (insert/update). Query: {query_1} | Params: {(user_id, group_id, username, first_name, last_name, 1 if is_admin else 0, is_restricted, restriction_until, cycle_start_date, cycle_end_date, total_points, knockout_points, general_warnings, banned_word_count, user_day_number)} | Error: {e}", exc_info=True)
                     raise
@@ -170,6 +176,7 @@ def add_member(group_id, user_id, username=None, first_name=None, last_name=None
                         raise
                     logger.debug(f"[DEBUG] Complete 'joined' record created for new user {user_id}")
         member_data = get_member(group_id, user_id)
+        logger.info(f"add_member returning: member_data={member_data is not None}, is_new={is_new}")
         return member_data, is_new
 
     except mysql.connector.Error as e:
@@ -189,7 +196,10 @@ def update_member_activity(group_id, user_id):
 def get_member(group_id, user_id):
     query = "SELECT * FROM group_members WHERE group_id = %s AND user_id = %s"
     result = execute_query(query, (group_id, user_id), fetch=True)
-    return result[0] if result else None
+    logger.info(f"get_member: query result for group_id={group_id}, user_id={user_id}: {result}")
+    member = result[0] if result else None
+    logger.info(f"get_member: returning {member}")
+    return member
 
 
 # updates banned word counts per user

@@ -75,13 +75,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     # Ensure member exists in database
+    logger.info(f"About to call add_member: group_id={group_id}, user_id={user_id}, username={username}, first_name={first_name}")
     member, is_new = db.add_member(group_id, user_id, username, first_name, restrict_new=False)
+    logger.info(f"add_member returned: member={member is not None}, is_new={is_new}, group_id={group_id}, user_id={user_id}")
 
     # Update member activity
     db.update_member_activity(group_id, user_id)
 
     # Check if user is admin first - admins are NEVER restricted and EXEMPT from all penalties
     member = db.get_member(group_id, user_id)
+    logger.info(f"get_member returned: member={member is not None}, group_id={group_id}, user_id={user_id}")
     
     if member and member.get("is_restricted") and member.get("restriction_until"):
         restriction_until_utc = member.get("restriction_until")  # Fetch raw datetime from DB (likely naive UTC)
@@ -269,11 +272,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             # Deduct 5 knockout points for posting outside slot
             db.deduct_knockout_points(group_id, user_id, 5)
 
+            # Get undesignated slot response from bot settings
+            admin_user_id = group_config.get("admin_user_id")
+            bot_settings = db.get_bot_settings_for_group(admin_user_id, group_id) if admin_user_id else None
+            undesignated_response = bot_settings.get("undesignated_slot_response", "Please only post during designated time slots.") if bot_settings else "Please only post during designated time slots."
+
             warning_msg = await safe_send_message(
                 context=context, 
                 chat_id=group_id,
                 text=f"⏰ {first_name}, no active slot right now!\n"
-                f"Please only post during designated time slots.\n",
+                f"{undesignated_response}\n",
             )
 
             # Delete warning after 10 seconds

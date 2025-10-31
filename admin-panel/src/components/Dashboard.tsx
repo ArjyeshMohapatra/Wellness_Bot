@@ -6,9 +6,7 @@ import Subscription from './dashboard/Subscription';
 import Header from './dashboard/Header';
 import SubscriptionStatus from './dashboard/SubscriptionStatus';
 import BotInfo from './dashboard/BotInfo';
-import GroupSelector from './dashboard/GroupSelector';
 import ConfigurationSuccessDialog from './dashboard/ConfigurationSuccessDialog';
-import CreateGroupDialog from './dashboard/CreateGroupDialog';
 import { useAuth } from '../hooks/useAuth';
 import { useSubscription } from '../hooks/useSubscription';
 import { usePayment } from '../hooks/usePayment';
@@ -19,27 +17,20 @@ const Dashboard: React.FC = () => {
     const { logout } = useAuth();
     const [showSaveNotification, setShowSaveNotification] = useState(false);
 
-    // Use the extracted dashboard state hook
+    // Use the extracted dashboard state hook - simplified for single group
     const {
         botSettings,
-        selectedGroupId,
-        showCreateGroupDialog,
-        newGroupName,
         showConfigurationDialog,
         configurationDialogData,
         loadedSlots,
         botUsername,
         hasAdminPermissions,
         licenseKey,
-        setShowCreateGroupDialog,
-        setNewGroupName,
         setShowConfigurationDialog,
         setConfigurationDialogData,
         setLoadedSlots,
         setBotUsername,
         setLicenseKey,
-        handleGroupSelect,
-        handleCreateGroup,
         refreshAdminPermissions,
     } = useDashboardState();
 
@@ -115,36 +106,28 @@ const Dashboard: React.FC = () => {
         localStorage.setItem('dashboardState', JSON.stringify(dashboardState));
     }, [botUsername, hasAdminPermissions, licenseKey, slots]);
 
-    // Save selectedGroupId to localStorage whenever it changes
-    useEffect(() => {
-        localStorage.setItem('selectedGroupId', selectedGroupId.toString());
-    }, [selectedGroupId]);
+    // Save selectedGroupId to localStorage whenever it changes - removed for single group
 
     // This effect syncs the settings from the database (fetched by useDashboardState)
     // with the state held by useSlotConfiguration.
     useEffect(() => {
-        if (botSettings.length > 0) {
-            const selectedSettings = botSettings.find(s => s.group_id === selectedGroupId);
+        if (botSettings) {
+            setEventType(botSettings.event_type || 'normal');
+            setEventName(botSettings.event_name || '');
+            setEventDays(String(botSettings.event_days || ''));
+            setPassPoints(String(botSettings.pass_points || ''));
+            setSlotsPerDay(String(botSettings.slots_per_day || '')); // <-- This is the key fix
+            setWelcomeMessage(botSettings.welcome_message || '');
+            setKickResponse(botSettings.kick_response || '');
+            setUndesignatedSlotResponse(botSettings.undesignated_slot_response || '');
+            setLeaderboardTime(botSettings.leaderboard_time || '');
+            setBannedWords(botSettings.banned_words || []);
 
-            if (selectedSettings) {
-                setEventType(selectedSettings.event_type || 'normal');
-                setEventName(selectedSettings.event_name || '');
-                setEventDays(String(selectedSettings.event_days || ''));
-                setPassPoints(String(selectedSettings.pass_points || ''));
-                setSlotsPerDay(String(selectedSettings.slots_per_day || '')); // <-- This is the key fix
-                setWelcomeMessage(selectedSettings.welcome_message || '');
-                setKickResponse(selectedSettings.kick_response || '');
-                setUndesignatedSlotResponse(selectedSettings.undesignated_slot_response || '');
-                setLeaderboardTime(selectedSettings.leaderboard_time || '');
-                setBannedWords(selectedSettings.banned_words || []);
-
-                // This will be picked up by useSlotConfiguration via its initialSlots prop
-                setLoadedSlots(selectedSettings.loaded_slots || []);
-            }
+            // This will be picked up by useSlotConfiguration via its initialSlots prop
+            setLoadedSlots(botSettings.loaded_slots || []);
         }
     }, [
         botSettings,
-        selectedGroupId,
         // Add all the setters from useSlotConfiguration here
         setEventType,
         setEventName,
@@ -157,9 +140,7 @@ const Dashboard: React.FC = () => {
         setLeaderboardTime,
         setBannedWords,
         setLoadedSlots // This setter is from useDashboardState
-    ]);
-
-    // Validation logic for save button
+    ]);    // Validation logic for save button
     const isConfigurationValid = () => {
         // Basic required fields
         if (!eventName.trim()) return false;
@@ -274,7 +255,7 @@ const Dashboard: React.FC = () => {
                 },
                 body: JSON.stringify({
                     admin_user_id: parsedAdminUserId,
-                    group_id: selectedGroupId,
+                    group_id: 0,
                     config_data: configData
                 })
             });
@@ -364,7 +345,7 @@ const Dashboard: React.FC = () => {
                 },
                 body: JSON.stringify({
                     admin_user_id: parsedAdminUserId,
-                    group_id: selectedGroupId,
+                    group_id: 0,
                     settings
                 })
             });
@@ -405,13 +386,6 @@ const Dashboard: React.FC = () => {
                 onCopyToClipboard={copyToClipboard}
             />
 
-            <GroupSelector
-                botSettings={botSettings}
-                selectedGroupId={selectedGroupId}
-                onGroupSelect={handleGroupSelect}
-                onCreateGroup={() => setShowCreateGroupDialog(true)}
-            />
-
             {/* Main Content */}
             <>
                 {!hasActiveSubscription && (
@@ -429,7 +403,7 @@ const Dashboard: React.FC = () => {
                 {/* Bot settings remain on dashboard when subscription is not being managed */}
                 {hasActiveSubscription && (
                     <BotSettings
-                        groupId={selectedGroupId}
+                        groupId={0}
                         eventType={eventType}
                         eventName={eventName}
                         eventDays={eventDays}
@@ -490,14 +464,6 @@ const Dashboard: React.FC = () => {
                 hasAdminPermissions={hasAdminPermissions}
                 onRefreshAdminPermissions={refreshAdminPermissions}
                 onCopyToClipboard={copyToClipboard}
-            />
-
-            <CreateGroupDialog
-                open={showCreateGroupDialog}
-                onClose={() => setShowCreateGroupDialog(false)}
-                newGroupName={newGroupName}
-                onNewGroupNameChange={setNewGroupName}
-                onCreateGroup={handleCreateGroup}
             />
 
             <Snackbar

@@ -261,17 +261,29 @@ def api_save_admin_panel():
             print(f"API: Missing fields - admin_user_id: {admin_user_id}, config_data: {config_data}")
             return jsonify({'success': False, 'message': 'Missing required fields: admin_user_id, config_data'}), 400
 
+        # Get telegram_id from database user id
+        user_result = execute_query(
+            "SELECT telegram_id FROM users WHERE id = %s AND is_active = TRUE",
+            (admin_user_id,),
+            fetch=True
+        )
+
+        if not user_result:
+            return jsonify({'success': False, 'message': 'User not found'}), 404
+
+        telegram_id = user_result[0]['telegram_id']
+
         # Check for an existing license key before generating a new one
         existing_license = None
         current_group_id = int(group_id) if group_id is not None and group_id != '' else None
 
         if current_group_id is not None:
             query = "SELECT license_key FROM licenses WHERE assigned_admin_id = %s AND assigned_group_id = %s LIMIT 1"
-            params = (admin_user_id, current_group_id)
+            params = (telegram_id, current_group_id)
         else:
             # This handles the template case (group_id is None)
             query = "SELECT license_key FROM licenses WHERE assigned_admin_id = %s AND assigned_group_id IS NULL LIMIT 1"
-            params = (admin_user_id,)
+            params = (telegram_id,)
         
         result = execute_query(query, params, fetch=True)
         if result:
@@ -292,14 +304,14 @@ def api_save_admin_panel():
 
         # If group_id is not provided or is None, save as admin template with group_id=None
         if group_id is None or group_id == '':
-            # Save configuration with NULL group_id using admin_user_id
-            success = save_admin_panel_config(admin_user_id, None, config_data)
+            # Save configuration with NULL group_id using telegram_id
+            success = save_admin_panel_config(telegram_id, None, config_data)
             if success:
                 # Only insert the license key into the database if it's a NEWLY generated one
                 if new_key_generated:
                     execute_query(
                         "INSERT INTO licenses (license_key, is_active, assigned_group_id, assigned_admin_id, created_at) VALUES (%s, TRUE, %s, %s, NOW())",
-                        (license_key, None, admin_user_id)
+                        (license_key, None, telegram_id)
                     )
                 return jsonify({
                     'success': True,
@@ -311,13 +323,13 @@ def api_save_admin_panel():
                 return jsonify({'success': False, 'message': 'Failed to save configuration template'}), 500
 
         # Save configuration for specific group (including group_id=0)
-        success = save_admin_panel_config(admin_user_id, int(group_id), config_data)
+        success = save_admin_panel_config(telegram_id, int(group_id), config_data)
         if success:
             # Only insert the license key into the database if it's a NEWLY generated one
             if new_key_generated:
                 execute_query(
                     "INSERT INTO licenses (license_key, is_active, assigned_group_id, assigned_admin_id, created_at) VALUES (%s, TRUE, %s, %s, NOW())",
-                    (license_key, int(group_id), admin_user_id)
+                    (license_key, int(group_id), telegram_id)
                 )
             return jsonify({
                 'success': True,
@@ -446,16 +458,29 @@ def api_get_group_id():
         if not admin_user_id:
             return jsonify({'success': False, 'message': 'Admin user ID required'}), 400
 
+        # Get telegram_id from database user id
+        user_result = execute_query(
+            "SELECT telegram_id FROM users WHERE id = %s AND is_active = TRUE",
+            (admin_user_id,),
+            fetch=True
+        )
+
+        if not user_result:
+            return jsonify({'success': False, 'message': 'User not found'}), 404
+
+        telegram_id = user_result[0]['telegram_id']
+
         # Get group ID for this admin
         group_result = execute_query(
             """
             SELECT DISTINCT gc.group_id
             FROM groups_config gc
             JOIN licenses l ON gc.license_key = l.license_key
-            WHERE l.assigned_admin_id = %s AND l.is_active = TRUE
+            WHERE l.assigned_admin_id = %s AND l.is_active = TRUE AND gc.group_id != 0
+            ORDER BY gc.group_id DESC
             LIMIT 1
             """,
-            (admin_user_id,),
+            (telegram_id,),
             fetch=True
         )
 

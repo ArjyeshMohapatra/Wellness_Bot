@@ -7,6 +7,13 @@ def get_group_config(group_id):
     return result[0] if result else None
 
 
+def get_active_group_id():
+    """Get the active group ID (the one with a license key)."""
+    query = "SELECT group_id FROM groups_config WHERE license_key IS NOT NULL AND group_id != 0 LIMIT 1"
+    result = execute_query(query, fetch=True)
+    return result[0]["group_id"] if result else None
+
+
 # fetches very first slot's starting time
 def get_first_slot_time(group_id):
     """Get the start time of the first slot of the day."""

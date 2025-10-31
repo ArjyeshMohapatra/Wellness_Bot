@@ -1,7 +1,7 @@
 # Database service - imports from db_service package
 from .db_service.utils import save_base64_image
 from .db_service.group_config import (
-    get_group_config, get_first_slot_time, get_restriction_until_time,
+    get_group_config, get_active_group_id, get_first_slot_time, get_restriction_until_time,
     create_group_config, create_pending_group_config, create_default_event_and_slots
 )
 from .db_service.member_management import (

@@ -25,7 +25,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if data.startswith("confirm_"): await handle_confirmation(update, context)
 
     # Handle water consumption buttons
-    elif data.startswith("water_"): await handle_water_button(update, context)
+    elif data.startswith("water_") or data.startswith("button_"): await handle_button_click(update, context)
 
     else: logger.warning(f"Unhandled callback data: {data}")
 
@@ -256,7 +256,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
     context.job_queue.run_once(delete_message, when=3)
 
 
-async def handle_water_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle water consumption button clicks (1L to 5L)."""
     query = update.callback_query
     data = query.data
@@ -304,14 +304,20 @@ async def handle_water_button(update: Update, context: ContextTypes.DEFAULT_TYPE
             await query.answer("You are currently restricted and cannot perform this action.", show_alert=True)
             return
 
-    # Parse: water_<liters>_<slot_id>
+    # Parse: water_<liters>_<slot_id> or button_<value>_<slot_id>
     parts = data.split("_")
     if len(parts) < 3:
-        await query.answer("Invalid water selection", show_alert=True)
+        await query.answer("Invalid button selection", show_alert=True)
         return
 
-    liters = int(parts[1])
-    slot_id = int(parts[2])
+    if data.startswith("water_"):
+        # Legacy water format: water_<liters>_<slot_id>
+        button_value = int(parts[1])
+        slot_id = int(parts[2])
+    else:
+        # New button format: button_<value>_<slot_id>
+        button_value = int(parts[1])
+        slot_id = int(parts[2])
 
     # Add in-memory lock to prevent spam clicking
     if "button_locks" not in context.bot_data: context.bot_data["button_locks"] = set()
@@ -358,18 +364,18 @@ async def handle_water_button(update: Update, context: ContextTypes.DEFAULT_TYPE
         # Award points
         db.add_points(group_id, user_id, points, event_id)
         db.log_activity(group_id=group_id,  user_id=user_id,  activity_type="button",  slot_name=slot_name, 
-                        message_content=f"{liters}L water", username=username, first_name=first_name, last_name=last_name, 
+                        message_content=f"Button value: {button_value}", username=username, first_name=first_name, last_name=last_name, 
                         points_earned=points)
         if event_id:
             db.mark_slot_completed(group_id, event_id, slot_id, user_id, "completed", points)
 
         # Send confirmation to telegram
-        await query.answer(f"✅ {liters}L logged! {points} points!", show_alert=True)
+        await query.answer(f"✅ Logged! {points} points!", show_alert=True)
 
         # Send a separate message to show who completed (doesn't replace buttons)
-        response_msg = await safe_send_message(context=context, chat_id=group_id, text=f"💧 {first_name} drank {liters}L of water! {points} points!")
+        response_msg = await safe_send_message(context=context, chat_id=group_id, text=f"✅ {first_name} completed {slot_name}! {points} points!")
 
-        logger.info(f"User {user_id} logged {liters}L water for slot {slot_name}")
+        logger.info(f"User {user_id} clicked button with value {button_value} for slot {slot_name}")
 
     finally:
         # Release lock after 5 seconds to prevent accidental double-clicks
