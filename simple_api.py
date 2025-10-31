@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 import sys
 import os
+import json
 
 # Add src directory to path so we can import simple_auth and db
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
@@ -273,69 +274,20 @@ def api_save_admin_panel():
 
         telegram_id = user_result[0]['telegram_id']
 
-        # Check for an existing license key before generating a new one
-        existing_license = None
-        current_group_id = int(group_id) if group_id is not None and group_id != '' else None
+        # Always create new event and license for each save
+        # Add license_key to config_data (will be generated in save_admin_panel_config)
+        config_data['license_key'] = ''  # Placeholder, will be set in function
 
-        if current_group_id is not None:
-            query = "SELECT license_key FROM licenses WHERE assigned_admin_id = %s AND assigned_group_id = %s LIMIT 1"
-            params = (telegram_id, current_group_id)
-        else:
-            # This handles the template case (group_id is None)
-            query = "SELECT license_key FROM licenses WHERE assigned_admin_id = %s AND assigned_group_id IS NULL LIMIT 1"
-            params = (telegram_id,)
-        
-        result = execute_query(query, params, fetch=True)
-        if result:
-            existing_license = result[0]['license_key']
+        # Save configuration
+        success, license_key, event_id = save_admin_panel_config(telegram_id, int(group_id) if group_id else None, config_data)
 
-        new_key_generated = False
-        if existing_license:
-            # If a key exists, use it
-            license_key = existing_license
-        else:
-            # If no key exists, generate a new one
-            from generate_license import generate_license_key
-            license_key = generate_license_key()
-            new_key_generated = True
-
-        # Add the (either new or existing) license key to config data
-        config_data['license_key'] = license_key
-
-        # If group_id is not provided or is None, save as admin template with group_id=None
-        if group_id is None or group_id == '':
-            # Save configuration with NULL group_id using telegram_id
-            success = save_admin_panel_config(telegram_id, None, config_data)
-            if success:
-                # Only insert the license key into the database if it's a NEWLY generated one
-                if new_key_generated:
-                    execute_query(
-                        "INSERT INTO licenses (license_key, is_active, assigned_group_id, assigned_admin_id, created_at) VALUES (%s, TRUE, %s, %s, NOW())",
-                        (license_key, None, telegram_id)
-                    )
-                return jsonify({
-                    'success': True,
-                    'message': 'Configuration template saved successfully',
-                    'license_key': license_key,
-                    'bot_username': 'WellnessBot'
-                }), 200
-            else:
-                return jsonify({'success': False, 'message': 'Failed to save configuration template'}), 500
-
-        # Save configuration for specific group (including group_id=0)
-        success = save_admin_panel_config(telegram_id, int(group_id), config_data)
         if success:
-            # Only insert the license key into the database if it's a NEWLY generated one
-            if new_key_generated:
-                execute_query(
-                    "INSERT INTO licenses (license_key, is_active, assigned_group_id, assigned_admin_id, created_at) VALUES (%s, TRUE, %s, %s, NOW())",
-                    (license_key, int(group_id), telegram_id)
-                )
             return jsonify({
                 'success': True,
                 'message': 'Configuration saved successfully',
                 'license_key': license_key,
-                'bot_username': 'WellnessBot'
+                'bot_username': 'WellnessBot',
+                'event_id': event_id
             }), 200
         else:
             return jsonify({'success': False, 'message': 'Failed to save configuration'}), 500
@@ -432,16 +384,21 @@ def api_generate_unique_user_ids():
         if not group_check:
             return jsonify({'success': False, 'message': 'Unauthorized: You do not own this group'}), 403
 
-        # Generate unique user IDs
+        # Generate unique user ID (one per call)
         from services.database_service import generate_unique_user_ids_for_group
-        user_ids = generate_unique_user_ids_for_group(group_id, count)
+        user_ids = generate_unique_user_ids_for_group(group_id, 1)
 
-        return jsonify({
-            'success': True,
-            'user_ids': user_ids,
-            'count': len(user_ids),
-            'message': f'Successfully generated {len(user_ids)} unique user IDs'
-        }), 200
+        if user_ids:
+            return jsonify({
+                'success': True,
+                'user_ids': user_ids,
+                'message': 'Successfully generated unique user ID'
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Could not generate user ID (subscription limit reached or error)'
+            }), 400
 
     except Exception as e:
         print(f"API Error in generate unique user IDs: {e}")
@@ -475,7 +432,8 @@ def api_get_group_id():
             """
             SELECT DISTINCT gc.group_id
             FROM groups_config gc
-            JOIN licenses l ON gc.license_key = l.license_key
+            JOIN events e ON gc.event_id = e.event_id
+            JOIN licenses l ON e.license_key = l.license_key
             WHERE l.assigned_admin_id = %s AND l.is_active = TRUE AND gc.group_id != 0
             ORDER BY gc.group_id DESC
             LIMIT 1
@@ -605,6 +563,250 @@ def api_save_admin_dashboard_settings():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'message': f'Server error: {str(e)}'}), 500
+
+@app.route('/api/admin/events', methods=['GET'])
+def api_get_events():
+    """Get events for admin with associated groups"""
+    try:
+        admin_user_id = request.args.get('admin_user_id')
+        if not admin_user_id:
+            return jsonify({'success': False, 'message': 'admin_user_id required'}), 400
+
+        # Get events with associated groups
+        query = """
+            SELECT 
+                e.*,
+                GROUP_CONCAT(
+                    JSON_OBJECT(
+                        'group_id', gc.group_id,
+                        'group_name', gc.group_name,
+                        'is_active', gc.is_active
+                    )
+                ) as groups_json
+            FROM events e
+            LEFT JOIN groups_config gc ON e.event_id = gc.event_id
+            WHERE e.admin_user_id = %s
+            GROUP BY e.event_id
+            ORDER BY e.created_at DESC
+        """
+        events = execute_query(query, (admin_user_id,), fetch=True)
+        
+        # Parse the groups JSON for each event
+        for event in events:
+            if event['groups_json']:
+                try:
+                    # Parse the concatenated JSON objects
+                    groups_str = event['groups_json']
+                    # Split by comma and parse each JSON object
+                    group_objects = []
+                    for group_json in groups_str.split(',{'):
+                        if not group_json.startswith('{'):
+                            group_json = '{' + group_json
+                        try:
+                            group_objects.append(json.loads(group_json))
+                        except json.JSONDecodeError:
+                            continue
+                    event['groups'] = group_objects
+                except Exception as e:
+                    print(f"Error parsing groups for event {event['event_id']}: {e}")
+                    event['groups'] = []
+            else:
+                event['groups'] = []
+            # Remove the raw JSON string
+            del event['groups_json']
+        
+        return jsonify({'success': True, 'events': events}), 200
+    except Exception as e:
+        print(f"Error getting events: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/admin/events', methods=['POST'])
+def api_create_event():
+    """Create a new event"""
+    try:
+        data = request.get_json()
+        admin_user_id = data.get('admin_user_id')
+        event_name = data.get('event_name')
+
+        if not admin_user_id or not event_name:
+            return jsonify({'success': False, 'message': 'admin_user_id and event_name required'}), 400
+
+        # Check if user exists
+        user_check = execute_query("SELECT id FROM users WHERE id = %s", (admin_user_id,), fetch=True)
+        if not user_check:
+            return jsonify({'success': False, 'message': 'User not found. Please login again.'}), 400
+
+        # Create event with default values
+        from generate_license import generate_license_key
+        license_key = generate_license_key()
+
+        query = """
+            INSERT INTO events (admin_user_id, event_name, license_key, event_type, event_days, slots_per_day, start_date, end_date, min_pass_points, is_active)
+            VALUES (%s, %s, %s, 'normal', 7, 2, CURDATE(), DATE_ADD(CURDATE(), INTERVAL 3650 DAY), 250, TRUE)
+        """
+        event_id = execute_query(query, (admin_user_id, event_name, license_key))
+        if not event_id:
+            raise Exception("Failed to insert event")
+
+        # Insert license into licenses table
+        license_query = """
+            INSERT INTO licenses (license_key, event_id, is_active, assigned_admin_id)
+            VALUES (%s, %s, TRUE, %s)
+        """
+        execute_query(license_query, (license_key, event_id, admin_user_id))
+
+        # Create default bot settings for the event
+        bot_settings_query = """
+            INSERT INTO bot_settings (event_id, bot_username, has_admin_permissions, event_type, event_name, event_days, pass_points, slots_per_day, welcome_message, kick_response, undesignated_slot_response, leaderboard_time, is_active)
+            VALUES (%s, 'WellnessBot', FALSE, 'normal', %s, 7, 250, 2, 'Welcome to our wellness program!', 'You have been removed for not following the rules.', 'Please respond to your assigned slot.', '11:00', TRUE)
+        """
+        execute_query(bot_settings_query, (event_id, event_name))
+
+        return jsonify({'success': True, 'event_id': event_id, 'license_key': license_key}), 200
+    except Exception as e:
+        print(f"Error creating event: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/admin/bot/settings', methods=['GET'])
+def api_get_bot_settings():
+    """Get bot settings for event"""
+    try:
+        event_id = request.args.get('event_id')
+        if not event_id:
+            return jsonify({'success': False, 'message': 'event_id required'}), 400
+
+        query = "SELECT * FROM bot_settings WHERE event_id = %s"
+        settings = execute_query(query, (event_id,), fetch=True)
+        if settings:
+            setting = settings[0]
+            # Convert banned_words from JSON to comma-separated string
+            if 'banned_words' in setting and setting['banned_words']:
+                try:
+                    banned_words_list = json.loads(setting['banned_words'])
+                    setting['banned_words'] = ', '.join(banned_words_list)
+                except (json.JSONDecodeError, TypeError):
+                    setting['banned_words'] = ''
+            # Convert loaded_slots from JSON to list
+            if 'loaded_slots' in setting and setting['loaded_slots']:
+                try:
+                    setting['loaded_slots'] = json.loads(setting['loaded_slots'])
+                except (json.JSONDecodeError, TypeError):
+                    setting['loaded_slots'] = []
+            return jsonify({'success': True, 'settings': setting}), 200
+        else:
+            return jsonify({'success': False, 'message': 'Settings not found'}), 404
+    except Exception as e:
+        print(f"Error getting bot settings: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/admin/bot/settings/save', methods=['POST'])
+def api_save_bot_settings():
+    """Save bot settings for an event"""
+    try:
+        data = request.get_json()
+        event_id = data.get('event_id')
+        config_data = data.get('config_data')
+
+        if not event_id or not config_data:
+            return jsonify({'success': False, 'message': 'event_id and config_data required'}), 400
+
+        # Update bot_settings for the event
+        query = """
+            INSERT INTO bot_settings (event_id, bot_username, has_admin_permissions, event_type, event_name,
+                                     event_days, pass_points, slots_per_day, welcome_message, kick_response,
+                                     undesignated_slot_response, leaderboard_time, banned_words, loaded_slots)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+            bot_username = VALUES(bot_username),
+            has_admin_permissions = VALUES(has_admin_permissions),
+            event_type = VALUES(event_type),
+            event_name = VALUES(event_name),
+            event_days = VALUES(event_days),
+            pass_points = VALUES(pass_points),
+            slots_per_day = VALUES(slots_per_day),
+            welcome_message = VALUES(welcome_message),
+            kick_response = VALUES(kick_response),
+            undesignated_slot_response = VALUES(undesignated_slot_response),
+            leaderboard_time = VALUES(leaderboard_time),
+            banned_words = VALUES(banned_words),
+            loaded_slots = VALUES(loaded_slots)
+        """
+        # Handle banned_words - convert to JSON array
+        banned_words = config_data.get('banned_words', '')
+        if isinstance(banned_words, str) and banned_words.strip():
+            # Split by comma and strip whitespace
+            banned_words_list = [word.strip() for word in banned_words.split(',') if word.strip()]
+            banned_words_json = json.dumps(banned_words_list)
+        elif isinstance(banned_words, list):
+            banned_words_json = json.dumps(banned_words)
+        else:
+            banned_words_json = json.dumps([])
+
+        params = (
+            event_id,
+            config_data.get('bot_username', 'WellnessBot'),
+            config_data.get('has_admin_permissions', False),
+            config_data.get('event_type', 'normal'),
+            config_data.get('event_name', ''),
+            config_data.get('event_days', 7),
+            config_data.get('pass_points', 250),
+            config_data.get('slots_per_day', 2),
+            config_data.get('welcome_message', ''),
+            config_data.get('kick_response', ''),
+            config_data.get('undesignated_slot_response', ''),
+            config_data.get('leaderboard_time', '11:00'),
+            banned_words_json,
+            json.dumps(config_data.get('loaded_slots', []))
+        )
+        execute_query(query, params)
+
+        # Save slots for the event
+        slots_data = config_data.get('slots', [])
+        if slots_data:
+            # First, delete existing slots for this event
+            execute_query("DELETE FROM event_slots WHERE event_id = %s", (event_id,))
+            # Then insert new slots
+            for slot in slots_data:
+                slot_query = """
+                    INSERT INTO event_slots (event_id, slot_name, start_time, end_time, initial_message,
+                                           response_positive, response_clarify, image_file_path, slot_type,
+                                           slot_points, is_mandatory, button_count, button_names, button_values)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """
+                slot_params = (
+                    event_id,
+                    slot.get('name', ''),
+                    slot.get('startTime', ''),
+                    slot.get('endTime', ''),
+                    slot.get('botResponse', ''),
+                    slot.get('postResponse', ''),
+                    '',  # response_clarify
+                    slot.get('image', ''),
+                    'button' if slot.get('type') == 'button' else 'default',
+                    slot.get('points', 10),
+                    slot.get('compulsory', False),
+                    slot.get('buttonCount', 0),
+                    json.dumps(slot.get('buttonNames', [])),
+                    json.dumps(slot.get('buttonValues', []))
+                )
+                execute_query(slot_query, slot_params)
+
+        # Get the license key for this event
+        license_query = "SELECT license_key FROM events WHERE event_id = %s"
+        license_result = execute_query(license_query, (event_id,), fetch=True)
+        license_key = license_result[0]['license_key'] if license_result else None
+
+        return jsonify({
+            'success': True, 
+            'message': 'Bot settings saved successfully',
+            'license_key': license_key,
+            'bot_username': config_data.get('bot_username', 'WellnessBot')
+        }), 200
+    except Exception as e:
+        print(f"Error saving bot settings: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8001, debug=False)

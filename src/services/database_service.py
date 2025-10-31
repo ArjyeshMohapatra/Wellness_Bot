@@ -36,7 +36,7 @@ from .db_service.banned_words import (
 )
 from .db_service.dashboard_settings import (
     save_admin_dashboard_settings, get_admin_dashboard_settings, get_admin_bot_settings,
-    get_bot_settings_for_group, save_bot_settings_for_group
+    get_bot_settings_for_group, get_bot_settings_for_event, save_bot_settings_for_group
 )
 from .db_service.subscription_limits import (
     get_admin_subscription_limits, can_admin_add_member
@@ -46,5 +46,5 @@ from .db_service.unique_user_ids import (
     get_available_unique_user_ids
 )
 from .db_service.bot_settings import (
-    get_admin_bot_settings, get_bot_settings_for_group, save_bot_settings_for_group
+    get_admin_bot_settings, get_bot_settings_for_group, get_bot_settings_for_event, save_bot_settings_for_group
 )

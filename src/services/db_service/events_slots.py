@@ -3,9 +3,10 @@ from .utils import execute_query, get_db_connection, logger, ist, datetime, time
 
 def get_active_event(group_id):
     query = """
-            SELECT * FROM events
-            WHERE group_id = %s AND is_active = TRUE
-            AND CURDATE() BETWEEN start_date AND end_date
+            SELECT e.* FROM events e
+            JOIN groups_config gc ON e.event_id = gc.event_id
+            WHERE gc.group_id = %s AND e.is_active = TRUE
+            AND CURDATE() BETWEEN e.start_date AND e.end_date
             LIMIT 1
         """
     result = execute_query(query, (group_id,), fetch=True)
@@ -14,12 +15,13 @@ def get_active_event(group_id):
 
 def get_active_slot(group_id):
     query = """
-            SELECT * FROM group_slots
-            WHERE group_id = %s
+            SELECT es.* FROM event_slots es
+            JOIN groups_config gc ON es.event_id = gc.event_id
+            WHERE gc.group_id = %s
             AND (
-                (start_time <= end_time AND CURTIME() BETWEEN start_time AND end_time)
+                (es.start_time <= es.end_time AND CURTIME() BETWEEN es.start_time AND es.end_time)
                 OR
-                (start_time > end_time AND (CURTIME() >= start_time OR CURTIME() <= end_time))
+                (es.start_time > es.end_time AND (CURTIME() >= es.start_time OR CURTIME() <= es.end_time))
             )
             LIMIT 1
         """
@@ -28,7 +30,12 @@ def get_active_slot(group_id):
 
 
 def get_all_slots(group_id):
-    query = "SELECT * FROM group_slots WHERE group_id = %s ORDER BY start_time"
+    query = """
+        SELECT es.* FROM event_slots es
+        JOIN groups_config gc ON es.event_id = gc.event_id
+        WHERE gc.group_id = %s
+        ORDER BY es.start_time
+    """
     return execute_query(query, (group_id,), fetch=True)
 
 
@@ -144,20 +151,13 @@ def save_or_update_event(cursor, group_id, config_data):
 
 
 def save_or_update_slots(cursor, group_id, admin_user_id, event_id, slots_data):
-    """Save or update slot configurations"""
-    # First, get existing slots for this group or admin
-    if group_id is not None:
-        try:
-            cursor.execute("SELECT slot_id, slot_name FROM group_slots WHERE group_id = %s", (group_id,))
-        except Exception as e:
-            logger.error(f"Failed executing save_or_update_slots (select group slots). Query: SELECT slot_id, slot_name FROM group_slots WHERE group_id = %s | Params: {(group_id,)} | Error: {e}", exc_info=True)
-            raise
-    else:
-        try:
-            cursor.execute("SELECT slot_id, slot_name FROM group_slots WHERE group_id IS NULL AND admin_user_id = %s", (admin_user_id,))
-        except Exception as e:
-            logger.error(f"Failed executing save_or_update_slots (select admin slots). Query: SELECT slot_id, slot_name FROM group_slots WHERE group_id IS NULL AND admin_user_id = %s | Params: {(admin_user_id,)} | Error: {e}", exc_info=True)
-            raise
+    """Save or update slot configurations for an event"""
+    # First, get existing slots for this event
+    try:
+        cursor.execute("SELECT slot_id, slot_name FROM event_slots WHERE event_id = %s", (event_id,))
+    except Exception as e:
+        logger.error(f"Failed executing save_or_update_slots (select event slots). Query: SELECT slot_id, slot_name FROM event_slots WHERE event_id = %s | Params: {(event_id,)} | Error: {e}", exc_info=True)
+        raise
     existing_slots = {row[1]: row[0] for row in cursor.fetchall()}  # slot_name -> slot_id
 
     # Track which slots we've processed
@@ -178,8 +178,6 @@ def save_or_update_slots(cursor, group_id, admin_user_id, event_id, slots_data):
             image_file_path = image_data
 
         slot_config = {
-            'group_id': group_id,
-            'admin_user_id': admin_user_id,
             'event_id': event_id,
             'slot_name': slot_name,
             'start_time': slot_data.get('startTime', ''),
@@ -206,23 +204,23 @@ def save_or_update_slots(cursor, group_id, admin_user_id, event_id, slots_data):
     slots_to_remove = set(existing_slots.keys()) - processed_slot_names
     for slot_name in slots_to_remove:
         try:
-            cursor.execute("DELETE FROM group_slots WHERE slot_id = %s", (existing_slots[slot_name],))
+            cursor.execute("DELETE FROM event_slots WHERE slot_id = %s", (existing_slots[slot_name],))
         except Exception as e:
-            logger.error(f"Failed executing save_or_update_slots (delete slot). Query: DELETE FROM group_slots WHERE slot_id = %s | Params: {(existing_slots[slot_name],)} | Error: {e}", exc_info=True)
+            logger.error(f"Failed executing save_or_update_slots (delete slot). Query: DELETE FROM event_slots WHERE slot_id = %s | Params: {(existing_slots[slot_name],)} | Error: {e}", exc_info=True)
             raise
 
 
 def create_slot(cursor, slot_config):
     """Create a new slot"""
     query = """
-        INSERT INTO group_slots (
-            group_id, admin_user_id, event_id, slot_name, start_time, end_time, initial_message,
+        INSERT INTO event_slots (
+            event_id, slot_name, start_time, end_time, initial_message,
             response_positive, response_clarify, image_file_path, slot_points, is_mandatory, slot_type,
             button_count, button_names, button_values
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
     params = (
-        slot_config['group_id'], slot_config['admin_user_id'], slot_config['event_id'], slot_config['slot_name'],
+        slot_config['event_id'], slot_config['slot_name'],
         slot_config['start_time'], slot_config['end_time'], slot_config['initial_message'],
         slot_config['response_positive'], '',  # response_clarify is empty for now
         slot_config['image_file_path'], slot_config['slot_points'], slot_config['is_mandatory'],
@@ -238,7 +236,7 @@ def create_slot(cursor, slot_config):
 def update_slot(cursor, slot_id, slot_config):
     """Update an existing slot"""
     query = """
-        UPDATE group_slots SET
+        UPDATE event_slots SET
             event_id = %s, slot_name = %s, start_time = %s, end_time = %s,
             initial_message = %s, response_positive = %s, response_clarify = %s,
             image_file_path = %s, slot_points = %s, is_mandatory = %s, slot_type = %s,

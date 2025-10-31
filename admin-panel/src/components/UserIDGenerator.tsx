@@ -82,7 +82,7 @@ const UserIDGenerator: React.FC = () => {
 
             const groupId = groupResult.group_id;
 
-            // Generate unique user IDs
+            // Generate a single unique user ID
             const response = await fetch('http://localhost:8001/api/admin/generate-unique-user-ids', {
                 method: 'POST',
                 headers: {
@@ -91,24 +91,24 @@ const UserIDGenerator: React.FC = () => {
                 body: JSON.stringify({
                     admin_user_id: parseInt(adminUserId),
                     group_id: groupId,
-                    count: 25  // Default count
+                    count: 1  // Generate one ID per click
                 })
             });
 
             const result = await response.json();
 
             if (result.success) {
-                // Append new IDs to existing ones (avoid duplicates)
-                const newIds = result.user_ids.filter((id: string) => !generatedUserIds.includes(id));
-                setGeneratedUserIds(prev => [...prev, ...newIds]);
+                // Add the new ID to the list (result.user_ids should be an array with one element)
+                const newId = result.user_ids[0];
+                setGeneratedUserIds(prev => [newId, ...prev]); // Add to beginning of list
                 setShowUserIdSection(true);
-                alert(`Successfully generated ${newIds.length} additional unique user IDs!`);
+                alert(`Successfully generated new user ID: ${newId}`);
             } else {
-                alert(`Failed to generate user IDs: ${result.message}`);
+                alert(`Failed to generate user ID: ${result.message}`);
             }
         } catch (error) {
-            console.error('Error generating user IDs:', error);
-            alert('Error generating user IDs. Please check your connection and try again.');
+            console.error('Error generating user ID:', error);
+            alert('Error generating user ID. Please check your connection and try again.');
         } finally {
             setGeneratingUserIds(false);
         }
@@ -126,7 +126,7 @@ const UserIDGenerator: React.FC = () => {
                     </Typography>
 
                     <Typography variant="body1" sx={{ mb: 4, textAlign: 'center', color: 'text.secondary' }}>
-                        View and generate unique user IDs for your group members. Each member will need one of these IDs to join your group after completing KYC verification.
+                        Generate unique user IDs for your group members. Each member will need one of these IDs to join your group after completing KYC verification.
                     </Typography>
 
                     {/* Generate Button */}
@@ -150,7 +150,7 @@ const UserIDGenerator: React.FC = () => {
                                     Generating...
                                 </>
                             ) : (
-                                '🎯 Generate More IDs'
+                                '🎯 Generate New ID'
                             )}
                         </Button>
                     </Box>
@@ -165,11 +165,56 @@ const UserIDGenerator: React.FC = () => {
                             borderColor: 'primary.main'
                         }}>
                             <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: 'primary.contrastText' }}>
-                                🎉 Available User IDs ({generatedUserIds.length})
+                                🎉 Generated User IDs ({generatedUserIds.length})
                             </Typography>
                             <Typography variant="body1" sx={{ mb: 2, color: 'primary.contrastText' }}>
-                                Here are your available unique user IDs. Share these with your potential group members along with the bot link:
+                                Here are your generated unique user IDs. Share these with your potential group members along with the bot link:
                             </Typography>
+
+                            {/* Highlight the most recent ID */}
+                            {generatedUserIds.length > 0 && (
+                                <Box sx={{
+                                    bgcolor: 'success.light',
+                                    p: 2,
+                                    borderRadius: 1,
+                                    border: '2px solid',
+                                    borderColor: 'success.main',
+                                    mb: 3
+                                }}>
+                                    <Typography variant="body1" sx={{ mb: 1, fontWeight: 'bold', color: 'success.contrastText' }}>
+                                        🆕 Latest Generated ID:
+                                    </Typography>
+                                    <Box sx={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 1,
+                                        fontFamily: 'monospace',
+                                        fontSize: '1.2rem',
+                                        fontWeight: 'bold',
+                                        p: 2,
+                                        bgcolor: 'white',
+                                        borderRadius: 1,
+                                        border: '1px solid',
+                                        borderColor: 'success.main'
+                                    }}>
+                                        <Typography variant="body1" sx={{ fontFamily: 'monospace', flexGrow: 1 }}>
+                                            {generatedUserIds[0]}
+                                        </Typography>
+                                        <IconButton
+                                            onClick={() => copyToClipboard(generatedUserIds[0], `User ID ${generatedUserIds[0]}`)}
+                                            sx={{
+                                                color: 'success.main',
+                                                '&:hover': {
+                                                    bgcolor: 'rgba(76, 175, 80, 0.1)'
+                                                }
+                                            }}
+                                            title={`Copy ${generatedUserIds[0]}`}
+                                        >
+                                            <ContentCopyIcon />
+                                        </IconButton>
+                                    </Box>
+                                </Box>
+                            )}
 
                             <Box sx={{
                                 bgcolor: 'grey.100',
@@ -181,7 +226,7 @@ const UserIDGenerator: React.FC = () => {
                             }}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                                     <Typography variant="body2" sx={{ color: 'primary.contrastText', fontWeight: 'bold' }}>
-                                        Generated User IDs ({generatedUserIds.length}):
+                                        All Generated User IDs ({generatedUserIds.length}):
                                     </Typography>
                                     <IconButton
                                         size="small"
@@ -218,10 +263,10 @@ const UserIDGenerator: React.FC = () => {
                                             fontSize: '0.9rem',
                                             fontWeight: 'bold',
                                             p: 1,
-                                            bgcolor: 'grey.50',
+                                            bgcolor: index === 0 ? 'success.light' : 'grey.50',
                                             borderRadius: 1,
                                             border: '1px solid',
-                                            borderColor: 'grey.200',
+                                            borderColor: index === 0 ? 'success.main' : 'grey.200',
                                             whiteSpace: 'nowrap'
                                         }}>
                                             <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>

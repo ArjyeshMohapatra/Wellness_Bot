@@ -1,5 +1,6 @@
 import logging
 import sys
+import asyncio
 from telegram import Update
 from telegram.ext import Application
 from . import config
@@ -30,7 +31,7 @@ def main():
         init_db_pool()
         logger.info("Database connection pool initialized")
         
-        # Create the Application with post_init
+        # Create the Application
         application = Application.builder().token(config.BOT_TOKEN).build()
 
         # Setup handlers
@@ -47,6 +48,12 @@ def main():
     except Exception:
         logger.error("Fatal error", exc_info=True)
         sys.exit(1)
+
+async def init_bot(application):
+    await application.bot.initialize()
+
+if __name__ == "__main__":
+    main()
     
 if __name__ == "__main__":
     main()

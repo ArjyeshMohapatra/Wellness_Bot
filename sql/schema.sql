@@ -44,15 +44,7 @@ END //
 
 DELIMITER ;
 
--- LICENSES TABLE
-CREATE TABLE IF NOT EXISTS licenses (
-    license_key VARCHAR(50) NOT NULL UNIQUE,
-    is_active BOOLEAN DEFAULT TRUE,
-    assigned_group_id BIGINT,  -- Removed UNIQUE constraint
-    assigned_admin_id BIGINT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
+-- USERS TABLE
 CREATE TABLE users (
     id INT PRIMARY KEY AUTO_INCREMENT,
     email VARCHAR(255) UNIQUE NOT NULL,
@@ -68,13 +60,40 @@ CREATE TABLE users (
     is_active BOOLEAN DEFAULT TRUE
 );
 
--- ADMIN DASHBOARD SETTINGS TABLE
+-- EVENTS TABLE
+CREATE TABLE IF NOT EXISTS events (
+    event_id INT AUTO_INCREMENT PRIMARY KEY,
+    admin_user_id INT NOT NULL,
+    event_name VARCHAR(255) NOT NULL DEFAULT 'Wellness Challenge',
+    event_type ENUM('normal', 'time-limited') DEFAULT 'normal',
+    event_days INT DEFAULT 0,
+    slots_per_day INT DEFAULT 0,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    min_pass_points INT DEFAULT 250,
+    license_key VARCHAR(50) UNIQUE NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (admin_user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+-- LICENSES TABLE
+CREATE TABLE IF NOT EXISTS licenses (
+    license_key VARCHAR(50) NOT NULL UNIQUE,
+    event_id INT NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    assigned_group_id BIGINT,  -- Can be NULL until used in a group
+    assigned_admin_id BIGINT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (event_id) REFERENCES events (event_id) ON DELETE CASCADE
+);
+
+-- ADMIN DASHBOARD SETTINGS TABLE (per event)
 CREATE TABLE IF NOT EXISTS admin_dashboard_settings (
     id INT PRIMARY KEY AUTO_INCREMENT,
-    admin_user_id INT NOT NULL,
+    event_id INT NOT NULL,
     bot_username VARCHAR(255) DEFAULT 'WellnessBot',
     has_admin_permissions BOOLEAN DEFAULT FALSE,
-    license_key VARCHAR(50),
     loaded_slots JSON,
     event_type VARCHAR(50) DEFAULT 'normal',
     event_name VARCHAR(255),
@@ -88,8 +107,8 @@ CREATE TABLE IF NOT EXISTS admin_dashboard_settings (
     banned_words JSON,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (admin_user_id) REFERENCES users (id) ON DELETE CASCADE,
-    UNIQUE KEY unique_admin (admin_user_id)
+    FOREIGN KEY (event_id) REFERENCES events (event_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_event (event_id)
 );
 
 CREATE TABLE password_resets (
@@ -120,13 +139,10 @@ CREATE TABLE IF NOT EXISTS payment_transactions (
     FOREIGN KEY (user_id) REFERENCES users (id)
 );
 
--- BOT SETTINGS TABLE (for multiple groups per admin)
+-- BOT SETTINGS TABLE (per event)
 CREATE TABLE IF NOT EXISTS bot_settings (
     setting_id INT AUTO_INCREMENT PRIMARY KEY,
-    admin_user_id INT NOT NULL,
-    group_id BIGINT NOT NULL DEFAULT 0,
-    group_name VARCHAR(255),
-    license_key VARCHAR(50) COLLATE utf8mb4_unicode_520_ci,
+    event_id INT NOT NULL,
     bot_username VARCHAR(255) COLLATE utf8mb4_unicode_520_ci DEFAULT 'WellnessBot',
     has_admin_permissions BOOLEAN DEFAULT FALSE,
     event_type ENUM('normal', 'time-limited') DEFAULT 'normal',
@@ -143,8 +159,8 @@ CREATE TABLE IF NOT EXISTS bot_settings (
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (admin_user_id) REFERENCES users (id) ON DELETE CASCADE,
-    UNIQUE KEY unique_admin_group_setting (admin_user_id, group_id)
+    FOREIGN KEY (event_id) REFERENCES events (event_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_event_setting (event_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
 
 -- ADMIN SUBSCRIPTION LIMITS TABLE
@@ -161,7 +177,8 @@ CREATE TABLE IF NOT EXISTS admin_subscription_limits (
 CREATE TABLE IF NOT EXISTS groups_config (
     config_id INT AUTO_INCREMENT PRIMARY KEY,
     group_id BIGINT NULL UNIQUE,
-    license_key VARCHAR(50) NULL,  -- Removed UNIQUE constraint
+    group_name VARCHAR(255),
+    event_id INT NULL,
     admin_user_id BIGINT NOT NULL,
     setting_id INT NULL,
     max_members INT DEFAULT 0,
@@ -169,10 +186,14 @@ CREATE TABLE IF NOT EXISTS groups_config (
     kick_message TEXT,
     undesignated_slot_response TEXT,
     leaderboard_time TIME,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    -- FOREIGN KEY (setting_id) REFERENCES bot_settings (setting_id) ON DELETE SET NULL
-    -- FOREIGN KEY (license_key) REFERENCES licenses(license_key) ON DELETE CASCADE  -- Temporarily removed
+    has_admin_permissions BOOLEAN DEFAULT FALSE,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (event_id) REFERENCES events (event_id) ON DELETE SET NULL,
+    FOREIGN KEY (setting_id) REFERENCES bot_settings (setting_id) ON DELETE SET NULL
 );
+
+-- EVENT SLOTS TABLE
 
 -- ADMIN SUBSCRIPTION LIMITS TABLE
 CREATE TABLE IF NOT EXISTS admin_subscription_limits (
@@ -184,27 +205,10 @@ CREATE TABLE IF NOT EXISTS admin_subscription_limits (
     FOREIGN KEY (admin_user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
 
--- EVENTS TABLE
-CREATE TABLE IF NOT EXISTS events (
-    event_id INT AUTO_INCREMENT PRIMARY KEY,
-    group_id BIGINT NOT NULL,
-    event_name VARCHAR(255) NOT NULL DEFAULT 'Wellness Challenge',
-    event_type ENUM('normal', 'time-limited') DEFAULT 'normal',
-    event_days INT DEFAULT 0,
-    slots_per_day INT DEFAULT 0,
-    start_date DATE NOT NULL,
-    end_date DATE NOT NULL,
-    min_pass_points INT DEFAULT 250,
-    is_active BOOLEAN DEFAULT TRUE,
-    FOREIGN KEY (group_id) REFERENCES groups_config (group_id) ON DELETE CASCADE
-);
-
--- GROUP SLOTS TABLE
-CREATE TABLE IF NOT EXISTS group_slots (
+-- EVENT SLOTS TABLE
+CREATE TABLE IF NOT EXISTS event_slots (
     slot_id INT AUTO_INCREMENT PRIMARY KEY,
-    group_id BIGINT NULL,
-    admin_user_id BIGINT NOT NULL,
-    event_id INT,
+    event_id INT NOT NULL,
     slot_name VARCHAR(255) NOT NULL,
     start_time TIME NOT NULL,
     end_time TIME NOT NULL,
@@ -218,7 +222,6 @@ CREATE TABLE IF NOT EXISTS group_slots (
     button_count INT DEFAULT 0,
     button_names JSON,
     button_values JSON,
-    FOREIGN KEY (group_id) REFERENCES groups_config (group_id) ON DELETE CASCADE,
     FOREIGN KEY (event_id) REFERENCES events (event_id) ON DELETE CASCADE
 );
 
@@ -227,7 +230,7 @@ CREATE TABLE IF NOT EXISTS slot_keywords (
     keyword_id INT AUTO_INCREMENT PRIMARY KEY,
     slot_id INT NOT NULL,
     keyword VARCHAR(100) NOT NULL,
-    FOREIGN KEY (slot_id) REFERENCES group_slots (slot_id) ON DELETE CASCADE
+    FOREIGN KEY (slot_id) REFERENCES event_slots (slot_id) ON DELETE CASCADE
 );
 
 -- GROUP MEMBERS TABLE
@@ -360,7 +363,7 @@ CREATE TABLE IF NOT EXISTS daily_slot_tracker (
         log_date
     ),
     FOREIGN KEY (event_id) REFERENCES events (event_id) ON DELETE CASCADE,
-    FOREIGN KEY (slot_id) REFERENCES group_slots (slot_id) ON DELETE CASCADE
+    FOREIGN KEY (slot_id) REFERENCES event_slots (slot_id) ON DELETE CASCADE
 );
 
 -- INACTIVITY WARNINGS TABLE
@@ -883,7 +886,7 @@ WHERE u.role = 'admin' AND u.is_active = TRUE;
 INSERT IGNORE INTO admin_subscription_limits (admin_user_id, max_members, current_total_members)
 SELECT
     u.id,
-    50 as max_members,  -- Default 50 members for development/testing
+    0 as max_members,  -- Default 50 members for development/testing
     0 as current_total_members
 FROM users u
 WHERE u.role = 'admin' AND u.is_active = TRUE;

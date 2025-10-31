@@ -1,4 +1,5 @@
 from .utils import execute_query, get_db_connection, logger, ist, datetime, timedelta, json, NEW_MEMBER_RESTRICTION_MINUTES
+from .events_slots import get_all_slots
 
 
 def get_group_config(group_id):
@@ -9,7 +10,7 @@ def get_group_config(group_id):
 
 def get_active_group_id():
     """Get the active group ID (the one with a license key)."""
-    query = "SELECT group_id FROM groups_config WHERE license_key IS NOT NULL AND group_id != 0 LIMIT 1"
+    query = "SELECT group_id FROM groups_config WHERE event_id IS NOT NULL AND group_id != 0 LIMIT 1"
     result = execute_query(query, fetch=True)
     return result[0]["group_id"] if result else None
 
@@ -97,8 +98,8 @@ def create_pending_group_config(group_id, admin_user_id):
             execute_query(
                 """
                     INSERT INTO groups_config
-                    (group_id, license_key, admin_user_id, max_members, welcome_message, kick_message)
-                    VALUES (%s, NULL, %s, 100, 'Welcome! Hoping that you will enjoy your time in here. 🌟', 'Goodbye, hope you enjoyed your time while being with us!')
+                    (group_id, admin_user_id, max_members, welcome_message, kick_message)
+                    VALUES (%s, %s, 100, 'Welcome! Hoping that you will enjoy your time in here. 🌟', 'Goodbye, hope you enjoyed your time while being with us!')
                 """,
                 (group_id, admin_user_id),
             )

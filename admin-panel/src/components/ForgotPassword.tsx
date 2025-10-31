@@ -34,7 +34,7 @@ const ForgotPassword: React.FC = () => {
             } else {
                 setError(data.message || 'Password reset failed');
             }
-        } catch (error) {
+        } catch {
             setError('Network error. Please check if the API server is running on port 8001.');
         } finally {
             setLoading(false);

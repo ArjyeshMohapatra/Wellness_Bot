@@ -1,12 +1,29 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Slot } from './useSlotConfiguration';
 
-interface BotSettings {
-    setting_id?: number;
+interface Event {
+    event_id: number;
     admin_user_id: number;
-    group_id: number;
-    group_name?: string;
-    license_key: string | null;
+    event_name: string;
+    event_type: 'normal' | 'time-limited';
+    event_days: number;
+    slots_per_day: number;
+    start_date: string;
+    end_date: string;
+    min_pass_points: number;
+    license_key: string;
+    is_active: boolean;
+    created_at: string;
+    groups: Array<{
+        group_id: number;
+        group_name: string;
+        is_active: boolean;
+    }>;
+}
+
+interface BotSettings {
+    setting_id: number;
+    event_id: number;
     bot_username: string;
     has_admin_permissions: boolean;
     event_type: 'normal' | 'time-limited';
@@ -24,7 +41,11 @@ interface BotSettings {
 }
 
 export const useDashboardState = () => {
-    // Bot settings state - simplified to single group
+    // Events state
+    const [events, setEvents] = useState<Event[]>([]);
+    const [currentEvent, setCurrentEvent] = useState<Event | null>(null);
+
+    // Bot settings state - now per event
     const [botSettings, setBotSettings] = useState<BotSettings | null>(null);
     const [showConfigurationDialog, setShowConfigurationDialog] = useState(false);
     const [configurationDialogData, setConfigurationDialogData] = useState<{
@@ -38,92 +59,127 @@ export const useDashboardState = () => {
     const [hasAdminPermissions, setHasAdminPermissions] = useState(false);
     const [licenseKey, setLicenseKey] = useState<string | null>(null);
 
-    // Function to load settings for a specific group
-    const loadSettingsForGroup = useCallback((settings: BotSettings) => {
+    // Function to load settings for an event
+    const loadSettingsForEvent = useCallback((settings: BotSettings) => {
         setBotUsername(settings.bot_username || 'BeHumanAgainBot');
         setHasAdminPermissions(settings.has_admin_permissions || false);
-        setLicenseKey(settings.license_key || null);
         setLoadedSlots(settings.loaded_slots || []);
     }, []);
 
-    // Function to load configuration - simplified for single group
-    const loadConfiguration = useCallback(async () => {
-        try {
-            // Load dashboard state from localStorage first
-            const savedDashboardState = localStorage.getItem('dashboardState');
-            if (savedDashboardState) {
-                const state = JSON.parse(savedDashboardState);
-                setBotUsername(state.botUsername || 'BeHumanAgainBot');
-                setHasAdminPermissions(state.hasAdminPermissions || false);
-                setLicenseKey(state.licenseKey || null);
-                setLoadedSlots(state.loadedSlots || []);
-            }
-
-            // Load bot settings from database for group 0
-            const adminUserId = localStorage.getItem('userId');
-            console.log('Loading dashboard for adminUserId:', adminUserId);
-
-            if (!adminUserId) {
-                console.error('No adminUserId found');
-                return;
-            }
-
-            const dashboardResponse = await fetch(`http://localhost:8001/api/admin/dashboard/settings?admin_user_id=${adminUserId}&group_id=0`);
-            const dashboardResult = await dashboardResponse.json();
-            if (dashboardResult.success && dashboardResult.settings) {
-                // For single group, we expect a single settings object, not an array
-                const settings = dashboardResult.settings;
-                setBotSettings(settings);
-                loadSettingsForGroup(settings);
-            } else {
-                // If no settings exist, initialize with defaults for group 0
-                const defaultSettings: BotSettings = {
-                    setting_id: 0,
-                    admin_user_id: parseInt(adminUserId),
-                    group_id: 0,
-                    license_key: null,
-                    bot_username: 'BeHumanAgainBot',
-                    has_admin_permissions: false,
-                    event_type: 'normal',
-                    event_name: '',
-                    event_days: 7,
-                    pass_points: 250,
-                    slots_per_day: 2,
-                    welcome_message: '',
-                    kick_response: '',
-                    undesignated_slot_response: '',
-                    leaderboard_time: '11:00',
-                    banned_words: [],
-                    loaded_slots: [],
-                    is_active: true
-                };
-                setBotSettings(defaultSettings);
-                loadSettingsForGroup(defaultSettings);
-            }
-        } catch (error) {
-            console.error('Error loading configuration:', error);
-        }
-    }, [loadSettingsForGroup]);
-
-    // Function to handle group selection - removed for single group
-    // Function to create new group settings - removed for single group
-
-    // Function to refresh admin permissions
-    const refreshAdminPermissions = useCallback(async () => {
+    // Function to load events for admin
+    const loadEvents = useCallback(async () => {
         try {
             const adminUserId = localStorage.getItem('userId');
             if (!adminUserId) return;
 
-            const dashboardResponse = await fetch(`http://localhost:8001/api/admin/dashboard/settings?admin_user_id=${adminUserId}&group_id=0`);
-            const dashboardResult = await dashboardResponse.json();
-            if (dashboardResult.success && dashboardResult.settings) {
-                const settings = dashboardResult.settings;
-                setHasAdminPermissions(settings.has_admin_permissions || false);
+            const response = await fetch(`http://localhost:8001/api/admin/events?admin_user_id=${adminUserId}`);
+            const result = await response.json();
+            if (result.success) {
+                setEvents(result.events);
+                if (result.events.length > 0 && !currentEvent) {
+                    setCurrentEvent(result.events[0]);
+                    loadSettingsForEvent(result.events[0]); // Assuming settings are included
+                }
             }
         } catch (error) {
-            console.error('Error refreshing admin permissions:', error);
+            console.error('Error loading events:', error);
         }
-    }, []);
+    }, [currentEvent, loadSettingsForEvent]);
+
+    // Function to load configuration - loads events and current event settings
+    const loadConfiguration = useCallback(async () => {
+        try {
+            // Load events first
+            await loadEvents();
+
+            // If we have a current event, load its settings
+            if (currentEvent) {
+                const settingsResponse = await fetch(`http://localhost:8001/api/admin/bot/settings?event_id=${currentEvent.event_id}`);
+                const settingsResult = await settingsResponse.json();
+                if (settingsResult.success && settingsResult.settings) {
+                    setBotSettings(settingsResult.settings);
+                    loadSettingsForEvent(settingsResult.settings);
+                    setLicenseKey(currentEvent.license_key);
+                }
+            }
+        } catch (error) {
+            console.error('Error loading configuration:', error);
+        }
+    }, [currentEvent, loadEvents, loadSettingsForEvent]);
+
+    // Function to select an event
+    const selectEvent = useCallback(async (event: Event) => {
+        setCurrentEvent(event);
+        setLicenseKey(event.license_key);
+        // Load settings for this event
+        try {
+            const settingsResponse = await fetch(`http://localhost:8001/api/admin/bot/settings?event_id=${event.event_id}`);
+            const settingsResult = await settingsResponse.json();
+            if (settingsResult.success && settingsResult.settings) {
+                setBotSettings(settingsResult.settings);
+                loadSettingsForEvent(settingsResult.settings);
+            } else {
+                // If no settings found, create default settings
+                setBotSettings(null);
+            }
+        } catch (error) {
+            console.error('Error loading bot settings for event:', error);
+            setBotSettings(null);
+        }
+    }, [loadSettingsForEvent]);
+
+    // Function to add new event
+    const addEvent = useCallback(async (eventName: string) => {
+        try {
+            const adminUserId = localStorage.getItem('userId');
+            if (!adminUserId) return false;
+
+            const response = await fetch('http://localhost:8001/api/admin/events', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    admin_user_id: parseInt(adminUserId),
+                    event_name: eventName
+                })
+            });
+            const result = await response.json();
+            if (result.success) {
+                await loadEvents(); // Reload events
+                // Find and select the newly created event
+                const newEvent = {
+                    event_id: result.event_id,
+                    admin_user_id: parseInt(adminUserId),
+                    event_name: eventName,
+                    event_type: 'normal' as const,
+                    event_days: 7,
+                    slots_per_day: 2,
+                    start_date: new Date().toISOString().split('T')[0],
+                    end_date: new Date(Date.now() + 3650 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                    min_pass_points: 250,
+                    license_key: result.license_key,
+                    is_active: true,
+                    created_at: new Date().toISOString(),
+                    groups: []
+                };
+                selectEvent(newEvent);
+                return true;
+            }
+        } catch (error) {
+            console.error('Error adding event:', error);
+        }
+        return false;
+    }, [loadEvents, selectEvent]);
+
+    // Function to refresh admin permissions
+    const refreshAdminPermissions = useCallback(async () => {
+        if (currentEvent) {
+            const settingsResponse = await fetch(`http://localhost:8001/api/admin/bot/settings?event_id=${currentEvent.event_id}`);
+            const settingsResult = await settingsResponse.json();
+            if (settingsResult.success && settingsResult.settings) {
+                setHasAdminPermissions(settingsResult.settings.has_admin_permissions || false);
+            }
+        }
+    }, [currentEvent]);
 
     // Load saved configuration on component mount
     useEffect(() => {
@@ -137,9 +193,11 @@ export const useDashboardState = () => {
         return () => clearInterval(interval);
     }, [loadConfiguration, refreshAdminPermissions]);
 
-    // Save selectedGroupId to localStorage whenever it changes - removed for single group
-
     return {
+        // Events
+        events,
+        currentEvent,
+
         // State
         botSettings,
         showConfigurationDialog,
@@ -150,7 +208,6 @@ export const useDashboardState = () => {
         licenseKey,
 
         // Setters
-        setBotSettings,
         setShowConfigurationDialog,
         setConfigurationDialogData,
         setLoadedSlots,
@@ -159,8 +216,9 @@ export const useDashboardState = () => {
         setLicenseKey,
 
         // Functions
-        loadSettingsForGroup,
         loadConfiguration,
+        selectEvent,
+        addEvent,
         refreshAdminPermissions,
     };
 };

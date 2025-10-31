@@ -524,14 +524,12 @@ async def sync_admin_status(context: ContextTypes.DEFAULT_TYPE):
                                 logger.info(f"Group {group_id}: new config created")
                     
                     if group_config:
-                        license_key = group_config.get('license_key')
-                        logger.info(f"Group {group_id}: license_key='{license_key}'")
-                        starts_with_auto = license_key.startswith('AUTO_') if license_key else False
-                        logger.info(f"Group {group_id}: starts_with_auto={starts_with_auto}")
+                        event_id = group_config.get('event_id')
+                        logger.info(f"Group {group_id}: event_id='{event_id}'")
                     
-                    if group_config and (not group_config.get('license_key') or group_config.get('license_key', '').startswith('AUTO_')):
-                        # Bot is admin but no license or has auto-generated license - trigger license request
-                        logger.info(f"Bot is admin in group {group_id} but no valid license found - requesting license")
+                    if group_config and not group_config.get('event_id'):
+                        # Bot is admin but no event/license assigned - trigger license request
+                        logger.info(f"Bot is admin in group {group_id} but no event/license found - requesting license")
                         from .join_handler import handle_bot_promoted_to_admin
                         
                         # Create a mock update object for the handler

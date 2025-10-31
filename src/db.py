@@ -100,6 +100,9 @@ def execute_query(query, params=None, fetch=False):
             # Only commit for write operations (INSERT, UPDATE, DELETE)
             if query.strip().upper().startswith(('INSERT', 'UPDATE', 'DELETE')):
                 conn.commit()
+                # Return last insert id for INSERT queries
+                if query.strip().upper().startswith('INSERT'):
+                    return cursor.lastrowid
             return affected_rows
 
     except mysql.connector.Error as e:

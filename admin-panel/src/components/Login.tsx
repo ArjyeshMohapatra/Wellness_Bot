@@ -75,7 +75,7 @@ const Login: React.FC = () => {
                 console.log('Login failed with status:', response.status, 'data:', data);
                 setError(data.message || 'Authentication failed');
             }
-        } catch (error) {
+        } catch {
             setError('Network error. Please check if the API server is running on port 8001.');
         } finally {
             setLoading(false);

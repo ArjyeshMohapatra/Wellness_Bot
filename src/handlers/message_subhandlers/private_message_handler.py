@@ -465,7 +465,7 @@ async def handle_license_key(message, context, license_key):
             return
 
         # Check if license key exists and is available
-        license_query = "SELECT license_key, assigned_group_id, is_active FROM licenses WHERE license_key = %s"
+        license_query = "SELECT l.license_key, l.event_id, l.assigned_group_id, l.is_active, e.event_name FROM licenses l JOIN events e ON l.event_id = e.event_id WHERE l.license_key = %s"
         license_result = execute_query(license_query, (license_key,), fetch=True)
 
         if not license_result:
@@ -500,19 +500,65 @@ async def handle_license_key(message, context, license_key):
         # License is valid, assign it to the current group
         actual_group_id = message.chat.id  # Actual Telegram group ID for API calls
         db_group_id = actual_group_id  # Use the actual group ID for database operations
+        event_id = license_data['event_id']
 
-        # Get admin_user_id from groups_config
+        # Get admin_user_id from groups_config or from the event
         admin_query = "SELECT admin_user_id FROM groups_config WHERE group_id = %s"
         admin_result = execute_query(admin_query, (db_group_id,), fetch=True)
-        admin_user_id = admin_result[0]['admin_user_id'] if admin_result else None
+        if admin_result:
+            admin_user_id = admin_result[0]['admin_user_id']
+        else:
+            # If no config exists, get from event
+            event_admin_query = "SELECT admin_user_id FROM events WHERE event_id = %s"
+            event_admin_result = execute_query(event_admin_query, (event_id,), fetch=True)
+            admin_user_id = event_admin_result[0]['admin_user_id'] if event_admin_result else None
 
-        # Update the license with group and admin assignment
-        update_query = "UPDATE licenses SET assigned_group_id = %s, assigned_admin_id = %s WHERE license_key = %s"
-        execute_query(update_query, (db_group_id, admin_user_id, license_key))
+        # Update the license with group assignment
+        update_query = "UPDATE licenses SET assigned_group_id = %s WHERE license_key = %s"
+        execute_query(update_query, (db_group_id, license_key))
 
-        # Update group config with license key
-        config_query = "UPDATE groups_config SET license_key = %s WHERE group_id = %s"
-        execute_query(config_query, (license_key, db_group_id))
+        # Get bot settings for this event to update group config
+        settings_query = """
+            SELECT welcome_message, kick_response, undesignated_slot_response, leaderboard_time
+            FROM bot_settings WHERE event_id = %s LIMIT 1
+        """
+        settings_result = execute_query(settings_query, (event_id,), fetch=True)
+        if settings_result:
+            settings = settings_result[0]
+            welcome_message = settings['welcome_message']
+            kick_message = settings['kick_response'] 
+            undesignated_slot_response = settings['undesignated_slot_response']
+            leaderboard_time = settings['leaderboard_time']
+        else:
+            welcome_message = kick_message = undesignated_slot_response = leaderboard_time = None
+        
+        # Try to get group name from Telegram
+        group_name = None
+        try:
+            chat_info = await context.bot.get_chat(actual_group_id)
+            group_name = chat_info.title
+        except Exception as e:
+            logger.warning(f"Could not get group name for {actual_group_id}: {e}")
+        
+        config_query = """
+            INSERT INTO groups_config (group_id, event_id, admin_user_id, max_members, setting_id, 
+                                     welcome_message, kick_message, undesignated_slot_response, 
+                                     leaderboard_time, group_name)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+            event_id = VALUES(event_id),
+            admin_user_id = VALUES(admin_user_id),
+            max_members = VALUES(max_members),
+            setting_id = VALUES(setting_id),
+            welcome_message = VALUES(welcome_message),
+            kick_message = VALUES(kick_message),
+            undesignated_slot_response = VALUES(undesignated_slot_response),
+            leaderboard_time = VALUES(leaderboard_time),
+            group_name = VALUES(group_name)
+        """
+        execute_query(config_query, (db_group_id, event_id, admin_user_id, max_members, setting_id,
+                                    welcome_message, kick_message, undesignated_slot_response, 
+                                    leaderboard_time, group_name))
 
         # Check if bot has admin permissions in this group
         has_admin_permissions = False
@@ -538,6 +584,7 @@ async def handle_license_key(message, context, license_key):
             context=context,
             chat_id=message.chat.id,
             text=f"🎉 **License Activated Successfully!**\n\n"
+            f"✅ Event: **{license_data['event_name']}**\n"
             f"✅ License Key: `{license_key}`\n"
             f"{admin_status_text}\n\n"
             f"Your wellness bot is now activated!\n\n"

@@ -273,8 +273,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             db.deduct_knockout_points(group_id, user_id, 5)
 
             # Get undesignated slot response from bot settings
-            admin_user_id = group_config.get("admin_user_id")
-            bot_settings = db.get_bot_settings_for_group(admin_user_id, group_id) if admin_user_id else None
+            event_id = group_config.get("event_id")
+            bot_settings = db.get_bot_settings_for_event(event_id) if event_id else None
             undesignated_response = bot_settings.get("undesignated_slot_response", "Please only post during designated time slots.") if bot_settings else "Please only post during designated time slots."
 
             warning_msg = await safe_send_message(

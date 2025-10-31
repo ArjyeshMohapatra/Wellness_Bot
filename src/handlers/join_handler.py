@@ -73,7 +73,7 @@ async def handle_bot_added_to_group(update, context):
 
             if bot_member.status in ["administrator", "creator"]:
                 # Bot is already admin, check if we need to request license
-                if group_config and not group_config.get('license_key'):
+                if group_config and not group_config.get('event_id'):
                     # Ask for license key
                     logger.info(f"Group {group_id} has config but no license - requesting license key")
                     await safe_send_message(
