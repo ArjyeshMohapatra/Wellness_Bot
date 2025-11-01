@@ -201,17 +201,16 @@ def save_bot_settings_for_group(admin_user_id, group_id, settings):
                 banned_words = json.dumps(settings.get('banned_words', []))
                 loaded_slots = json.dumps(settings.get('loaded_slots', []))
 
-                # Insert or update bot settings
+                # Insert or update bot settings for the event
                 query = """
                     INSERT INTO bot_settings
-                    (admin_user_id, group_id, group_name, license_key, bot_username, has_admin_permissions,
-                     event_type, event_name, event_days, pass_points, slots_per_day,
-                     welcome_message, kick_response, undesignated_slot_response, leaderboard_time,
-                     banned_words, loaded_slots, is_active)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
+                    (event_id, bot_username, has_admin_permissions, event_type, event_name, event_days, pass_points, slots_per_day,
+                     welcome_message, kick_response, undesignated_slot_response, leaderboard_time, banned_words, loaded_slots, is_active)
+                    VALUES (
+                        (SELECT event_id FROM events WHERE license_key = %s),
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE
+                    )
                     ON DUPLICATE KEY UPDATE
-                        group_name = VALUES(group_name),
-                        license_key = VALUES(license_key),
                         bot_username = VALUES(bot_username),
                         has_admin_permissions = VALUES(has_admin_permissions),
                         event_type = VALUES(event_type),
@@ -229,10 +228,8 @@ def save_bot_settings_for_group(admin_user_id, group_id, settings):
                 """
 
                 params = (
-                    admin_user_id, group_id, group_name, license_key, bot_username, has_admin_permissions,
-                    event_type, event_name, event_days, pass_points, slots_per_day,
-                    welcome_message, kick_response, undesignated_slot_response, leaderboard_time,
-                    banned_words, loaded_slots
+                    license_key, bot_username, has_admin_permissions, event_type, event_name, event_days, pass_points, slots_per_day,
+                    welcome_message, kick_response, undesignated_slot_response, leaderboard_time, banned_words, loaded_slots
                 )
 
                 try:

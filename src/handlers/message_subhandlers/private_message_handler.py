@@ -485,7 +485,7 @@ async def handle_license_key(message, context, license_key):
             logger.warning(f"Could not check if sender is admin: {e}")
 
         # Check if license key exists and is available
-        license_query = "SELECT l.license_key, l.event_id, l.assigned_group_id, l.is_active, e.event_name, e.admin_user_id as event_admin_id FROM licenses l JOIN events e ON l.event_id = e.event_id WHERE l.license_key = %s"
+        license_query = "SELECT l.license_key, l.event_id, l.assigned_group_id, l.is_active, e.event_name, u.telegram_id as event_admin_telegram_id FROM licenses l JOIN events e ON l.event_id = e.event_id JOIN users u ON e.admin_user_id = u.id WHERE l.license_key = %s"
         license_result = execute_query(license_query, (license_key,), fetch=True)
 
         if not license_result:
@@ -500,7 +500,7 @@ async def handle_license_key(message, context, license_key):
         license_data = license_result[0]
 
         # Check if the license belongs to the correct admin (only if sender is not admin)
-        if admin_user_id is not None and admin_user_id != license_data['event_admin_id'] and not sender_is_admin:
+        if admin_user_id is not None and admin_user_id != license_data['event_admin_telegram_id'] and not sender_is_admin:
             await safe_send_message(
                 context=context,
                 chat_id=message.chat.id,
@@ -521,8 +521,8 @@ async def handle_license_key(message, context, license_key):
         # License is valid, assign it to the current group
         event_id = license_data['event_id']
 
-        # Use the event admin's user ID
-        admin_user_id = license_data['event_admin_id']
+        # Use the event admin's telegram user ID
+        admin_user_id = license_data['event_admin_telegram_id']
 
         # License can be reused for multiple groups by the same admin for the same event
 

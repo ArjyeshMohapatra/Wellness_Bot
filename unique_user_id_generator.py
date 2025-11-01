@@ -62,8 +62,8 @@ def generate_user_ids_for_group(group_id, count):
         max_attempts = actual_count * 10  # Prevent infinite loops
 
         while len(generated_ids) < actual_count and attempts < max_attempts:
-            # Generate a 6-digit random number
-            user_id = ''.join(random.choices(string.digits, k=6))
+            # Generate a 10-digit alphanumeric ID
+            user_id = ''.join(random.choices(string.ascii_uppercase + string.digits, k=10))
 
             # Check if this ID already exists
             query = "SELECT member_id FROM group_members WHERE unique_user_id = %s"

@@ -40,20 +40,21 @@ def login_admin(email, password):
     """Login admin using existing users table"""
     try:
         # Get user from database
-        users = execute_query("SELECT password_hash FROM users WHERE email = %s AND is_active = TRUE",(email,),fetch=True)
+        users = execute_query("SELECT id, password_hash FROM users WHERE email = %s AND is_active = TRUE",(email,),fetch=True)
 
         if not users:
             print("❌ Admin not found!")
             return False
 
         user = users[0]
+        stored_hash = user['password_hash']
 
         # Check password
-        if check_password(password, user['password_hash']):
+        if check_password(password, stored_hash):
             print("✅ Login successful!")
-            return True
+            return user['id']  # Return internal user ID
         else:
-            print("❌ Wrong password!")
+            print("❌ Invalid password!")
             return False
 
     except Exception as e:

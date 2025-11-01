@@ -7,7 +7,7 @@ USE telegram_bot_manager;
 -- Function to calculate max members based on highest plan purchased
 DELIMITER //
 
-CREATE FUNCTION get_max_members_for_admin(admin_user_id INT) RETURNS INT
+CREATE FUNCTION get_max_members_for_admin(admin_user_id BIGINT) RETURNS INT
 DETERMINISTIC
 BEGIN
     DECLARE max_members INT DEFAULT 0; -- Default for development/testing
@@ -39,7 +39,7 @@ BEGIN
     END IF;
 
     -- Fallback (should not reach here if transactions exist)
-    RETURN 50;
+    RETURN 0;
 END //
 
 DELIMITER ;
@@ -47,13 +47,13 @@ DELIMITER ;
 -- USERS TABLE
 CREATE TABLE users (
     id INT PRIMARY KEY AUTO_INCREMENT,
+    telegram_id BIGINT UNIQUE,
     email VARCHAR(255) UNIQUE NOT NULL,
     first_name VARCHAR(100),
     last_name VARCHAR(100),
     password_hash VARCHAR(255) NOT NULL,
     date_of_birth DATE,
     phone_number VARCHAR(20),
-    telegram_id BIGINT UNIQUE,
     role ENUM('admin', 'developer') DEFAULT 'admin',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_login TIMESTAMP NULL,
@@ -83,9 +83,10 @@ CREATE TABLE IF NOT EXISTS licenses (
     event_id INT NOT NULL,
     is_active BOOLEAN DEFAULT TRUE,
     assigned_group_id BIGINT,  -- Can be NULL until used in a group
-    assigned_admin_id BIGINT,
+    assigned_admin_id INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (event_id) REFERENCES events (event_id) ON DELETE CASCADE
+    FOREIGN KEY (event_id) REFERENCES events (event_id) ON DELETE CASCADE,
+    FOREIGN KEY (assigned_admin_id) REFERENCES users (id) ON DELETE SET NULL
 );
 
 -- ADMIN DASHBOARD SETTINGS TABLE (per event)
@@ -97,8 +98,8 @@ CREATE TABLE IF NOT EXISTS admin_dashboard_settings (
     loaded_slots JSON,
     event_type VARCHAR(50) DEFAULT 'normal',
     event_name VARCHAR(255),
-    event_days INT DEFAULT 7,
-    pass_points INT DEFAULT 250,
+    event_days INT DEFAULT 0,
+    pass_points INT DEFAULT 0,
     slots_per_day INT DEFAULT 2,
     welcome_message TEXT,
     kick_response TEXT,
@@ -147,8 +148,8 @@ CREATE TABLE IF NOT EXISTS bot_settings (
     has_admin_permissions BOOLEAN DEFAULT FALSE,
     event_type ENUM('normal', 'time-limited') DEFAULT 'normal',
     event_name VARCHAR(255) COLLATE utf8mb4_unicode_520_ci,
-    event_days INT DEFAULT 7,
-    pass_points INT DEFAULT 250,
+    event_days INT DEFAULT 0,
+    pass_points INT DEFAULT 0,
     slots_per_day INT DEFAULT 2,
     welcome_message TEXT COLLATE utf8mb4_unicode_520_ci,
     kick_response TEXT COLLATE utf8mb4_unicode_520_ci,
@@ -190,7 +191,8 @@ CREATE TABLE IF NOT EXISTS groups_config (
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (event_id) REFERENCES events (event_id) ON DELETE SET NULL,
-    FOREIGN KEY (setting_id) REFERENCES bot_settings (setting_id) ON DELETE SET NULL
+    FOREIGN KEY (setting_id) REFERENCES bot_settings (setting_id) ON DELETE SET NULL,
+    FOREIGN KEY (admin_user_id) REFERENCES users (telegram_id) ON DELETE CASCADE
 );
 
 -- EVENT SLOTS TABLE
@@ -877,7 +879,7 @@ DELIMITER ;
 INSERT IGNORE INTO admin_subscription_limits (admin_user_id, max_members, current_total_members)
 SELECT
     u.id,
-    get_max_members_for_admin(u.id) as max_members,
+    get_max_members_for_admin(u.telegram_id) as max_members,
     0 as current_total_members
 FROM users u
 WHERE u.role = 'admin' AND u.is_active = TRUE;
@@ -899,7 +901,7 @@ CREATE TABLE IF NOT EXISTS sync_notifications (
 INSERT IGNORE INTO admin_subscription_limits (admin_user_id, max_members, current_total_members)
 SELECT
     u.id,
-    0 as max_members,  -- Default 50 members for development/testing
+    0 as max_members,
     0 as current_total_members
 FROM users u
 WHERE u.role = 'admin' AND u.is_active = TRUE;

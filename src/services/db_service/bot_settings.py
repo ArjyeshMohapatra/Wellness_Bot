@@ -193,8 +193,8 @@ def save_bot_settings_for_group(admin_user_id, group_id, settings):
                 event_id = None
                 if license_key:
                     # Check if event already exists with this license_key
-                    cursor.execute("SELECT event_id FROM events WHERE license_key = %s AND admin_user_id = %s",
-                                 (license_key, admin_user_id))
+                    cursor.execute("SELECT event_id FROM events WHERE license_key = %s",
+                                 (license_key,))
                     existing_event = cursor.fetchone()
                     if existing_event:
                         event_id = existing_event[0]

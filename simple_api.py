@@ -70,11 +70,11 @@ def api_login():
         if not email or not password:
             return jsonify({'success': False, 'message': 'Email and password required'}), 400
 
-        success = login_admin(email, password)
-        if success:
+        user_id = login_admin(email, password)
+        if user_id:
             # Get user details after successful login
-            user_query = "SELECT id, email, first_name, last_name, role FROM users WHERE email = %s AND is_active = TRUE"
-            user_result = execute_query(user_query, (email,), fetch=True)
+            user_query = "SELECT id, email, first_name, last_name, role FROM users WHERE id = %s AND is_active = TRUE"
+            user_result = execute_query(user_query, (user_id,), fetch=True)
             if user_result:
                 user = user_result[0]
                 return jsonify({
@@ -370,22 +370,15 @@ def api_generate_unique_user_ids():
         if not admin_user_id or not group_id:
             return jsonify({'success': False, 'message': 'Admin user ID and group ID required'}), 400
 
-        # Get the Telegram admin ID for this user
-        telegram_admin_query = "SELECT telegram_id FROM users WHERE id = %s"
-        telegram_result = execute_query(telegram_admin_query, (admin_user_id,), fetch=True)
-        if not telegram_result or not telegram_result[0]['telegram_id']:
-            return jsonify({'success': False, 'message': 'Admin Telegram ID not found'}), 400
-        
-        telegram_admin_id = telegram_result[0]['telegram_id']
-
         # Verify that this admin owns this group
         group_check = execute_query(
             """
             SELECT gc.group_id 
             FROM groups_config gc
-            WHERE gc.group_id = %s AND gc.admin_user_id = %s AND gc.is_active = TRUE
+            JOIN events e ON gc.event_id = e.event_id
+            WHERE gc.group_id = %s AND e.admin_user_id = %s AND gc.is_active = TRUE
             """,
-            (group_id, telegram_admin_id),
+            (group_id, admin_user_id),
             fetch=True
         )
 
@@ -475,11 +468,11 @@ def api_get_available_user_ids():
         if not admin_user_id:
             return jsonify({'success': False, 'message': 'Admin user ID required'}), 400
 
-        # Get the Telegram admin ID for this user
+        # Get the Telegram admin ID for this user (for Telegram operations)
         telegram_admin_query = "SELECT telegram_id FROM users WHERE id = %s"
         telegram_result = execute_query(telegram_admin_query, (admin_user_id,), fetch=True)
         if not telegram_result or not telegram_result[0]['telegram_id']:
-            return jsonify({'success': False, 'message': 'Admin Telegram ID not found'}), 400
+            return jsonify({'success': False, 'message': 'Admin Telegram ID not found. Please interact with the bot first.'}), 400
         
         telegram_admin_id = telegram_result[0]['telegram_id']
 
@@ -560,9 +553,9 @@ def api_save_admin_dashboard_settings():
         group_id = data.get('group_id')  # Require group_id, no default
         settings = data.get('settings', {})
 
-        if not admin_user_id or not group_id:
-            print("API: admin_user_id and group_id required")
-            return jsonify({'success': False, 'message': 'Admin user ID and group ID required'}), 400
+        if not admin_user_id:
+            print("API: admin_user_id required")
+            return jsonify({'success': False, 'message': 'Admin user ID required'}), 400
 
         from src.services.database_service import save_bot_settings_for_group
 
@@ -671,7 +664,6 @@ def api_create_event():
             VALUES (%s, %s, TRUE, %s)
         """
         execute_query(license_query, (license_key, event_id, admin_user_id))
-
         # Create default bot settings for the event
         bot_settings_query = """
             INSERT INTO bot_settings (event_id, bot_username, has_admin_permissions, event_type, event_name, event_days, pass_points, slots_per_day, welcome_message, kick_response, undesignated_slot_response, leaderboard_time, is_active)
