@@ -21,17 +21,16 @@ def generate_user_ids_for_group(group_id, count):
     try:
         # First, get the admin for this group
         admin_query = """
-            SELECT l.assigned_admin_id
-            FROM groups_config gc
-            JOIN licenses l ON gc.license_key = l.license_key
-            WHERE gc.group_id = %s
+            SELECT admin_user_id
+            FROM groups_config
+            WHERE group_id = %s
         """
         admin_result = execute_query(admin_query, (group_id,), fetch=True)
         if not admin_result:
             logger.error(f"No admin found for group {group_id}")
             return []
 
-        admin_user_id = admin_result[0]['assigned_admin_id']
+        admin_user_id = admin_result[0]['admin_user_id']
 
         # Check current subscription limits
         from src.services.database_service import get_admin_subscription_limits
@@ -45,8 +44,7 @@ def generate_user_ids_for_group(group_id, count):
             SELECT COUNT(*) as total
             FROM group_members gm
             JOIN groups_config gc ON gm.group_id = gc.group_id
-            JOIN licenses l ON gc.license_key = l.license_key
-            WHERE l.assigned_admin_id = %s AND gm.unique_user_id IS NOT NULL
+            WHERE gc.admin_user_id = %s AND gm.unique_user_id IS NOT NULL
         """
         current_total_result = execute_query(current_total_query, (admin_user_id,), fetch=True)
         current_total = current_total_result[0]['total'] if current_total_result else 0

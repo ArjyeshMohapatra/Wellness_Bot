@@ -8,6 +8,7 @@ import json
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 from simple_auth import register_admin, login_admin, reset_admin_password, get_all_admins
 from services.database_service import save_admin_panel_config, get_admin_panel_config
+from services.db_service.utils import save_base64_image
 from db import execute_query, init_db_pool
 
 # Initialize database connection pool
@@ -369,15 +370,22 @@ def api_generate_unique_user_ids():
         if not admin_user_id or not group_id:
             return jsonify({'success': False, 'message': 'Admin user ID and group ID required'}), 400
 
-        # Verify that this admin owns this group (through license assignment)
+        # Get the Telegram admin ID for this user
+        telegram_admin_query = "SELECT telegram_id FROM users WHERE id = %s"
+        telegram_result = execute_query(telegram_admin_query, (admin_user_id,), fetch=True)
+        if not telegram_result or not telegram_result[0]['telegram_id']:
+            return jsonify({'success': False, 'message': 'Admin Telegram ID not found'}), 400
+        
+        telegram_admin_id = telegram_result[0]['telegram_id']
+
+        # Verify that this admin owns this group
         group_check = execute_query(
             """
             SELECT gc.group_id 
             FROM groups_config gc
-            JOIN licenses l ON gc.license_key = l.license_key
-            WHERE gc.group_id = %s AND l.assigned_admin_id = %s AND l.is_active = TRUE
+            WHERE gc.group_id = %s AND gc.admin_user_id = %s AND gc.is_active = TRUE
             """,
-            (group_id, admin_user_id),
+            (group_id, telegram_admin_id),
             fetch=True
         )
 
@@ -467,16 +475,23 @@ def api_get_available_user_ids():
         if not admin_user_id:
             return jsonify({'success': False, 'message': 'Admin user ID required'}), 400
 
+        # Get the Telegram admin ID for this user
+        telegram_admin_query = "SELECT telegram_id FROM users WHERE id = %s"
+        telegram_result = execute_query(telegram_admin_query, (admin_user_id,), fetch=True)
+        if not telegram_result or not telegram_result[0]['telegram_id']:
+            return jsonify({'success': False, 'message': 'Admin Telegram ID not found'}), 400
+        
+        telegram_admin_id = telegram_result[0]['telegram_id']
+
         # Get group ID for this admin
         group_result = execute_query(
             """
             SELECT DISTINCT gc.group_id
             FROM groups_config gc
-            JOIN licenses l ON gc.license_key = l.license_key
-            WHERE l.assigned_admin_id = %s AND l.is_active = TRUE
+            WHERE gc.admin_user_id = %s AND gc.is_active = TRUE AND gc.group_id != 0
             LIMIT 1
             """,
-            (admin_user_id,),
+            (telegram_admin_id,),
             fetch=True
         )
 
@@ -542,12 +557,12 @@ def api_save_admin_dashboard_settings():
         data = request.get_json()
         print(f"API: Saving dashboard settings for data: {data}")
         admin_user_id = data.get('admin_user_id')
-        group_id = data.get('group_id', 0)  # Default to 0 if not provided (for backward compatibility)
+        group_id = data.get('group_id')  # Require group_id, no default
         settings = data.get('settings', {})
 
-        if not admin_user_id:
-            print("API: No admin_user_id provided")
-            return jsonify({'success': False, 'message': 'Admin user ID required'}), 400
+        if not admin_user_id or not group_id:
+            print("API: admin_user_id and group_id required")
+            return jsonify({'success': False, 'message': 'Admin user ID and group ID required'}), 400
 
         from src.services.database_service import save_bot_settings_for_group
 
@@ -767,10 +782,22 @@ def api_save_bot_settings():
         # Save slots for the event
         slots_data = config_data.get('slots', [])
         if slots_data:
+            # Get admin_user_id for the event
+            admin_query = "SELECT admin_user_id FROM events WHERE event_id = %s"
+            admin_result = execute_query(admin_query, (event_id,), fetch=True)
+            admin_user_id = admin_result[0]['admin_user_id'] if admin_result else None
+            
             # First, delete existing slots for this event
             execute_query("DELETE FROM event_slots WHERE event_id = %s", (event_id,))
             # Then insert new slots
             for slot in slots_data:
+                # Handle image data - if it's Base64, save as file
+                image_data = slot.get('image', '')
+                if image_data and image_data.startswith('data:image/'):
+                    image_file_path = save_base64_image(image_data, admin_user_id, slot.get('name', ''))
+                else:
+                    image_file_path = image_data
+                
                 slot_query = """
                     INSERT INTO event_slots (event_id, slot_name, start_time, end_time, initial_message,
                                            response_positive, response_clarify, image_file_path, slot_type,
@@ -785,7 +812,7 @@ def api_save_bot_settings():
                     slot.get('botResponse', ''),
                     slot.get('postResponse', ''),
                     '',  # response_clarify
-                    slot.get('image', ''),
+                    image_file_path,
                     'button' if slot.get('type') == 'button' else 'default',
                     slot.get('points', 10),
                     slot.get('compulsory', False),

@@ -521,9 +521,8 @@ async def handle_license_key(message, context, license_key):
         # License is valid, assign it to the current group
         event_id = license_data['event_id']
 
-        # If we didn't get admin_user_id from config, get it from event
-        if admin_user_id is None:
-            admin_user_id = license_data['event_admin_id']
+        # Use the event admin's user ID
+        admin_user_id = license_data['event_admin_id']
 
         # License can be reused for multiple groups by the same admin for the same event
 

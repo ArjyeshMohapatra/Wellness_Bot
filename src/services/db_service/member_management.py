@@ -35,15 +35,14 @@ def add_member(group_id, user_id, username=None, first_name=None, last_name=None
         if is_new and not is_admin:
             # Get admin for this group
             admin_query = """
-                SELECT l.assigned_admin_id
-                FROM groups_config gc
-                JOIN licenses l ON gc.license_key = l.license_key
-                WHERE gc.group_id = %s
+                SELECT admin_user_id
+                FROM groups_config
+                WHERE group_id = %s
             """
             admin_result = execute_query(admin_query, (group_id,), fetch=True)
             logger.info(f"add_member: admin_query result for group_id={group_id}: {admin_result}")
             if admin_result:
-                admin_user_id = admin_result[0]['assigned_admin_id']
+                admin_user_id = admin_result[0]['admin_user_id']
                 logger.info(f"add_member: admin_user_id={admin_user_id}")
                 if not can_admin_add_member(admin_user_id):
                     logger.warning(f"Cannot add member {user_id} to group {group_id}: subscription limit reached for admin {admin_user_id}")
