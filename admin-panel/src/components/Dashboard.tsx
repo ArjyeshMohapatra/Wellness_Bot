@@ -259,6 +259,24 @@ const Dashboard: React.FC = () => {
                 // Update loadedSlots to reflect the current slots configuration
                 setLoadedSlots(slots);
 
+                // Notify bot of settings change for real-time sync
+                try {
+                    await fetch('http://localhost:8001/api/admin/sync-notification', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            event_id: currentEvent?.event_id,
+                            change_type: 'settings_updated',
+                            admin_user_id: parsedAdminUserId
+                        })
+                    });
+                } catch (syncError) {
+                    console.warn('Failed to send sync notification to bot:', syncError);
+                    // Don't fail the save if sync notification fails
+                }
+
                 // Also save dashboard settings to persist across sessions
                 const dashboardSaveSuccess = await saveDashboardSettings(result.license_key);
                 if (!dashboardSaveSuccess) {

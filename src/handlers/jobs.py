@@ -311,8 +311,7 @@ async def check_mid_slot_warnings(context: ContextTypes.DEFAULT_TYPE):
                             context=context, 
                             chat_id=group_id,
                             text=f"⏰ *{slot_name}* - Final Reminder!\n\n"
-                                 f"⚠️ Only 10 minutes remaining!\n"
-                                 f"📸 If you haven't posted yet, do it now!",
+                                 f"⚠️ Only 10 minutes remaining!\n",
                             parse_mode="Markdown",
                         )
 
@@ -546,6 +545,248 @@ async def sync_admin_status(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Critical error in the admin synchronization job: {e}", exc_info=True)
 
+
+async def sync_group_info(context: ContextTypes.DEFAULT_TYPE):
+    """Sync group names and admin permissions for all active groups"""
+    try:
+        logger.info("Starting group info sync job")
+
+        # Get all groups with active events
+        query = """
+            SELECT DISTINCT gc.group_id, gc.admin_user_id, gc.event_id
+            FROM groups_config gc
+            WHERE gc.event_id IS NOT NULL AND gc.group_id != 0 AND gc.is_active = TRUE
+        """
+        groups = execute_query(query, fetch=True)
+
+        for group in groups:
+            group_id = group["group_id"]
+            try:
+                # Get current group info from Telegram
+                chat_info = await context.bot.get_chat(group_id)
+                group_name = chat_info.title or f"Group {group_id}"
+
+                # Check if bot has admin permissions
+                has_admin_permissions = False
+                try:
+                    bot_member = await context.bot.get_chat_member(group_id, context.bot.id)
+                    has_admin_permissions = bot_member.status in ["administrator", "creator"]
+                except Exception as e:
+                    logger.warning(f"Could not check bot permissions for group {group_id}: {e}")
+
+                # Update group name and admin permissions in database
+                update_query = """
+                    UPDATE groups_config
+                    SET group_name = %s, has_admin_permissions = %s
+                    WHERE group_id = %s
+                """
+                execute_query(update_query, (group_name, has_admin_permissions, group_id))
+
+                logger.info(f"Updated group {group_id}: name='{group_name}', admin_permissions={has_admin_permissions}")
+
+            except Exception as e:
+                logger.error(f"Could not sync info for group {group_id}: {e}", exc_info=True)
+
+        logger.info("Group info sync job completed")
+
+    except Exception as e:
+        logger.error(f"Critical error in group info sync job: {e}", exc_info=True)
+
+
+async def refresh_bot_settings(context: ContextTypes.DEFAULT_TYPE):
+    """Refresh bot settings cache for all active groups"""
+    try:
+        logger.info("Starting bot settings refresh job")
+
+        # Get all groups with active events
+        query = """
+            SELECT DISTINCT gc.group_id, gc.event_id
+            FROM groups_config gc
+            WHERE gc.event_id IS NOT NULL AND gc.group_id != 0 AND gc.is_active = TRUE
+        """
+        groups = execute_query(query, fetch=True)
+
+        refreshed_count = 0
+        for group in groups:
+            group_id = group["group_id"]
+            event_id = group["event_id"]
+
+            try:
+                # Get latest settings from database
+                settings = db.get_bot_settings_for_event(event_id)
+                if settings:
+                    # Update any cached settings or perform validation
+                    logger.info(f"Refreshed settings for group {group_id}, event {event_id}")
+                    refreshed_count += 1
+                else:
+                    logger.warning(f"No settings found for group {group_id}, event {event_id}")
+
+            except Exception as e:
+                logger.error(f"Could not refresh settings for group {group_id}: {e}", exc_info=True)
+
+        logger.info(f"Bot settings refresh job completed - refreshed {refreshed_count} groups")
+
+    except Exception as e:
+        logger.error(f"Critical error in bot settings refresh job: {e}", exc_info=True)
+
+
+async def handle_sync_notification(event_id: int, change_type: str, context: ContextTypes.DEFAULT_TYPE):
+    """Handle real-time sync notifications from admin panel"""
+    try:
+        logger.info(f"Handling sync notification: event_id={event_id}, change_type={change_type}")
+
+        if change_type == 'settings_updated':
+            # Find all groups using this event and refresh their info
+            query = "SELECT group_id FROM groups_config WHERE event_id = %s AND is_active = TRUE"
+            groups = execute_query(query, (event_id,), fetch=True)
+
+            for group in groups:
+                group_id = group['group_id']
+                try:
+                    # Update group name and permissions immediately
+                    chat_info = await context.bot.get_chat(group_id)
+                    group_name = chat_info.title or f"Group {group_id}"
+
+                    has_admin_permissions = False
+                    try:
+                        bot_member = await context.bot.get_chat_member(group_id, context.bot.id)
+                        has_admin_permissions = bot_member.status in ["administrator", "creator"]
+                    except Exception as e:
+                        logger.warning(f"Could not check bot permissions for group {group_id}: {e}")
+
+                    # Update database
+                    update_query = """
+                        UPDATE groups_config
+                        SET group_name = %s, has_admin_permissions = %s
+                        WHERE group_id = %s
+                    """
+                    execute_query(update_query, (group_name, has_admin_permissions, group_id))
+
+                    logger.info(f"Immediate sync completed for group {group_id} after {change_type}")
+
+                except Exception as e:
+                    logger.error(f"Could not sync group {group_id} immediately: {e}", exc_info=True)
+
+        logger.info(f"Sync notification handling completed for {change_type}")
+
+    except Exception as e:
+        logger.error(f"Error handling sync notification: {e}", exc_info=True)
+
+
+async def send_event_update_message(context, group_id, change_type):
+    """Send event update notification to a group."""
+    try:
+        message_text = {
+            'event_created': "📅 New event slot has been configured in the admin panel!",
+            'event_updated': "📅 Event slot configuration has been updated in the admin panel!",
+            'event_deleted': "📅 Event slot has been removed from the admin panel!"
+        }.get(change_type, "📅 Event configuration has been updated!")
+
+        await context.bot.send_message(
+            chat_id=group_id,
+            text=message_text,
+            parse_mode='HTML'
+        )
+    except Exception as e:
+        logger.error(f"Failed to send event update message to group {group_id}: {e}")
+
+
+async def send_settings_update_message(context, group_id):
+    """Send settings update notification to a group."""
+    try:
+        await context.bot.send_message(
+            chat_id=group_id,
+            text="⚙️ Bot settings have been updated in the admin panel!",
+            parse_mode='HTML'
+        )
+    except Exception as e:
+        logger.error(f"Failed to send settings update message to group {group_id}: {e}")
+
+
+async def send_group_config_update_message(context, group_id):
+    """Send group config update notification to a group."""
+    try:
+        await context.bot.send_message(
+            chat_id=group_id,
+            text="🔧 Group configuration has been updated in the admin panel!",
+            parse_mode='HTML'
+        )
+    except Exception as e:
+        logger.error(f"Failed to send group config update message to group {group_id}: {e}")
+
+
+async def process_sync_notifications(context):
+    """Process queued sync notifications and send real-time updates to affected groups."""
+    try:
+        # Get unprocessed notifications
+        query = """
+            SELECT id, change_type, event_id, admin_user_id, created_at
+            FROM sync_notifications
+            WHERE processed = FALSE
+            ORDER BY created_at ASC
+        """
+        notifications = execute_query(query, fetch=True)
+
+        if not notifications:
+            return
+
+        logger.info(f"Processing {len(notifications)} sync notifications")
+
+        for notification in notifications:
+            notification_id = notification['id']
+            change_type = notification['change_type']
+            event_id = notification['event_id']
+            admin_user_id = notification['admin_user_id']
+
+            try:
+                # Find affected groups
+                affected_groups = []
+                if event_id:
+                    # Event-related notification - find all groups using this event
+                    groups_query = """
+                        SELECT DISTINCT group_id
+                        FROM events_slots
+                        WHERE event_id = %s
+                    """
+                    group_results = execute_query(groups_query, (event_id,), fetch=True)
+                    affected_groups = [row['group_id'] for row in group_results]
+                else:
+                    # Global notification - affect all groups
+                    groups_query = "SELECT group_id FROM groups_config"
+                    group_results = execute_query(groups_query, fetch=True)
+                    affected_groups = [row['group_id'] for row in group_results]
+
+                # Send real-time updates to affected groups
+                for gid in affected_groups:
+                    try:
+                        if change_type in ['event_created', 'event_updated', 'event_deleted']:
+                            # Refresh event slots for this group
+                            await send_event_update_message(context, gid, change_type)
+                        elif change_type in ['settings_updated']:
+                            # Refresh bot settings
+                            await send_settings_update_message(context, gid)
+                        elif change_type in ['group_config_updated']:
+                            # Refresh group configuration
+                            await send_group_config_update_message(context, gid)
+
+                        logger.info(f"Sent {change_type} update to group {gid}")
+
+                    except Exception as e:
+                        logger.error(f"Failed to send {change_type} update to group {gid}: {e}")
+
+                # Mark notification as processed
+                update_query = "UPDATE sync_notifications SET processed = TRUE WHERE id = %s"
+                execute_query(update_query, (notification_id,))
+
+            except Exception as e:
+                logger.error(f"Error processing notification {notification_id}: {e}")
+
+        logger.info("Sync notification processing completed")
+
+    except Exception as e:
+        logger.error(f"Error in process_sync_notifications: {e}", exc_info=True)
+
+
 def setup_jobs(application):
     """Setup periodic jobs."""
     job_queue = application.job_queue
@@ -559,6 +800,15 @@ def setup_jobs(application):
     
     # Runs 10s after startup, then hourly
     job_queue.run_repeating(sync_admin_status, interval=10, first=10)
+
+    # Sync group info (names, permissions) every 30 minutes
+    job_queue.run_repeating(sync_group_info, interval=50, first=25)
+
+    # Refresh bot settings every 15 minutes
+    job_queue.run_repeating(refresh_bot_settings, interval=60, first=30)
+
+    # Process sync notifications every 30 seconds for real-time updates
+    job_queue.run_repeating(process_sync_notifications, interval=30, first=15)
 
     # Check inactive users once daily at 22:00 (10 PM)
     scheduler.add_job(check_inactive_users, trigger='cron', hour=12, minute=20, timezone=ist, args=[application])

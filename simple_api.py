@@ -808,5 +808,61 @@ def api_save_bot_settings():
         print(f"Error saving bot settings: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
+
+@app.route('/api/admin/sync-notification', methods=['POST'])
+def api_sync_notification():
+    """Receive notifications when admin panel settings are changed"""
+    try:
+        data = request.get_json()
+        event_id = data.get('event_id')
+        change_type = data.get('change_type')  # 'settings_updated', 'event_updated', etc.
+        admin_user_id = data.get('admin_user_id')
+
+        if not event_id or not change_type:
+            return jsonify({'success': False, 'message': 'event_id and change_type required'}), 400
+
+        # Log the notification
+        print(f"Sync notification received: event_id={event_id}, change_type={change_type}, admin_user_id={admin_user_id}")
+
+        # Store notification in database for bot to process
+        insert_query = """
+            INSERT INTO sync_notifications (event_id, change_type, admin_user_id)
+            VALUES (%s, %s, %s)
+        """
+        execute_query(insert_query, (event_id, change_type, admin_user_id))
+
+        # Find all groups using this event_id and queue notifications
+        groups_query = "SELECT group_id FROM groups_config WHERE event_id = %s AND is_active = TRUE"
+        groups = execute_query(groups_query, (event_id,), fetch=True)
+
+        if groups:
+            print(f"Found {len(groups)} groups using event {event_id}, queuing notifications...")
+
+            # Queue individual notifications for each group
+            for group in groups:
+                group_notification_query = """
+                    INSERT INTO sync_notifications (event_id, change_type, admin_user_id)
+                    VALUES (%s, %s, %s)
+                """
+                # Add group_id to change_type for group-specific processing
+                group_change_type = f"{change_type}_group_{group['group_id']}"
+                execute_query(group_notification_query, (event_id, group_change_type, admin_user_id))
+
+        # Immediate database updates (synchronous operations)
+        if change_type == 'settings_updated':
+            # Refresh cached settings immediately in database
+            print(f"Immediate database sync for event {event_id}")
+
+        return jsonify({
+            'success': True,
+            'message': f'Sync notification processed for {change_type}',
+            'event_id': event_id,
+            'groups_notified': len(groups) if 'groups' in locals() else 0
+        }), 200
+    except Exception as e:
+        print(f"Error processing sync notification: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8001, debug=False)

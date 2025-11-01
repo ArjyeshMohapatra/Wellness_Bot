@@ -882,6 +882,19 @@ SELECT
 FROM users u
 WHERE u.role = 'admin' AND u.is_active = TRUE;
 
+-- SYNC NOTIFICATIONS TABLE (for real-time admin panel ↔ bot sync)
+CREATE TABLE IF NOT EXISTS sync_notifications (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    event_id INT NOT NULL,
+    change_type VARCHAR(50) NOT NULL,
+    admin_user_id BIGINT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    processed BOOLEAN DEFAULT FALSE,
+    INDEX idx_processed (processed),
+    INDEX idx_event (event_id),
+    FOREIGN KEY (event_id) REFERENCES events (event_id) ON DELETE CASCADE
+);
+
 -- Ensure all admins have at least default subscription limits (safety net)
 INSERT IGNORE INTO admin_subscription_limits (admin_user_id, max_members, current_total_members)
 SELECT
