@@ -3,6 +3,7 @@ from telegram.ext import ContextTypes
 import logging
 from datetime import datetime
 import re
+import json
 from ...services import database_service as db
 from ...db import execute_query
 from ...bot_utils import safe_send_message
@@ -464,8 +465,27 @@ async def handle_license_key(message, context, license_key):
             )
             return
 
+        # Get admin_user_id for this group first
+        actual_group_id = message.chat.id
+        db_group_id = actual_group_id
+        admin_query = "SELECT admin_user_id FROM groups_config WHERE group_id = %s"
+        admin_result = execute_query(admin_query, (db_group_id,), fetch=True)
+        if admin_result:
+            admin_user_id = admin_result[0]['admin_user_id']
+        else:
+            # If no config exists, we can't determine admin yet, will get from event later
+            admin_user_id = None
+
+        # Check if the sender is an admin of this group
+        sender_is_admin = False
+        try:
+            chat_admins = await context.bot.get_chat_administrators(actual_group_id)
+            sender_is_admin = any(admin.user.id == message.from_user.id and admin.status in ['creator', 'administrator'] for admin in chat_admins)
+        except Exception as e:
+            logger.warning(f"Could not check if sender is admin: {e}")
+
         # Check if license key exists and is available
-        license_query = "SELECT l.license_key, l.event_id, l.assigned_group_id, l.is_active, e.event_name FROM licenses l JOIN events e ON l.event_id = e.event_id WHERE l.license_key = %s"
+        license_query = "SELECT l.license_key, l.event_id, l.assigned_group_id, l.is_active, e.event_name, e.admin_user_id as event_admin_id FROM licenses l JOIN events e ON l.event_id = e.event_id WHERE l.license_key = %s"
         license_result = execute_query(license_query, (license_key,), fetch=True)
 
         if not license_result:
@@ -479,11 +499,12 @@ async def handle_license_key(message, context, license_key):
 
         license_data = license_result[0]
 
-        if license_data['assigned_group_id'] is not None and license_data['assigned_group_id'] != 0:
+        # Check if the license belongs to the correct admin (only if sender is not admin)
+        if admin_user_id is not None and admin_user_id != license_data['event_admin_id'] and not sender_is_admin:
             await safe_send_message(
                 context=context,
                 chat_id=message.chat.id,
-                text=f"❌ **License Key Already Used**\n\nThe license key `{license_key}` has already been assigned to another group.\n\nPlease get a new license key from your admin panel.",
+                text=f"❌ **License Key Not Authorized**\n\nThe license key `{license_key}` does not belong to the admin of this group.\n\nPlease get a license key from your admin panel.",
                 parse_mode="Markdown"
             )
             return
@@ -498,39 +519,33 @@ async def handle_license_key(message, context, license_key):
             return
 
         # License is valid, assign it to the current group
-        actual_group_id = message.chat.id  # Actual Telegram group ID for API calls
-        db_group_id = actual_group_id  # Use the actual group ID for database operations
         event_id = license_data['event_id']
 
-        # Get admin_user_id from groups_config or from the event
-        admin_query = "SELECT admin_user_id FROM groups_config WHERE group_id = %s"
-        admin_result = execute_query(admin_query, (db_group_id,), fetch=True)
-        if admin_result:
-            admin_user_id = admin_result[0]['admin_user_id']
-        else:
-            # If no config exists, get from event
-            event_admin_query = "SELECT admin_user_id FROM events WHERE event_id = %s"
-            event_admin_result = execute_query(event_admin_query, (event_id,), fetch=True)
-            admin_user_id = event_admin_result[0]['admin_user_id'] if event_admin_result else None
+        # If we didn't get admin_user_id from config, get it from event
+        if admin_user_id is None:
+            admin_user_id = license_data['event_admin_id']
 
-        # Update the license with group assignment
-        update_query = "UPDATE licenses SET assigned_group_id = %s WHERE license_key = %s"
-        execute_query(update_query, (db_group_id, license_key))
+        # License can be reused for multiple groups by the same admin for the same event
 
         # Get bot settings for this event to update group config
         settings_query = """
-            SELECT welcome_message, kick_response, undesignated_slot_response, leaderboard_time
+            SELECT setting_id, welcome_message, kick_response, undesignated_slot_response, leaderboard_time
             FROM bot_settings WHERE event_id = %s LIMIT 1
         """
         settings_result = execute_query(settings_query, (event_id,), fetch=True)
         if settings_result:
             settings = settings_result[0]
+            setting_id = settings['setting_id']
             welcome_message = settings['welcome_message']
             kick_message = settings['kick_response'] 
             undesignated_slot_response = settings['undesignated_slot_response']
             leaderboard_time = settings['leaderboard_time']
         else:
+            setting_id = None
             welcome_message = kick_message = undesignated_slot_response = leaderboard_time = None
+        
+        # Set default max_members (can be updated later based on subscription)
+        max_members = 0
         
         # Try to get group name from Telegram
         group_name = None
@@ -559,6 +574,27 @@ async def handle_license_key(message, context, license_key):
         execute_query(config_query, (db_group_id, event_id, admin_user_id, max_members, setting_id,
                                     welcome_message, kick_message, undesignated_slot_response, 
                                     leaderboard_time, group_name))
+
+        # Copy banned words from bot_settings to banned_words table for this group
+        if setting_id:
+            banned_words_query = "SELECT banned_words FROM bot_settings WHERE setting_id = %s"
+            banned_words_result = execute_query(banned_words_query, (setting_id,), fetch=True)
+            if banned_words_result and banned_words_result[0]['banned_words']:
+                try:
+                    banned_words_list = json.loads(banned_words_result[0]['banned_words'])
+                    if banned_words_list:
+                        # Then insert the banned words for this group
+                        for word in banned_words_list:
+                            if word.strip():  # Only insert non-empty words
+                                execute_query(
+                                    "INSERT INTO banned_words (group_id, word) VALUES (%s, %s)",
+                                    (db_group_id, word.strip())
+                                )
+                        logger.info(f"Copied {len(banned_words_list)} banned words to group {db_group_id}")
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Could not parse banned_words JSON for setting_id {setting_id}: {e}")
+                except Exception as e:
+                    logger.error(f"Error copying banned words to group {db_group_id}: {e}")
 
         # Check if bot has admin permissions in this group
         has_admin_permissions = False

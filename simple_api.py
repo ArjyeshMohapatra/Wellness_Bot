@@ -735,11 +735,13 @@ def api_save_bot_settings():
         """
         # Handle banned_words - convert to JSON array
         banned_words = config_data.get('banned_words', '')
+        banned_words_list = []  # Initialize as empty list
         if isinstance(banned_words, str) and banned_words.strip():
             # Split by comma and strip whitespace
             banned_words_list = [word.strip() for word in banned_words.split(',') if word.strip()]
             banned_words_json = json.dumps(banned_words_list)
         elif isinstance(banned_words, list):
+            banned_words_list = banned_words  # Use the list directly
             banned_words_json = json.dumps(banned_words)
         else:
             banned_words_json = json.dumps([])
